@@ -1,14 +1,64 @@
+# DATA
+Data/
+preprocessed/
+*.npy
+references/
+docs/
+
+
+# Python
 __pycache__/
 *.py[oc]
+*.pyc
+*.pyo
+*.pyd
+
+# Environment
+.env
+.env.*
+*.env
+
+# Virtual Environment
+venv/
+.venv/
+
+# GitHub
+.github/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Database
+*.db
+*.sqlite3
+
+# Docker
+*.pid
+
+# Models
+models/
+*.gguf
+*.bin
+*.pt
+*.pth
+
+# Cache / temp
+.cache/
+tmp/
+temp/
+
 build/
 dist/
 wheels/
 *.egg-info
-.venv
-.*.env
-.env
-.idea/
-.vscode
 .coverage
 *.coverage
 .coverage.*
