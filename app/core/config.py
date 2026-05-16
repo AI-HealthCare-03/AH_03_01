@@ -23,8 +23,8 @@ class Config(BaseSettings):
     TEMPLATE_DIR: str = os.path.join(Path(__file__).resolve().parent.parent, "templates")
 
     DB_HOST: str = "localhost"
-    DB_PORT: int = 3306
-    DB_USER: str = "root"
+    DB_PORT: int = 5432
+    DB_USER: str = "postgres"
     DB_PASSWORD: str = "pw1234"
     DB_NAME: str = "ai_health"
     DB_CONNECT_TIMEOUT: int = 5
@@ -36,3 +36,19 @@ class Config(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 14 * 24 * 60
     JWT_LEEWAY: int = 5
+
+    # 미디어/파일 업로드
+    MEDIA_ROOT: str = "/app/media"
+    MEDIA_URL_PREFIX: str = "/media"
+    UPLOAD_MAX_BYTES: int = 50 * 1024 * 1024  # 50MB
+    ALLOWED_IMAGE_MIME: tuple[str, ...] = ("image/jpeg", "image/png", "image/webp")
+
+    # Redis / 큐
+    REDIS_HOST: str = "redis"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    IMAGE_VERIFY_QUEUE: str = "queue:image-verification"
+
+    # AI 모델
+    SIGLIP_MODEL_NAME: str = "google/siglip2-base-patch16-224"
+    SIGLIP_APPROVE_THRESHOLD: float = 0.20  # softmax 후 매칭 점수 임계

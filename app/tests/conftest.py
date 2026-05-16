@@ -19,7 +19,7 @@ TEST_DB_TZ = "Asia/Seoul"
 
 def get_test_db_config() -> dict[str, Any]:
     tortoise_config = generate_config(
-        db_url=f"mysql://{config.DB_USER}:{config.DB_PASSWORD}@{config.DB_HOST}:{config.DB_PORT}/test",
+        db_url=f"postgres://{config.DB_USER}:{config.DB_PASSWORD}@{config.DB_HOST}:{config.DB_PORT}/test",
         app_modules={TEST_DB_LABEL: TORTOISE_APP_MODELS},
         connection_label=TEST_DB_LABEL,
         testing=True,

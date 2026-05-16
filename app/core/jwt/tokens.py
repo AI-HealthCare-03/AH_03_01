@@ -4,9 +4,9 @@ from typing import TYPE_CHECKING, Any, Self
 from uuid import uuid4
 
 from app.core import config
-from app.models.users import User
 from app.core.jwt.exceptions import ExpiredTokenError, TokenBackendError, TokenBackendExpiredError, TokenError
 from app.core.jwt.state import token_backend
+from app.models.users import User
 
 if TYPE_CHECKING:
     from app.core.jwt.backends import TokenBackend

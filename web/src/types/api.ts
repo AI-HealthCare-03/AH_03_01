@@ -1,0 +1,175 @@
+/* =========================================
+   홈/출석 관련 API 응답 타입 정의
+   백엔드 FastAPI /api/v1/ 엔드포인트 기반
+   ========================================= */
+
+/* 내 정보 (GET /api/v1/users/me) */
+export interface Me {
+  id: number;
+  email: string;
+  name: string;
+  nickname?: string;
+  gender: "MALE" | "FEMALE";
+  birth_date: string;
+  phone_number: string;
+  created_at: string;
+}
+
+/* 펫 (GET /api/v1/pets/me) */
+export interface MyPet {
+  id: number;
+  name: string;
+  level: number;
+  current_xp: number;
+  xp_to_next_level: number;
+  pet_type?: string;
+  created_at: string;
+}
+
+/* 챌린지 카테고리 */
+export type ChallengeCategory =
+  | "EXERCISE"
+  | "WATER"
+  | "SLEEP"
+  | "DIET"
+  | "NO_SMOKING"
+  | "NO_ALCOHOL"
+  | "DISEASE_CARE"
+  | "MEDITATION";
+
+/* 챌린지 상태 */
+export type ChallengeStatus = "ACTIVE" | "COMPLETED" | "CANCELLED";
+
+/* 챌린지 아이템 */
+export interface ChallengeItem {
+  id: number;
+  title: string;
+  description?: string;
+  category: ChallengeCategory;
+  status: ChallengeStatus;
+  start_date: string;
+  end_date: string;
+  reward_points: number;
+  created_at: string;
+}
+
+/* 챌린지 목록 응답 */
+export interface ChallengeListResponse {
+  items: ChallengeItem[];
+  total: number;
+  page: number;
+  size: number;
+}
+
+/* 질병 타입 */
+export type DiseaseType = "HYPERTENSION" | "DIABETES" | "CARDIOVASCULAR";
+
+/* 위험도 등급. 백엔드는 NORMAL/CAUTION/RISK/HIGH_RISK 를 사용하지만
+   초기 UI 일부에서 DANGER/HIGH_DANGER 별칭이 쓰여 둘 다 허용 */
+export type RiskGrade =
+  | "NORMAL"
+  | "CAUTION"
+  | "RISK"
+  | "HIGH_RISK"
+  | "DANGER"
+  | "HIGH_DANGER";
+
+/* 예측 결과 */
+export interface PredictionItem {
+  id: number;
+  disease_type: DiseaseType;
+  risk_score: number;        /* 0-100 */
+  risk_grade: RiskGrade;
+  risk_factors_count: number;
+  created_at: string;
+}
+
+/* 예측 목록 응답 */
+export interface PredictionListResponse {
+  items: PredictionItem[];
+}
+
+/* 추천 챌린지 우선순위. 백엔드: TOP|RECOMMENDED|OPTIONAL. 일부 초기 UI 가 사용한
+   HIGHEST|SUPPLEMENTAL 별칭도 허용해 점진 마이그레이션 */
+export type RecommendationPriority =
+  | "TOP"
+  | "RECOMMENDED"
+  | "OPTIONAL"
+  | "HIGHEST"
+  | "SUPPLEMENTAL";
+
+/* 추천 챌린지 아이템. 백엔드 응답은 template_id/challenge_id (둘 다 nullable)
+   를 사용하며 별도의 id 필드는 없다. reward_points 도 백엔드에 없으므로 옵셔널. */
+export interface ChallengeRecommendationItem {
+  id?: number;
+  template_id?: number | null;
+  challenge_id?: number | null;
+  title: string;
+  description?: string;
+  category: ChallengeCategory;
+  sub_category?: string | null;
+  reason?: string | null;
+  priority: RecommendationPriority;
+  reward_points?: number;
+  already_joined?: boolean;
+}
+
+/* 추천 챌린지 목록 응답 */
+export interface ChallengeRecommendationResponse {
+  items: ChallengeRecommendationItem[];
+}
+
+/* 출석 체크 월간 응답 (GET /api/v1/attendance-checks?month=YYYY-MM)
+   백엔드는 month_total 을 보내지 않으므로 클라이언트에서 checked_dates.length 로 계산.
+   month 필드도 응답에 포함되지만 화면에서 사용하지 않음. */
+export interface AttendanceMonthResponse {
+  month?: string;
+  checked_dates: string[];    /* "YYYY-MM-DD" 배열 */
+  current_streak: number;
+  next_bonus_at: number | null; /* 다음 보너스 연속 임계 일수 (없으면 null) */
+}
+
+/* 출석 체크 POST 응답 (POST /api/v1/attendance-checks) */
+export interface AttendanceCheckResponse {
+  streak_days: number;
+  reward_point: number;
+  bonus_point: number;
+  transaction_ids: number[];
+}
+
+/* 포인트 잔액 (GET /api/v1/points/transactions) */
+export interface PointTransaction {
+  id: number;
+  amount: number;
+  description: string;
+  created_at: string;
+}
+
+export interface PointBalanceResponse {
+  balance: number;
+  transactions: PointTransaction[];
+}
+
+/* 건강 프로필 아이템 (GET /api/v1/health-records?recordType=profile).
+   백엔드 HealthProfileResponse 는 updated_at 을 보내며 record_type 은 응답에 포함되지 않음. */
+export interface HealthProfileRecord {
+  id?: number;
+  record_type?: "profile";
+  height_cm?: number;
+  weight_kg?: number;
+  updated_at?: string;
+  recorded_at?: string;
+}
+
+/* 측정 통계 시리즈 포인트 */
+export interface MetricSeriesPoint {
+  recorded_at: string;
+  primary_value: number;
+  secondary_value?: number;  /* 혈압의 이완기 */
+}
+
+/* 측정 통계 응답 (GET /api/v1/health-records/statistics) */
+export interface MetricStatResponse {
+  metric: string;
+  series: MetricSeriesPoint[];
+}

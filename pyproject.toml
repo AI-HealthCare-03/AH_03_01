@@ -19,18 +19,23 @@ ai = [
     "torch",
     "torchvision",
     "torchaudio",
-    "sentence-transformers>=5.2.0"
+    "sentence-transformers>=5.2.0",
+    "transformers>=4.45.0",
+    "Pillow>=10.4.0",
+    "tortoise-orm[asyncpg]>=0.25.3",
+    "redis>=7.1.0",
 ]
 app = [
     "aerich>=0.9.2",
-    "asyncmy>=0.2.11",
+    "asyncpg>=0.30.0",
     "bcrypt<=4.0.1",
     "fastapi[standard]>=0.128.0",
     "httpx>=0.28.1",
     "orjson>=3.11.5",
     "passlib[bcrypt]>=1.7.4",
+    "pgvector>=0.3.6",
     "pyjwt>=2.10.1",
-    "tortoise-orm>=0.25.3",
+    "tortoise-orm[asyncpg]>=0.25.3",
     "uvicorn>=0.40.0",
 ]
 dev = [
@@ -54,7 +59,7 @@ explicit = true
 
 [tool.aerich]
 tortoise_orm = "app.core.db.databases.TORTOISE_ORM"
-location = "./app/core/db/migrations"
+location = "./migrations"
 src_folder = "./."
 
 [tool.pytest.ini_options]

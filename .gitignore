@@ -4,6 +4,7 @@ preprocessed/
 *.npy
 references/
 docs/
+RAG/
 
 
 # Python
@@ -62,3 +63,4 @@ wheels/
 .coverage
 *.coverage
 .coverage.*
+.claude/

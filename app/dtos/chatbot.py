@@ -1,0 +1,76 @@
+from datetime import datetime
+from typing import Annotated, Any
+
+from pydantic import BaseModel, Field
+
+from app.dtos.base import BaseSerializerModel
+from app.models.chatbot import ChatMessageRole, ChatMessageType, FaqCategory
+
+
+class FaqResponse(BaseSerializerModel):
+    id: int
+    category: FaqCategory
+    question: str
+    answer: str
+    sort_order: int
+
+
+class FaqListResponse(BaseModel):
+    faqs: list[FaqResponse]
+
+
+class ChatMessageRequest(BaseModel):
+    message: Annotated[str, Field(min_length=1, max_length=2000)]
+    conversation_id: int | None = None
+    faq_id: int | None = None
+
+
+class ChatSourceItem(BaseModel):
+    title: str | None = None
+    url: str | None = None
+    document_id: int | None = None
+    snippet: str | None = None
+
+
+class ChatMessageResponse(BaseModel):
+    conversation_id: int
+    message_id: int
+    role: ChatMessageRole
+    message_type: ChatMessageType
+    answer: str
+    sources: list[ChatSourceItem] = []
+    confidence: float | None = None
+    model_version: str | None = None
+    disclaimer: str = "본 답변은 의학적 진단을 대체하지 않습니다."
+
+
+class ChatSessionListItem(BaseModel):
+    id: int
+    title: str | None
+    started_at: datetime
+    ended_at: datetime | None
+    last_message_at: datetime | None
+    message_count: int
+
+
+class ChatSessionListResponse(BaseModel):
+    sessions: list[ChatSessionListItem]
+
+
+class ChatMessageItem(BaseModel):
+    id: int
+    role: ChatMessageRole
+    message_type: ChatMessageType
+    content: str
+    faq_id: int | None
+    sources: list[dict[str, Any]] = []
+    confidence: float | None
+    created_at: datetime
+
+
+class ChatSessionDetailResponse(BaseModel):
+    id: int
+    title: str | None
+    started_at: datetime
+    ended_at: datetime | None
+    messages: list[ChatMessageItem]

@@ -1,8 +1,8 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
-from fastapi.responses import ORJSONResponse as Response
 
+from app.core.responses import ORJSONResponse as Response
 from app.dependencies.security import get_request_user
 from app.dtos.users import UserInfoResponse, UserUpdateRequest
 from app.models.users import User

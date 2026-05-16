@@ -11,9 +11,13 @@ COPY pyproject.toml uv.lock ./
 # 3. pyproject.toml에 명시된 의존성 패키지 중에서 'app' 그룹만 설치합니다.
 RUN uv sync --group ai --no-dev --frozen
 
-# 4. 로컬 소스 코드를 컨테이너 내부로 복사합니다.
-COPY ./ai_worker ./app
+# 4. 소스 코드 복사. ai_worker 가 Tortoise 모델을 직접 import 하므로 app/ 도 포함.
+COPY ./ai_worker ./ai_worker
+COPY ./app ./app
 
-# 5. 해당 이미지를 활용하여 도커컨테이너 실행시 실행되는 명령어입니다.
-# 아래 커맨드를 수정한 뒤에 사용합니다.
-CMD ["echo", "'hello world'"]
+# Huggingface 모델 캐시 경로 (시작 시 SigLIP2 다운로드, 이후 캐시)
+ENV HF_HOME=/app/.cache/huggingface
+ENV TRANSFORMERS_CACHE=/app/.cache/huggingface
+
+# 5. SigLIP2 Redis 큐 consumer 실행 (BRPOP 무한 루프)
+CMD ["uv", "run", "--no-sync", "python", "-m", "ai_worker.main"]
