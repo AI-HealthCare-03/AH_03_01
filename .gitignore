@@ -5,6 +5,7 @@ preprocessed/
 references/
 docs/
 RAG/
+test_imgs/
 
 
 # Python
@@ -46,6 +47,7 @@ Thumbs.db
 
 # Models
 models/
+!migrations/models/
 *.gguf
 *.bin
 *.pt

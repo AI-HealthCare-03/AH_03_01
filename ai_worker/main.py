@@ -31,7 +31,11 @@ from typing import Any
 
 from tortoise import Tortoise
 
-from ai_worker.tasks.category_prompts import build_prompts_for
+from ai_worker.tasks.category_prompts import (
+    build_prompts_for,
+    positive_count,
+    threshold_for,
+)
 from ai_worker.tasks.image_classifier import SigLip2ZeroShotClassifier
 from app.core import config
 from app.core.db.databases import TORTOISE_ORM
@@ -49,6 +53,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 
 QUEUE_KEY = config.IMAGE_VERIFY_QUEUE
 THRESHOLD = config.SIGLIP_APPROVE_THRESHOLD
+# positive_max 가 negative_max 보다 이 마진 이상으로 높아야 APPROVED.
+# false-positive 방지: 모든 점수가 비슷하게 낮으면 거절.
+POSITIVE_MARGIN = 0.05
 
 _should_exit = False
 
@@ -65,7 +72,17 @@ def _install_signal_handlers() -> None:
 
 @asynccontextmanager
 async def _tortoise_session():
-    await Tortoise.init(config=TORTOISE_ORM)
+    # ai_worker 는 마이그레이션 관리를 하지 않으므로 aerich.models 제외 후 init.
+    # (ai 그룹에는 aerich 가 설치되지 않음)
+    worker_config = {
+        **TORTOISE_ORM,
+        "apps": {
+            "models": {
+                "models": [m for m in TORTOISE_ORM["apps"]["models"]["models"] if m != "aerich.models"],
+            },
+        },
+    }
+    await Tortoise.init(config=worker_config)
     try:
         yield
     finally:
@@ -78,6 +95,7 @@ async def _process_message(classifier: SigLip2ZeroShotClassifier, payload: dict[
     file_id: int = int(payload["file_id"])
     category: str = str(payload.get("category") or "")
     sub_category: str | None = payload.get("sub_category")
+    goal_config: dict = payload.get("goal_config") or {}
 
     job = await ImageVerificationJob.get_or_none(id=job_id)
     verification = await ChallengeVerification.get_or_none(id=verification_id)
@@ -94,7 +112,7 @@ async def _process_message(classifier: SigLip2ZeroShotClassifier, payload: dict[
         await _fail_job(job, verification, reason=f"file_not_found id={file_id}")
         return
 
-    prompts = build_prompts_for(category=category, sub_category=sub_category)
+    prompts = build_prompts_for(category=category, sub_category=sub_category, goal_config=goal_config)
     if not prompts:
         await _fail_job(job, verification, reason=f"no_prompts_for_category={category}")
         return
@@ -106,12 +124,24 @@ async def _process_message(classifier: SigLip2ZeroShotClassifier, payload: dict[
         await _fail_job(job, verification, reason=f"classifier_error: {exc}")
         return
 
-    approved = top_score >= THRESHOLD
+    # 정책: build_prompts_for 결과는 [positive...] + [negative...] 순서이므로
+    # 앞 N 개 = positive, 뒤 = negative 로 분리해 판정.
+    n_pos = positive_count(category, sub_category, goal_config)
+    positive_scores = [s["score"] for s in all_scores[:n_pos]] or [0.0]
+    negative_scores = [s["score"] for s in all_scores[n_pos:]] or [0.0]
+    p_max = max(positive_scores)
+    n_max = max(negative_scores)
+    category_threshold = threshold_for(category, THRESHOLD)
+    approved = p_max >= category_threshold and p_max > n_max + POSITIVE_MARGIN
+
     result: dict[str, Any] = {
         "top_label": top_label,
         "top_score": top_score,
+        "positive_max": p_max,
+        "negative_max": n_max,
         "scores": all_scores,
-        "threshold": THRESHOLD,
+        "threshold": category_threshold,
+        "positive_margin": POSITIVE_MARGIN,
         "approved": approved,
     }
 
@@ -123,21 +153,25 @@ async def _process_message(classifier: SigLip2ZeroShotClassifier, payload: dict[
 
     if approved:
         verification.status = VerificationStatus.APPROVED
-        verification.rejection_reason = None
+        verification.rejection_reason = None  # type: ignore[assignment]
         await verification.save(update_fields=["status", "rejection_reason"])
         await _grant_daily_reward_if_eligible(verification)
     else:
         verification.status = VerificationStatus.REJECTED
         verification.rejection_reason = (
-            f"카테고리 매칭 점수가 임계({THRESHOLD:.2f}) 미만입니다. top_label='{top_label}' score={top_score:.3f}"
+            f"카테고리({category}) 매칭 점수 부족. "
+            f"positive_max={p_max:.3f} negative_max={n_max:.3f} "
+            f"threshold={category_threshold:.2f} margin={POSITIVE_MARGIN:.2f}"
         )
         await verification.save(update_fields=["status", "rejection_reason"])
 
     logger.info(
-        "verification_id=%s top=%s score=%.3f approved=%s",
+        "verification_id=%s category=%s pos_max=%.3f neg_max=%.3f threshold=%.2f approved=%s",
         verification_id,
-        top_label,
-        top_score,
+        category,
+        p_max,
+        n_max,
+        category_threshold,
         approved,
     )
 
@@ -162,7 +196,7 @@ async def _grant_daily_reward_if_eligible(verification: ChallengeVerification) -
 
     participant_repo = ChallengeParticipantRepository()
     points = PointTransactionRepository()
-    participant = await participant_repo.get(verification.participant_id)
+    participant = await participant_repo.get(verification.participant_id)  # type: ignore[attr-defined]
     if participant is None:
         return
     await participant_repo.add_score(participant, points=1)
@@ -192,7 +226,7 @@ async def _main_loop() -> None:
 
     while not _should_exit:
         try:
-            popped = await client.brpop([QUEUE_KEY], timeout=5)
+            popped = await client.brpop([QUEUE_KEY], timeout=5)  # type: ignore[misc]
         except Exception:  # noqa: BLE001
             logger.exception("redis brpop failed")
             await asyncio.sleep(2)

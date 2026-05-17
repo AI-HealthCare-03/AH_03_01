@@ -19,6 +19,7 @@ export const CATEGORY_CONFIG: Record<
   NO_ALCOHOL: { emoji: "🚫", label: "금주", color: "bg-purple-50 text-purple-600" },
   DISEASE_CARE: { emoji: "💊", label: "질환 관리", color: "bg-teal-50 text-teal-600" },
   MEDITATION: { emoji: "🧘", label: "명상", color: "bg-yellow-50 text-yellow-600" },
+  WEIGHT_MANAGEMENT: { emoji: "⚖️", label: "체중 관리", color: "bg-pink-50 text-pink-600" },
 };
 
 interface ChallengeCategoryIconProps {

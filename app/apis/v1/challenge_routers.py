@@ -172,7 +172,13 @@ async def get_challenge(
     service: Annotated[ChallengeService, Depends(ChallengeService)],
 ) -> Response:
     challenge = await service.get_owned_or_participating(user, challenge_id)
-    return Response(ChallengeResponse.model_validate(challenge).model_dump(), status_code=status.HTTP_200_OK)
+    payload = ChallengeResponse.model_validate(challenge).model_dump()
+    # 그룹 챌린지의 경우 참여자/방장에게 invite_code 노출 (코드 복사 기능)
+    if challenge.scope.value == "GROUP":
+        invite_code = await service.get_active_invite_code(challenge.id)
+        if invite_code:
+            payload["invite_code"] = invite_code
+    return Response(payload, status_code=status.HTTP_200_OK)
 
 
 @challenges_router.patch("/{challenge_id}", response_model=ChallengeResponse, status_code=status.HTTP_200_OK)

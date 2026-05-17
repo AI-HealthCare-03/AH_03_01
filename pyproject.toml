@@ -21,6 +21,8 @@ ai = [
     "torchaudio",
     "sentence-transformers>=5.2.0",
     "transformers>=4.45.0",
+    "sentencepiece>=0.2.0",  # SigLIP2 AutoProcessor 의존성
+    "protobuf>=4.21.0",      # transformers tokenizer 의존성
     "Pillow>=10.4.0",
     "tortoise-orm[asyncpg]>=0.25.3",
     "redis>=7.1.0",
@@ -49,6 +51,12 @@ dev = [
 
 [tool.uv.sources]
 torch = [
+    { index = "pytorch-cpu" },
+]
+torchvision = [
+    { index = "pytorch-cpu" },
+]
+torchaudio = [
     { index = "pytorch-cpu" },
 ]
 

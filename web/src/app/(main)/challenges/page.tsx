@@ -22,10 +22,16 @@ function ChallengeListContent() {
   const searchParams = useSearchParams();
   const tab = (searchParams.get("tab") ?? "active") as TabKey;
 
-  /* 진행중/완료 챌린지 */
+  /* 진행중/완료 챌린지.
+     "진행중" 탭은 ACTIVE(시작됨) + RECRUITING(그룹, 멤버 모집 중) 모두 포함. */
   const { data: activeData, isLoading: activeLoading } = useChallenges({
     mine: true,
     status: "ACTIVE",
+    size: 20,
+  });
+  const { data: recruitingData, isLoading: recruitingLoading } = useChallenges({
+    mine: true,
+    status: "RECRUITING",
     size: 20,
   });
   const { data: completedData, isLoading: completedLoading } = useChallenges({
@@ -45,7 +51,7 @@ function ChallengeListContent() {
     isLoading: recLoading,
   } = useChallengeRecommendations(latestPredictionId, 6);
 
-  const activeItems = activeData?.items ?? [];
+  const activeItems = [...(activeData?.items ?? []), ...(recruitingData?.items ?? [])];
   const completedItems = completedData?.items ?? [];
   const recommendationItems = recommendationData?.items ?? [];
 
@@ -80,7 +86,7 @@ function ChallengeListContent() {
           {/* 진행중 탭 */}
           {tab === "active" && (
             <>
-              {activeLoading ? (
+              {activeLoading || recruitingLoading ? (
                 <div className="space-y-3">
                   {[0, 1, 2].map((i) => (
                     <div

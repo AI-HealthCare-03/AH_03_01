@@ -63,6 +63,7 @@ services:
     volumes:
       - ./app:/app/app  # 로컬의 app 디렉토리를 컨테이너의 /app/app에 마운트(수정사항 즉시 반영)
       - static_volume:/app/templates
+      - media_data:/app/media  # 업로드된 사진 등 미디어 영속화. ai-worker 와 공유
     restart: always
     ports:
       - "8000:8000"
@@ -87,8 +88,15 @@ services:
     env_file: .env
     environment:
       DB_HOST: postgres
+      HF_HOME: /app/.cache/huggingface
+      TRANSFORMERS_CACHE: /app/.cache/huggingface
     restart: always
     mem_limit: 4G
+    volumes:
+      - media_data:/app/media       # fastapi 가 업로드한 사진을 같은 경로로 공유
+      - hf_cache:/app/.cache/huggingface  # SigLIP2 가중치 캐시 영속화 (재빌드 시 재다운로드 방지)
+      - ./ai_worker:/app/ai_worker  # 코드 변경 즉시 반영 (컨테이너 restart 만 필요)
+      - ./app:/app/app              # ai_worker 가 import 하는 app 모듈도 동기화
     networks:
       - ws
     depends_on:
@@ -114,6 +122,8 @@ services:
 volumes:
   postgres_data:
   static_volume:
+  media_data:
+  hf_cache:
 
 networks:
   ws:

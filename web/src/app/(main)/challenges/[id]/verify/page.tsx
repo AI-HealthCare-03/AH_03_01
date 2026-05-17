@@ -7,6 +7,7 @@ import { useChallenge } from "@/hooks/queries/useChallenge";
 import { useCreateVerification } from "@/hooks/queries/useCreateVerification";
 import CheckVerify from "@/components/challenges/verify/CheckVerify";
 import PhotoVerify from "@/components/challenges/verify/PhotoVerify";
+import QuestionnaireVerify from "@/components/challenges/verify/QuestionnaireVerify";
 import RewardCelebrationModal from "@/components/challenges/verify/RewardCelebrationModal";
 import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
@@ -31,6 +32,15 @@ export default function VerifyPage({ params }: VerifyPageProps) {
 
   const [rewardOpen, setRewardOpen] = useState(false);
 
+  /* 오늘 날짜 (YYYY-MM-DD, 로컬 기준) */
+  const today = (() => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  })();
+
   /* 체크 인증 */
   const handleCheck = (checked: boolean) => {
     verifyMutation.mutate(
@@ -38,6 +48,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
         body: {
           challenge_id: challengeId,
           method: "CHECK",
+          verified_date: today,
           checked,
         },
         method: "CHECK",
@@ -58,6 +69,35 @@ export default function VerifyPage({ params }: VerifyPageProps) {
     );
   };
 
+  /* 설문형 인증 (당뇨발 등). 9문항 답변 → answers 에 저장 + checked=true 로 인증 */
+  const handleQuestionnaire = (answers: Record<string, string>) => {
+    verifyMutation.mutate(
+      {
+        body: {
+          challenge_id: challengeId,
+          method: "CHECK",
+          verified_date: today,
+          checked: true, // 답변 자체로 인증 완료. 위험 신호 분석은 추후
+          answers,
+        },
+        method: "CHECK",
+      },
+      {
+        onSuccess: (data) => {
+          if (data.status === "APPROVED") {
+            setRewardOpen(true);
+          } else {
+            showToast("설문이 제출되었어요", "info");
+            router.push(`/challenges/${challengeId}`);
+          }
+        },
+        onError: (err) => {
+          showToast(extractErrorMessage(err), "error");
+        },
+      },
+    );
+  };
+
   /* 사진 인증. PhotoVerify 가 파일 업로드를 마치고 photoFileId 를 넘겨준다. */
   const handlePhoto = (memo: string, photoFileId: number) => {
     verifyMutation.mutate(
@@ -65,6 +105,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
         body: {
           challenge_id: challengeId,
           method: "PHOTO",
+          verified_date: today,
           photo_file_id: photoFileId,
           memo: memo || undefined,
         },
@@ -123,20 +164,44 @@ export default function VerifyPage({ params }: VerifyPageProps) {
         ← {challenge.title}
       </Link>
 
-      {/* 인증 컴포넌트 분기 */}
-      {challenge.verification_type === "CHECK" ? (
-        <CheckVerify
-          challenge={challenge}
-          onSubmit={handleCheck}
-          loading={verifyMutation.isPending}
-        />
-      ) : (
-        <PhotoVerify
-          challenge={challenge}
-          onSubmit={handlePhoto}
-          loading={verifyMutation.isPending}
-        />
-      )}
+      {/* 인증 컴포넌트 분기.
+          1) 설문 템플릿이 지정된 경우 (예: 당뇨발 9문항) → QuestionnaireVerify
+          2) CHECK → 예/아니오
+          3) PHOTO → 사진 업로드 */}
+      {(() => {
+        const questionnaireTemplate = (challenge.goal_config as Record<string, unknown> | undefined)?.[
+          "questionnaire_template"
+        ];
+        if (
+          challenge.verification_type === "CHECK" &&
+          typeof questionnaireTemplate === "string"
+        ) {
+          return (
+            <QuestionnaireVerify
+              challenge={challenge}
+              template={questionnaireTemplate}
+              onSubmit={handleQuestionnaire}
+              loading={verifyMutation.isPending}
+            />
+          );
+        }
+        if (challenge.verification_type === "CHECK") {
+          return (
+            <CheckVerify
+              challenge={challenge}
+              onSubmit={handleCheck}
+              loading={verifyMutation.isPending}
+            />
+          );
+        }
+        return (
+          <PhotoVerify
+            challenge={challenge}
+            onSubmit={handlePhoto}
+            loading={verifyMutation.isPending}
+          />
+        );
+      })()}
 
       {/* 보상 모달 */}
       <RewardCelebrationModal

@@ -75,16 +75,12 @@ class ChallengeRepository:
         if date_to is not None:
             qs = qs.filter(start_date__lte=date_to)
         if user_id is not None:
-            qs = qs.filter(
-                Q(creator_id=user_id)
-                | Q(
-                    id__in=(
-                        ChallengeParticipant.filter(user_id=user_id, status=ParticipantStatus.APPROVED).values_list(
-                            "challenge_id", flat=True
-                        )
-                    )
-                )
-            )
+            # Tortoise 가 __in= 에 subquery 객체를 직접 받지 못하므로 list 로 먼저 materialize.
+            participating_ids = await ChallengeParticipant.filter(
+                user_id=user_id,
+                status=ParticipantStatus.APPROVED,
+            ).values_list("challenge_id", flat=True)
+            qs = qs.filter(Q(creator_id=user_id) | Q(id__in=list(participating_ids)))
         total = await qs.count()
         items = await qs.order_by("-created_at").offset((page - 1) * size).limit(size)
         return list(items), total

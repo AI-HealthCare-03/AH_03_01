@@ -96,6 +96,40 @@ export async function leaveChallenge(challengeId: number): Promise<void> {
   await apiClient.delete(`/api/v1/challenges/${challengeId}/participants`);
 }
 
+/* ─── 사용자 닉네임 검색 (초대 대상 찾기) ─── */
+export interface UserSearchItem {
+  id: number;
+  name: string;
+}
+export async function searchUsersByNickname(
+  nickname: string,
+  limit = 10,
+): Promise<UserSearchItem[]> {
+  const { data } = await apiClient.get<{ items: UserSearchItem[] }>(
+    "/api/v1/users/search",
+    { params: { nickname, limit } },
+  );
+  return data.items;
+}
+
+/* ─── 사용자에게 직접 초대 발송 ─── */
+export interface DirectInviteResponse {
+  invite_id: number;
+  invite_code: string;
+  expires_at: string;
+}
+export async function inviteUserToChallenge(
+  challengeId: number,
+  inviteeId: number,
+): Promise<DirectInviteResponse> {
+  const { data } = await apiClient.post<DirectInviteResponse>(
+    `/api/v1/challenges/${challengeId}/participants`,
+    { invitee_id: inviteeId },
+    { params: { action: "invite" } },
+  );
+  return data;
+}
+
 /* ─── 방장 참여자 승인/거절 ─── */
 export async function approveParticipant(
   challengeId: number,

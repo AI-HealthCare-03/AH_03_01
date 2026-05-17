@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { dDayLabel } from "@/lib/dateUtils";
 import ChallengeCategoryIcon from "./common/ChallengeCategoryIcon";
 import ChallengeProgressBar from "./common/ChallengeProgressBar";
@@ -21,6 +22,7 @@ export default function ChallengeCard({
   challenge,
   showCTA = true,
 }: ChallengeCardProps) {
+  const router = useRouter();
   const progressPct =
     challenge.total_days && challenge.total_days > 0
       ? Math.round(((challenge.my_progress ?? 0) / challenge.total_days) * 100)
@@ -91,14 +93,18 @@ export default function ChallengeCard({
           )}
         </div>
         {showCTA && challenge.status === "ACTIVE" && (
-          <Link
-            href={ctaHref}
-            onClick={(e) => e.stopPropagation()}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              router.push(ctaHref);
+            }}
             className="text-xs font-semibold text-brand-black underline underline-offset-2"
             aria-label={`${challenge.title} ${ctaLabel}`}
           >
             {ctaLabel}
-          </Link>
+          </button>
         )}
       </div>
     </Link>

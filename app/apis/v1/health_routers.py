@@ -39,6 +39,17 @@ health_reports_router = APIRouter(prefix="/health-reports", tags=["health-report
 predictions_router = APIRouter(prefix="/predictions", tags=["predictions"])
 
 
+async def _award_health_view(user_id: int) -> None:
+    """건강 데이터 확인 활동량 EXP 적립 (1일 1회). best-effort."""
+    try:
+        from app.models.experience import XpKind
+        from app.services.experience import ExperienceService
+
+        await ExperienceService().award(user_id=user_id, kind=XpKind.HEALTH_VIEW)
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # /health-records (profile + daily records unified via recordType)
 # ---------------------------------------------------------------------------
@@ -209,6 +220,7 @@ async def get_health_report(
     if output_format == "pdf":
         # PDF 생성 파이프라인은 별도 작업(FILE_UPLOAD/렌더러)이라 현 단계에서 미지원.
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="PDF 다운로드는 추후 지원 예정입니다.")
+    await _award_health_view(user.id)
     return Response(payload, status_code=status.HTTP_200_OK)
 
 
@@ -255,6 +267,7 @@ async def list_predictions(
         latest_only=latest,
     )
     payload = PredictionListResponse(items=[PredictionResponse.model_validate(r) for r in risks])
+    await _award_health_view(user.id)
     return Response(payload.model_dump(), status_code=status.HTTP_200_OK)
 
 

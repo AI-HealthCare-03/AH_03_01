@@ -59,6 +59,9 @@ export interface Challenge {
   invite_code?: string | null;
   created_by: number;
   created_at: string;
+  /* 신규: cadence + goal_config */
+  cadence?: ChallengeCadence | null;
+  goal_config?: ChallengeGoalConfig | null;
   /* 클라이언트 계산 필드 (API에 없을 수 있음) */
   participant_count?: number;
   my_progress?: number;      /* 내 달성일 수 */
@@ -87,6 +90,9 @@ export interface CreateChallengeRequest {
   end_date: string;
   max_participants?: number;
   verification_type: VerificationMethod;
+  /* 신규 옵션 필드 */
+  cadence?: ChallengeCadence;
+  goal_config?: ChallengeGoalConfig;
 }
 
 /* 챌린지 수정 요청 */
@@ -131,10 +137,14 @@ export interface ChallengeVerification {
 export interface CreateVerificationRequest {
   challenge_id: number;
   method: VerificationMethod;
+  /* YYYY-MM-DD. 백엔드 DTO 가 필수로 요구. */
+  verified_date: string;
   checked?: boolean;
   photo_file_id?: number;
   shield_inventory_id?: number;
   memo?: string;
+  /* 설문형 인증 응답 (예: 당뇨발 9문항 → {template, wound, blister, ...}) */
+  answers?: Record<string, string>;
 }
 
 export interface VerificationListResponse {
@@ -185,15 +195,57 @@ export interface ChallengeSummaryResponse {
   items: ChallengeSummaryItem[];
 }
 
+/* ─── cadence 타입 ─── */
+export type ChallengeCadence =
+  | "DAILY"
+  | "WEEKLY_COUNT"
+  | "GROUP_SUM"
+  | "GROUP_MEMBERS";
+
+/* ─── goal_config 구조 ─── */
+export interface ChallengeGoalConfig {
+  /* 공통 */
+  amount?: { value: number; unit: string };
+  duration_minutes?: number;
+  distance_km?: number;
+  step_count?: number;
+  weekly_target_count?: number;
+  group_target_count?: number;
+  group_target_members?: number;
+  /* 수면 */
+  sleep_mode?: "BED_TIME" | "SLEEP_DURATION" | "WAKE_TIME";
+  sleep_time_range?: string;       /* "22-23" 형식 */
+  sleep_duration_hours?: number;
+  wake_time?: string;              /* "07:00" 형식 */
+  /* 식단 */
+  diet_mode?: "AVOID" | "INCLUDE";
+  diet_targets?: string[];
+  diet_type?: "MEDITERRANEAN" | "LOW_CARB" | "LOW_FAT" | "LOW_SODIUM" | "LOW_SUGAR";
+  /* 체중 */
+  weight_loss_mode?: "MAINTAIN" | "USER_INPUT" | "PERCENT_5";
+  weight_loss_kg?: number;
+  /* 운동 기타 */
+  exercise_other_type?: string;
+  /* 질환 관리 */
+  questionnaire_template?: string;
+  /* 보조 분류 */
+  kind?: "WEIGHT";
+}
+
 /* ─── 위저드 폼 상태 ─── */
 export interface WizardFormState {
   scope: ChallengeScope;
   category: ChallengeCategory | null;
   sub_category: ExerciseSubType | null;
+  /* Step3 내 세부 모드 분기 */
+  step3Mode: string | null; /* "DAILY" | "WEEKLY_COUNT" | BED_TIME | AVOID | DIABETIC_FOOT | WALKING ... */
   goal_type: GoalType;
   goal_value: number;
-  duration_days: 7 | 14 | 30;
+  duration_days: 7 | 14 | 30 | 90 | 180; /* WEIGHT_MANAGEMENT 는 90/180 까지 */
   title: string;
   max_participants: number;
   verification_type: VerificationMethod;
+  /* 신규 필드 */
+  cadence: ChallengeCadence | null;
+  goal_config: ChallengeGoalConfig;
 }

@@ -94,6 +94,7 @@ function ChallengeDetailContent({
         body: {
           challenge_id: challengeId,
           method: "SHIELD",
+          verified_date: new Date().toISOString().slice(0, 10),
           shield_inventory_id: 1, /* mock */
         },
         method: "SHIELD",

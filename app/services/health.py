@@ -81,7 +81,16 @@ class HealthRecordService:
                 else None
             )
         async with in_transaction():
-            return await self.repo.create(user.id, payload)
+            record = await self.repo.create(user.id, payload)
+        # 주간 활동량 EXP 적립 (HEALTH_INPUT, 1일 1회). best-effort.
+        try:
+            from app.models.experience import XpKind
+            from app.services.experience import ExperienceService
+
+            await ExperienceService().award(user_id=user.id, kind=XpKind.HEALTH_INPUT)
+        except Exception:
+            pass
+        return record
 
     async def get_owned(self, user: User, record_id: int) -> HealthRecord:
         record = await self.repo.get_owned(record_id, user.id)

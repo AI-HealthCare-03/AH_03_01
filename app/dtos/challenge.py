@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.dtos.base import BaseSerializerModel
 from app.models.challenge import (
+    ChallengeCadence,
     ChallengeCategory,
     ChallengeDifficulty,
     ChallengeScope,
@@ -67,6 +68,12 @@ class ChallengeCreateRequest(BaseModel):
     goal_type: GoalType
     goal_value: Annotated[Decimal | None, Field(None, ge=0)] = None
     unit: Annotated[str | None, Field(None, max_length=20)] = None
+    cadence: ChallengeCadence = ChallengeCadence.DAILY
+    # 카테고리별 자유 설정. 예시 키: weekly_target_count, group_target_count,
+    # group_target_members, amount, duration_minutes, distance_km, step_count,
+    # diet_type, sleep_mode, sleep_time_range, sleep_duration_hours, wake_time,
+    # weight_loss_mode, weight_loss_kg, exercise_other_type, questionnaire_template
+    goal_config: dict[str, Any] = Field(default_factory=dict)
     verification_type: VerificationType
     difficulty: ChallengeDifficulty = ChallengeDifficulty.LEVEL_1
     visibility: ChallengeVisibility = ChallengeVisibility.PUBLIC
@@ -109,6 +116,9 @@ class ChallengeResponse(BaseSerializerModel):
     end_date: date
     creator_id: int
     created_at: datetime
+    cadence: ChallengeCadence = ChallengeCadence.DAILY
+    goal_config: dict[str, Any] = Field(default_factory=dict)
+    invite_code: str | None = None  # 그룹 챌린지 + 방장/참여자에게만 노출
 
 
 class ChallengeListItem(BaseModel):

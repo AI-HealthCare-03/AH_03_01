@@ -35,7 +35,8 @@ export type ChallengeCategory =
   | "NO_SMOKING"
   | "NO_ALCOHOL"
   | "DISEASE_CARE"
-  | "MEDITATION";
+  | "MEDITATION"
+  | "WEIGHT_MANAGEMENT";
 
 /* 챌린지 상태 */
 export type ChallengeStatus = "ACTIVE" | "COMPLETED" | "CANCELLED";

@@ -20,6 +20,7 @@ const CATEGORY_EMOJI: Record<ChallengeCategory, string> = {
   NO_ALCOHOL: "🚱",
   DISEASE_CARE: "💊",
   MEDITATION: "🧘",
+  WEIGHT_MANAGEMENT: "⚖️",
 };
 
 interface MyStatusCardProps {

@@ -97,6 +97,8 @@ class ChallengeService:
                     "goal_type": data.goal_type,
                     "goal_value": data.goal_value,
                     "unit": data.unit,
+                    "cadence": data.cadence,
+                    "goal_config": data.goal_config,
                     "verification_type": data.verification_type,
                     "difficulty": data.difficulty,
                     "visibility": data.visibility,
@@ -140,6 +142,17 @@ class ChallengeService:
         if participation is None or participation.status != ParticipantStatus.APPROVED:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="접근 권한이 없습니다.")
         return challenge
+
+    async def get_active_invite_code(self, challenge_id: int) -> str | None:
+        """그룹 챌린지의 PENDING 상태(코드형) invite_code 를 반환. 없으면 None."""
+        from app.models.challenge import ChallengeInvite, InviteStatus, InviteType  # noqa: PLC0415
+
+        invite = await ChallengeInvite.filter(
+            challenge_id=challenge_id,
+            invite_type=InviteType.CODE,
+            status=InviteStatus.PENDING,
+        ).order_by("-created_at").first()
+        return invite.invite_code if invite else None
 
     async def get_public(self, challenge_id: int) -> Challenge:
         challenge = await self.repo.get(challenge_id)
@@ -408,6 +421,8 @@ class VerificationService:
                         "file_id": data.photo_file_id,
                         "category": challenge.category.value,
                         "sub_category": challenge.sub_category.value if challenge.sub_category else None,
+                        # goal_config 도 함께 전달해 SigLIP2 프롬프트 동적 생성에 사용
+                        "goal_config": challenge.goal_config or {},
                     }
                 )
             if data.method == VerificationMethod.SHIELD:
@@ -426,6 +441,16 @@ class VerificationService:
                     source=GrowthEventSource.CHALLENGE,
                     source_id=verification.id,
                 )
+
+        # 주간 활동량 EXP 적립 (방지권 제외). best-effort.
+        if data.method != VerificationMethod.SHIELD:
+            try:
+                from app.models.experience import XpKind
+                from app.services.experience import ExperienceService
+
+                await ExperienceService().award(user_id=user.id, kind=XpKind.CHALLENGE_VERIFY)
+            except Exception:
+                pass
 
         return verification
 

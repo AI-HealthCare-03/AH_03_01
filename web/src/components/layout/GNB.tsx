@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Activity, Trophy, MessageCircle, User } from "lucide-react";
+import ProfileDropdown from "@/components/layout/ProfileDropdown";
+import { usePointBalance } from "@/hooks/queries/usePointBalance";
 
 /* =========================================
    GNB (Global Navigation Bar)
@@ -12,7 +14,7 @@ import { Home, Activity, Trophy, MessageCircle, User } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "홈", icon: Home },
-  { href: "/health", label: "건강", icon: Activity },
+  { href: "/health-records", label: "건강", icon: Activity },
   { href: "/challenges", label: "챌린지", icon: Trophy },
   { href: "/community", label: "커뮤니티", icon: MessageCircle },
   { href: "/mypage", label: "마이", icon: User },
@@ -56,15 +58,8 @@ export default function GNB() {
           </ul>
         </nav>
 
-        {/* 우측: 포인트 + 알림 */}
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-text-primary">
-            2,840 P
-          </span>
-          <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-xs font-bold">
-            H
-          </div>
-        </div>
+        {/* 우측: 포인트 + 프로필 드롭다운 */}
+        <HeaderRight />
       </header>
 
       {/* 모바일 하단 탭바 */}
@@ -100,5 +95,17 @@ export default function GNB() {
         </ul>
       </nav>
     </>
+  );
+}
+
+function HeaderRight() {
+  const { data: balance } = usePointBalance(0);
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-sm font-semibold text-text-primary">
+        {(balance?.balance ?? 0).toLocaleString()} P
+      </span>
+      <ProfileDropdown />
+    </div>
   );
 }
