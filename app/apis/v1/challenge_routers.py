@@ -297,7 +297,7 @@ async def respond_to_pending(
     participant = await service.respond_to_pending(user, challenge_id, target_user_id, action, reason)
     return Response(
         {
-            "user_id": participant.user_id,
+            "user_id": str(participant.user_id),
             "status": participant.status.value,
             "updated_at": participant.joined_at.isoformat(),
         },

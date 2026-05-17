@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any
+from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -114,7 +115,7 @@ class ChallengeResponse(BaseSerializerModel):
     max_participants: int
     start_date: date
     end_date: date
-    creator_id: int
+    creator_id: UUID
     created_at: datetime
     cadence: ChallengeCadence = ChallengeCadence.DAILY
     goal_config: dict[str, Any] = Field(default_factory=dict)
@@ -147,7 +148,7 @@ class ChallengeListResponse(BaseModel):
 
 class ParticipantResponse(BaseSerializerModel):
     id: int
-    user_id: int
+    user_id: UUID
     role: ParticipantRole
     status: ParticipantStatus
     current_score: int
@@ -165,13 +166,13 @@ class InviteCreateResponse(BaseModel):
 
 
 class DirectInviteRequest(BaseModel):
-    invitee_id: int
+    invitee_id: UUID
 
 
 class InvitationResponse(BaseSerializerModel):
     id: int
     challenge_id: int
-    invitee_id: int | None
+    invitee_id: UUID | None
     invite_code: str | None
     status: InviteStatus
     expires_at: datetime | None
@@ -217,7 +218,7 @@ class VerificationUpdateRequest(BaseModel):
 class VerificationResponse(BaseSerializerModel):
     id: int
     challenge_id: int
-    user_id: int
+    user_id: UUID
     method: VerificationMethod
     verified_date: date
     checked: bool | None
@@ -259,7 +260,7 @@ class ReactionUpdateRequest(BaseModel):
 
 class ReactionResponse(BaseSerializerModel):
     id: int
-    user_id: int
+    user_id: UUID
     type: ReactionType
     content: str | None
     created_at: datetime

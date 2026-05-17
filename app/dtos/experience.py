@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from pydantic import BaseModel
 
 
@@ -16,7 +18,7 @@ class WeeklyXpResponse(BaseModel):
 
 
 class LeaderboardEntryDto(BaseModel):
-    user_id: int
+    user_id: UUID
     user_name: str
     points: int
     rank: int

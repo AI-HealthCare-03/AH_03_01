@@ -69,20 +69,34 @@ export interface HealthProfileUpsertRequest {
   pregnancy_status?: PregnancyStatus;
 }
 
-/** 건강 프로필 상세 응답 */
+/** 건강 프로필 상세 응답.
+ *
+ * 백엔드 HealthProfileResponse 의 실 키(`has_*_family_history`, `diseases`, `is_smoker`,
+ * `alcohol_intake`, `pregnancy_history`, `is_chronic_patient`, `medications`)를
+ * 우선 정의하고, 과거 컴포넌트 호환을 위해 별칭 필드도 옵셔널로 유지한다.
+ */
 export interface HealthProfileDetail {
   id?: number;
   record_type?: "profile";
   height_cm?: number;
   weight_kg?: number;
   waist_cm?: number;
+  /* 백엔드 응답 키 (진실의 원천) */
+  has_diabetes_family_history?: boolean;
+  has_hypertension_family_history?: boolean;
+  is_smoker?: boolean;
+  alcohol_intake?: string;
+  pregnancy_history?: string;
+  is_chronic_patient?: boolean;
+  diseases?: string[];
+  medications?: string[];
+  /* 과거 별칭 (호환용) */
   smoking_status?: SmokingStatus;
   alcohol_frequency?: AlcoholFrequency;
   family_history_diabetes?: boolean;
   family_history_hypertension?: boolean;
   chronic_diseases?: ChronicDisease[];
   pregnancy_status?: PregnancyStatus;
-  /* 백엔드 HealthProfileResponse 는 updated_at 만 보냄. 호환을 위해 recorded_at 옵셔널 보존 */
   updated_at?: string;
   recorded_at?: string;
 }

@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from typing import Annotated
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -26,7 +27,7 @@ class PasswordChangeRequest(BaseModel):
 
 
 class UserInfoResponse(BaseSerializerModel):
-    id: int
+    id: UUID
     email: str
     name: str
     nickname: str | None = None

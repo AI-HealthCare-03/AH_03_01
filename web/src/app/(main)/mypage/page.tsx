@@ -188,15 +188,23 @@ export default function MyPage() {
           <dd className="text-text-primary text-right">{bmi}</dd>
           <dt className="text-text-tertiary">보유 질환</dt>
           <dd className="text-text-primary text-right">
-            {profile?.chronic_diseases && profile.chronic_diseases.length > 0
-              ? profile.chronic_diseases.join(", ")
-              : "없음"}
+            {(() => {
+              const diseases =
+                profile?.diseases ?? profile?.chronic_diseases ?? [];
+              return diseases.length > 0 ? diseases.join(", ") : "없음";
+            })()}
           </dd>
           <dt className="text-text-tertiary">가족력</dt>
           <dd className="text-text-primary text-right">
             {[
-              profile?.family_history_hypertension ? "고혈압" : null,
-              profile?.family_history_diabetes ? "당뇨" : null,
+              (profile?.has_hypertension_family_history ??
+                profile?.family_history_hypertension)
+                ? "고혈압"
+                : null,
+              (profile?.has_diabetes_family_history ??
+                profile?.family_history_diabetes)
+                ? "당뇨"
+                : null,
             ]
               .filter(Boolean)
               .join(", ") || "없음"}
