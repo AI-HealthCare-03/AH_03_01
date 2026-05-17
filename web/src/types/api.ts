@@ -27,6 +27,10 @@ export interface MyPet {
   current_xp: number;
   xp_to_next_level: number;
   pet_type?: string;
+  selected_style?: string | null;
+  hunger?: number;
+  cleanliness?: number;
+  mood?: number;
   created_at: string;
 }
 

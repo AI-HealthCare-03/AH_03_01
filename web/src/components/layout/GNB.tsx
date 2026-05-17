@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Activity, Trophy, MessageCircle, User } from "lucide-react";
+import { Home, Activity, Trophy, MessageCircle, User, Sparkles } from "lucide-react";
 import ProfileDropdown from "@/components/layout/ProfileDropdown";
 import { usePointBalance } from "@/hooks/queries/usePointBalance";
 
@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: "/", label: "홈", icon: Home },
   { href: "/health-records", label: "건강", icon: Activity },
   { href: "/challenges", label: "챌린지", icon: Trophy },
+  { href: "/pets", label: "펫", icon: Sparkles },
   { href: "/community", label: "커뮤니티", icon: MessageCircle },
   { href: "/mypage", label: "마이", icon: User },
 ] as const;
