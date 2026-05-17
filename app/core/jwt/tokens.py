@@ -78,7 +78,8 @@ class Token:
     @classmethod
     def for_user(cls, user: User) -> Self:
         token = cls()
-        token["user_id"] = user.id
+        # User.id 가 UUID 가 된 이후 JWT 페이로드는 문자열로 직렬화한다.
+        token["user_id"] = str(user.id)
         return token
 
 

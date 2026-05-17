@@ -101,14 +101,14 @@ export type UpdateChallengeRequest = Partial<CreateChallengeRequest>;
 /* ─── 참여자 ─── */
 export interface ChallengeParticipant {
   id: number;
-  user_id: number;
+  user_id: string; /* UUID */
   challenge_id: number;
   status: ParticipantStatus;
   joined_at: string;
   progress_days?: number;
   missed_count?: number;
   user?: {
-    id: number;
+    id: string; /* UUID */
     name: string;
     nickname?: string | null;
   };
@@ -123,7 +123,7 @@ export interface ParticipantListResponse {
 export interface ChallengeVerification {
   id: number;
   challenge_id: number;
-  user_id: number;
+  user_id: string; /* UUID */
   method: VerificationMethod;
   status: VerificationStatus;
   checked?: boolean | null;
@@ -156,12 +156,12 @@ export interface VerificationListResponse {
 export interface VerificationReaction {
   id: number;
   verification_id: number;
-  user_id: number;
+  user_id: string; /* UUID */
   type: ReactionType;
   content?: string | null;
   created_at: string;
   user?: {
-    id: number;
+    id: string; /* UUID */
     name: string;
     nickname?: string | null;
   };

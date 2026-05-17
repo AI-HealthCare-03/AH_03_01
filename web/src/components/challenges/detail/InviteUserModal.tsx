@@ -20,7 +20,7 @@ interface InviteUserModalProps {
   open: boolean;
   onClose: () => void;
   /** 이미 참여 중인 user_id 집합 (검색 결과에서 회색 처리) */
-  excludeUserIds?: number[];
+  excludeUserIds?: string[];
 }
 
 export default function InviteUserModal({
@@ -33,7 +33,7 @@ export default function InviteUserModal({
   const [keyword, setKeyword] = useState("");
   const [results, setResults] = useState<UserSearchItem[]>([]);
   const [searching, setSearching] = useState(false);
-  const [invitedIds, setInvitedIds] = useState<Set<number>>(new Set());
+  const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   /* 모달 열릴 때 입력 포커스 + 상태 리셋 */
@@ -79,7 +79,7 @@ export default function InviteUserModal({
   }, [open, onClose]);
 
   const inviteMutation = useMutation({
-    mutationFn: (userId: number) => inviteUserToChallenge(challengeId, userId),
+    mutationFn: (userId: string) => inviteUserToChallenge(challengeId, userId),
     onSuccess: (_, userId) => {
       setInvitedIds((prev) => new Set(prev).add(userId));
       showToast("초대를 보냈어요", "success");

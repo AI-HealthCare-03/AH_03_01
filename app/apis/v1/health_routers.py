@@ -39,7 +39,7 @@ health_reports_router = APIRouter(prefix="/health-reports", tags=["health-report
 predictions_router = APIRouter(prefix="/predictions", tags=["predictions"])
 
 
-async def _award_health_view(user_id: int) -> None:
+async def _award_health_view(user_id) -> None:  # type: ignore[no-untyped-def]  # user_id: UUID
     """건강 데이터 확인 활동량 EXP 적립 (1일 1회). best-effort."""
     try:
         from app.models.experience import XpKind

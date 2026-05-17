@@ -5,7 +5,8 @@
 
 /* 내 정보 (GET /api/v1/users/me) */
 export interface Me {
-  id: number;
+  /* USER PK 는 UUID (ERD v1). 문자열 직렬화. */
+  id: string;
   email: string;
   name: string;
   nickname?: string | null;

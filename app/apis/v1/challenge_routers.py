@@ -1,6 +1,7 @@
 from collections import defaultdict
 from datetime import date
 from typing import Annotated, Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -287,7 +288,7 @@ async def leave_challenge(
 )
 async def respond_to_pending(
     challenge_id: int,
-    target_user_id: int,
+    target_user_id: UUID,
     user: Annotated[User, Depends(get_request_user)],
     service: Annotated[ParticipantService, Depends(ParticipantService)],
     action: Annotated[str, Query(description="approve|reject")],

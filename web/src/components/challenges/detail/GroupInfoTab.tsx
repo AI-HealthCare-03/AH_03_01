@@ -32,7 +32,7 @@ export default function GroupInfoTab({
   const [inviteOpen, setInviteOpen] = useState(false);
   const participantUserIds = participants
     .map((p) => p.user_id ?? p.user?.id)
-    .filter((id): id is number => typeof id === "number");
+    .filter((id): id is string => typeof id === "string");
   /* 모집 중 + 슬롯 여유 있을 때만 초대 활성 */
   const canInvite =
     challenge.status === "RECRUITING" &&

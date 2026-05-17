@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from typing import Any
+from uuid import UUID
 
 from pydantic import EmailStr
 
@@ -17,7 +18,7 @@ class UserRepository:
     async def get_all(self):
         return await self._model.all()
 
-    async def get_user(self, user_id: int) -> User | None:
+    async def get_user(self, user_id: UUID | str) -> User | None:
         return await self._model.get_or_none(id=user_id)
 
     async def create_user(
@@ -57,7 +58,7 @@ class UserRepository:
     async def exists_by_phone_number(self, phone_number: str) -> bool:
         return await self._model.filter(phone_number=phone_number).exists()
 
-    async def update_last_login(self, user_id: int) -> None:
+    async def update_last_login(self, user_id: UUID) -> None:
         await self._model.filter(id=user_id).update(last_login=datetime.now(config.TIMEZONE))
 
     async def update_instance(self, user: User, data: dict[str, Any]) -> None:

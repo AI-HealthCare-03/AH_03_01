@@ -98,7 +98,7 @@ export async function leaveChallenge(challengeId: number): Promise<void> {
 
 /* ─── 사용자 닉네임 검색 (초대 대상 찾기) ─── */
 export interface UserSearchItem {
-  id: number;
+  id: string; /* UUID */
   name: string;
 }
 export async function searchUsersByNickname(
@@ -120,7 +120,7 @@ export interface DirectInviteResponse {
 }
 export async function inviteUserToChallenge(
   challengeId: number,
-  inviteeId: number,
+  inviteeId: string, /* UUID */
 ): Promise<DirectInviteResponse> {
   const { data } = await apiClient.post<DirectInviteResponse>(
     `/api/v1/challenges/${challengeId}/participants`,

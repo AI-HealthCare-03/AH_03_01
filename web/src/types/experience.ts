@@ -23,7 +23,7 @@ export interface WeeklyXpResponse {
 }
 
 export interface LeaderboardEntry {
-  user_id: number;
+  user_id: string; /* UUID */
   user_name: string;
   points: number;
   rank: number;
