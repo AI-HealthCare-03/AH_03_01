@@ -27,10 +27,10 @@ export interface SignupRequest {
   email: string;
   password: string;
   name: string;
+  nickname: string;
   gender: "MALE" | "FEMALE";
   birth_date: string; /* YYYY-MM-DD */
   phone_number: string;
-  /* nickname: string; // TODO(backend): nickname 필드 추가 후 연결 */
 }
 
 export interface SignupResponse {

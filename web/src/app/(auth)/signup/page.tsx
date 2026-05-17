@@ -76,12 +76,11 @@ export default function SignupPage() {
 
   const onSubmit = async (data: SignupFormValues) => {
     try {
-      /* nickname 은 백엔드 미구현 — 호출 시 제외 */
-      // TODO(backend): nickname 필드 추가 후 아래 주석 해제 및 nickname 포함
       await signup({
         email: data.email,
         password: data.password,
         name: data.name,
+        nickname: data.nickname,
         gender: data.gender,
         birth_date: data.birth_date,
         phone_number: data.phone_number.replace(/-/g, ""),

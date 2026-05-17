@@ -33,14 +33,11 @@ async def check_email_available(
 
 @auth_router.get("/check-nickname", status_code=status.HTTP_200_OK)
 async def check_nickname_available(
-    nickname: Annotated[str, Query(min_length=2, max_length=20)],
+    nickname: Annotated[str, Query(min_length=2, max_length=10)],
 ) -> Response:
-    """닉네임 사용 가능 여부 확인.
-
-    NOTE: 현 User 모델에 nickname 컬럼 없음. 추후 추가 시 실제 검증 로직 연결.
-    지금은 항상 사용 가능 응답으로 가입 플로우만 유지.
-    """
-    return Response(content={"nickname": nickname, "available": True}, status_code=status.HTTP_200_OK)
+    """닉네임 사용 가능 여부 확인. (ERD: USER.nickname varchar(10) NN unique)"""
+    exists = await UserRepository().exists_by_nickname(nickname)
+    return Response(content={"nickname": nickname, "available": not exists}, status_code=status.HTTP_200_OK)
 
 
 @auth_router.post("/login", response_model=LoginResponse, status_code=status.HTTP_200_OK)

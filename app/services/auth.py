@@ -21,6 +21,9 @@ class AuthService:
         # 이메일 중복 체크
         await self.check_email_exists(data.email)
 
+        # 닉네임 중복 체크
+        await self.check_nickname_exists(data.nickname)
+
         # 입력받은 휴대폰 번호를 노말라이즈
         normalized_phone_number = normalize_phone_number(data.phone_number)
 
@@ -33,6 +36,7 @@ class AuthService:
                 email=data.email,
                 hashed_password=hash_password(data.password),  # 해시화된 비밀번호를 사용
                 name=data.name,
+                nickname=data.nickname,
                 phone_number=normalized_phone_number,
                 gender=data.gender,
                 birthday=data.birth_date,
@@ -68,6 +72,10 @@ class AuthService:
     async def check_email_exists(self, email: str | EmailStr) -> None:
         if await self.user_repo.exists_by_email(email):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 사용중인 이메일입니다.")
+
+    async def check_nickname_exists(self, nickname: str) -> None:
+        if await self.user_repo.exists_by_nickname(nickname):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 사용중인 닉네임입니다.")
 
     async def check_phone_number_exists(self, phone_number: str) -> None:
         if await self.user_repo.exists_by_phone_number(phone_number):

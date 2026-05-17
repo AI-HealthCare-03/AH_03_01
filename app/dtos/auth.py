@@ -14,6 +14,7 @@ class SignUpRequest(BaseModel):
     ]
     password: Annotated[str, Field(min_length=8), AfterValidator(validate_password)]
     name: Annotated[str, Field(max_length=20)]
+    nickname: Annotated[str, Field(min_length=2, max_length=10)]
     gender: Gender
     birth_date: Annotated[date, AfterValidator(validate_birthday)]
     phone_number: Annotated[str, AfterValidator(validate_phone_number)]

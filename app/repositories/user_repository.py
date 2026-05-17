@@ -6,7 +6,7 @@ from pydantic import EmailStr
 from app.core import config
 from app.models.users import Gender, User
 
-ALLOWED_UPDATE_FIELDS = ["name", "phone_number", "gender", "birthday"]
+ALLOWED_UPDATE_FIELDS = ["nickname", "phone_number", "avatar_file_id"]
 UPDATED_AT_FIELD = "updated_at"
 
 
@@ -25,6 +25,7 @@ class UserRepository:
         email: str | EmailStr,
         hashed_password: str,
         name: str,
+        nickname: str,
         phone_number: str,
         gender: Gender,
         birthday: date,
@@ -36,6 +37,7 @@ class UserRepository:
             email=email,
             hashed_password=hashed_password,
             name=name,
+            nickname=nickname,
             phone_number=phone_number,
             gender=gender,
             birthday=birthday,
@@ -48,6 +50,9 @@ class UserRepository:
 
     async def exists_by_email(self, email: str) -> bool:
         return await self._model.filter(email=email).exists()
+
+    async def exists_by_nickname(self, nickname: str) -> bool:
+        return await self._model.filter(nickname=nickname).exists()
 
     async def exists_by_phone_number(self, phone_number: str) -> bool:
         return await self._model.filter(phone_number=phone_number).exists()

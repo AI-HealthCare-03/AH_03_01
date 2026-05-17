@@ -50,7 +50,8 @@ export default function ProfileDropdown() {
     };
   }, [open]);
 
-  const initial = me?.name?.[0]?.toUpperCase() ?? "U";
+  const initial = (me?.nickname?.[0] ?? me?.name?.[0] ?? "U").toUpperCase();
+  const displayName = me?.nickname ?? me?.name ?? "사용자";
 
   return (
     <div ref={wrapRef} className="relative">
@@ -73,7 +74,7 @@ export default function ProfileDropdown() {
           {/* 사용자 헤더 */}
           <div className="px-4 py-3 border-b border-border">
             <p className="text-sm font-bold text-text-primary truncate">
-              {me?.name ?? "사용자"}
+              {displayName}
             </p>
             {me?.email ? (
               <p className="text-xs text-text-tertiary truncate">{me.email}</p>

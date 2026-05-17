@@ -19,7 +19,10 @@ export default function Providers({ children }: ProvidersProps) {
         defaultOptions: {
           queries: {
             staleTime: 60 * 1000,
+            gcTime: 10 * 60 * 1000, // 캐시를 10분 보존 → 페이지 이동 시 즉시 표시
             retry: 1,
+            refetchOnWindowFocus: false,
+            refetchOnMount: false, // 캐시 데이터가 fresh 하면 마운트 시 재요청 안 함
           },
         },
       })

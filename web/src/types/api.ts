@@ -8,10 +8,13 @@ export interface Me {
   id: number;
   email: string;
   name: string;
-  nickname?: string;
+  nickname?: string | null;
   gender: "MALE" | "FEMALE";
-  birth_date: string;
+  birth_date?: string;
+  birthday?: string;
   phone_number: string;
+  avatar_file_id?: number | null;
+  avatar_url?: string | null;
   created_at: string;
 }
 
