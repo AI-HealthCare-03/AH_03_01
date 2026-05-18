@@ -28,8 +28,14 @@ app.add_middleware(
 initialize_tortoise(app)
 
 # /media 정적 파일 서빙. 업로드된 이미지/리소스에 접근 가능.
-_media_root = Path(config.MEDIA_ROOT)
-_media_root.mkdir(parents=True, exist_ok=True)
+# 컨테이너 환경 기본값 /app/media 는 CI / 로컬에서 권한 거부될 수 있으므로
+# mkdir 실패 시 ./.media 로 폴백한다.
+try:
+    _media_root = Path(config.MEDIA_ROOT)
+    _media_root.mkdir(parents=True, exist_ok=True)
+except (PermissionError, OSError):
+    _media_root = Path.cwd() / ".media"
+    _media_root.mkdir(parents=True, exist_ok=True)
 app.mount(config.MEDIA_URL_PREFIX, StaticFiles(directory=str(_media_root)), name="media")
 
 app.include_router(v1_routers)

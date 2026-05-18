@@ -48,9 +48,7 @@ async def get_weekly_leaderboard(
     payload = LeaderboardResponse(
         week_id=result.week_id,
         entries=[
-            LeaderboardEntryDto(
-                user_id=e.user_id, user_name=e.user_name, points=e.points, rank=e.rank
-            )
+            LeaderboardEntryDto(user_id=e.user_id, user_name=e.user_name, points=e.points, rank=e.rank)
             for e in result.entries
         ],
         my_rank=result.my_rank,

@@ -147,11 +147,15 @@ class ChallengeService:
         """그룹 챌린지의 PENDING 상태(코드형) invite_code 를 반환. 없으면 None."""
         from app.models.challenge import ChallengeInvite, InviteStatus, InviteType  # noqa: PLC0415
 
-        invite = await ChallengeInvite.filter(
-            challenge_id=challenge_id,
-            invite_type=InviteType.CODE,
-            status=InviteStatus.PENDING,
-        ).order_by("-created_at").first()
+        invite = (
+            await ChallengeInvite.filter(
+                challenge_id=challenge_id,
+                invite_type=InviteType.CODE,
+                status=InviteStatus.PENDING,
+            )
+            .order_by("-created_at")
+            .first()
+        )
         return invite.invite_code if invite else None
 
     async def get_public(self, challenge_id: int) -> Challenge:

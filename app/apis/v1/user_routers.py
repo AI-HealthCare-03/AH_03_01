@@ -21,6 +21,7 @@ async def _build_user_info_response(user: User) -> UserInfoResponse:
             payload.avatar_url = file_record.access_url
     return payload
 
+
 user_router = APIRouter(prefix="/users", tags=["users"])
 
 
@@ -67,10 +68,7 @@ async def search_users(
         .values("id", "nickname", "name")
     )
     payload = UserSearchResponse(
-        items=[
-            UserSearchItem(id=r["id"], name=str(r["nickname"] or r["name"]))
-            for r in rows
-        ],
+        items=[UserSearchItem(id=r["id"], name=str(r["nickname"] or r["name"])) for r in rows],
     )
     return Response(payload.model_dump(mode="json"), status_code=status.HTTP_200_OK)
 

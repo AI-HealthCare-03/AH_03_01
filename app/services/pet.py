@@ -54,13 +54,13 @@ MEDICINE_RECOVERY_AMOUNT = 20
 
 # 소비형 아이템 사용 시 스탯 변동 정책: intimacy/hunger/cleanliness/mood/xp_gain
 CONSUMABLE_POLICY: dict[str, dict[str, int]] = {
-    "FOOD_ANIMAL":              {"intimacy": 5,  "hunger": 25, "cleanliness": 0,  "mood": 3,  "xp": 5},
-    "FOOD_ANIMAL_PREMIUM":      {"intimacy": 10, "hunger": 35, "cleanliness": 0,  "mood": 5,  "xp": 10},
-    "SNACK_ANIMAL":             {"intimacy": 8,  "hunger": 10, "cleanliness": 0,  "mood": 15, "xp": 5},
-    "FERTILIZER_PLANT":         {"intimacy": 5,  "hunger": 20, "cleanliness": 0,  "mood": 10, "xp": 5},
-    "FERTILIZER_PLANT_PREMIUM": {"intimacy": 10, "hunger": 30, "cleanliness": 0,  "mood": 20, "xp": 10},
-    "SUPPLEMENT_PLANT":         {"intimacy": 8,  "hunger": 10, "cleanliness": 5,  "mood": 25, "xp": 8},
-    "WATER":                    {"intimacy": 3,  "hunger": 5,  "cleanliness": 25, "mood": 5,  "xp": 3},
+    "FOOD_ANIMAL": {"intimacy": 5, "hunger": 25, "cleanliness": 0, "mood": 3, "xp": 5},
+    "FOOD_ANIMAL_PREMIUM": {"intimacy": 10, "hunger": 35, "cleanliness": 0, "mood": 5, "xp": 10},
+    "SNACK_ANIMAL": {"intimacy": 8, "hunger": 10, "cleanliness": 0, "mood": 15, "xp": 5},
+    "FERTILIZER_PLANT": {"intimacy": 5, "hunger": 20, "cleanliness": 0, "mood": 10, "xp": 5},
+    "FERTILIZER_PLANT_PREMIUM": {"intimacy": 10, "hunger": 30, "cleanliness": 0, "mood": 20, "xp": 10},
+    "SUPPLEMENT_PLANT": {"intimacy": 8, "hunger": 10, "cleanliness": 5, "mood": 25, "xp": 8},
+    "WATER": {"intimacy": 3, "hunger": 5, "cleanliness": 25, "mood": 5, "xp": 3},
 }
 ANIMAL_ONLY_CATEGORIES = {"FOOD_ANIMAL", "FOOD_ANIMAL_PREMIUM", "SNACK_ANIMAL"}
 PLANT_ONLY_CATEGORIES = {"FERTILIZER_PLANT", "FERTILIZER_PLANT_PREMIUM", "SUPPLEMENT_PLANT"}
@@ -108,9 +108,7 @@ class PetService:
         pet.cleanliness = max(0, min(100, pet.cleanliness + cleanliness_delta))
         pet.mood = max(0, min(100, pet.mood + mood_delta))
         pet.last_interacted_at = datetime.now(config.TIMEZONE)
-        await pet.save(
-            update_fields=["intimacy", "hunger", "cleanliness", "mood", "last_interacted_at"]
-        )
+        await pet.save(update_fields=["intimacy", "hunger", "cleanliness", "mood", "last_interacted_at"])
         gained = 0
         if xp_gain > 0:
             pet, gained, _ = await self.repo.add_xp(pet, xp_gain, xp_per_level=XP_PER_LEVEL)
@@ -638,9 +636,7 @@ async def equipped_slots_payload(pet: Pet) -> dict[str, Any]:
     needed_ids = {*([bg_id] if bg_id else []), *furn_ids, *deco_ids}
     if not needed_ids:
         return {"equipped_background": None, "equipped_furniture": [], "equipped_decoration": []}
-    items_by_id: dict[int, Item] = {
-        i.id: i for i in await Item.filter(id__in=needed_ids)
-    }
+    items_by_id: dict[int, Item] = {i.id: i for i in await Item.filter(id__in=needed_ids)}
     bg = items_by_id.get(bg_id) if bg_id else None
     bg_payload = None
     if bg:

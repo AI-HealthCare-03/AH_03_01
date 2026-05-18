@@ -18,9 +18,7 @@ async def get_request_user(credential: Annotated[HTTPAuthorizationCredentials, D
     try:
         user_id = UUID(str(raw_user_id))
     except (ValueError, TypeError) as err:
-        raise HTTPException(
-            detail="Invalid token subject.", status_code=status.HTTP_401_UNAUTHORIZED
-        ) from err
+        raise HTTPException(detail="Invalid token subject.", status_code=status.HTTP_401_UNAUTHORIZED) from err
     user = await UserRepository().get_user(user_id)
     if not user:
         raise HTTPException(detail="Authenticate Failed.", status_code=status.HTTP_401_UNAUTHORIZED)

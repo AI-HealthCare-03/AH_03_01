@@ -371,7 +371,9 @@ async def list_my_invitations(
                 "id": inv.id,
                 "challenge_id": inv.challenge_id,
                 "challenge_title": inv.challenge.title if inv.challenge else None,
-                "challenge_category": inv.challenge.category.value if inv.challenge and inv.challenge.category else None,
+                "challenge_category": inv.challenge.category.value
+                if inv.challenge and inv.challenge.category
+                else None,
                 "inviter_id": str(inv.inviter_id) if inv.inviter_id else None,  # type: ignore[attr-defined]
                 "inviter_name": (inv.inviter.nickname or inv.inviter.name) if inv.inviter else None,
                 "status": inv.status.value,

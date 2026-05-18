@@ -143,9 +143,9 @@ class ExperienceService:
         )
         rows_sorted = sorted(rows, key=lambda r: r["total"] or 0, reverse=True)
         from app.models.users import User  # noqa: PLC0415
+
         users_map = {
-            u.id: (u.nickname or u.name)
-            for u in await User.filter(id__in=[r["user_id"] for r in rows_sorted]).all()
+            u.id: (u.nickname or u.name) for u in await User.filter(id__in=[r["user_id"] for r in rows_sorted]).all()
         }
         # UUID 비교를 위해 모두 UUID 객체로 정규화
         my_uid: UUID | None = None
