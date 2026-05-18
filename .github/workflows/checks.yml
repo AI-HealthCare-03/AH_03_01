@@ -96,18 +96,27 @@ jobs:
           done
           echo "postgres failed to start"; exit 1
 
-      - name: Create test database + pgcrypto/vector extensions
+      - name: Setup template1 + create test database (extensions inherited)
         env:
           PGPASSWORD: pw1234
         run: |
-          # conftest.py 는 'test' DB 에 접속한다. 미리 생성하고 필수 확장 활성화.
+          # tortoise.contrib.test._init_db 가 매 세션마다 'test' DB 를 DROP/CREATE 재생성한다.
+          # (tortoise/contrib/test/__init__.py:77-87  _drop_databases → init(_create_db=True))
+          # 그래서 'test' DB 에 직접 CREATE EXTENSION 해두어도 다음 init 시 사라진다.
+          # 해결: PostgreSQL 의 CREATE DATABASE 는 default 로 template1 을 복제하므로
+          #       template1 에 확장을 미리 활성화하면 이후 만들어지는 모든 DB 가 자동 상속.
           # - pgcrypto: UUID PK 마이그레이션의 gen_random_uuid()
           # - vector  : app/models/rag.py 의 VectorField(dimensions=768)
-          psql -h localhost -U postgres -d ai_health -c "CREATE DATABASE test;" || true
-          for db in ai_health test; do
-            psql -h localhost -U postgres -d "$db" -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;"
-            psql -h localhost -U postgres -d "$db" -c "CREATE EXTENSION IF NOT EXISTS vector;"
+          for ext in pgcrypto vector; do
+            psql -h localhost -U postgres -d template1 -c "CREATE EXTENSION IF NOT EXISTS ${ext};"
           done
+          # ai_health 자체에도 동일 확장 보장 (이미 만들어진 DB 라 template1 상속 시점 지났을 수 있음)
+          for ext in pgcrypto vector; do
+            psql -h localhost -U postgres -d ai_health -c "CREATE EXTENSION IF NOT EXISTS ${ext};"
+          done
+          # 'test' DB 는 tortoise 가 매번 DROP/CREATE 하므로 사전 생성 불필요.
+          # 다만 첫 접속 전에 존재해야 init 이 멱등하게 동작하니 한 번 만들어 둔다 (실패 무시).
+          psql -h localhost -U postgres -d ai_health -c "CREATE DATABASE test;" || true
 
       - name: Check if tests exist
         id: check_tests
