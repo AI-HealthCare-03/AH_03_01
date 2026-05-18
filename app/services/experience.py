@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 
 from tortoise.exceptions import IntegrityError
 from tortoise.functions import Sum
+from tortoise.transactions import in_transaction
 
 from app.models.experience import WeeklySettlement, XpEvent, XpKind
 from app.models.pet import PointSource
@@ -94,20 +95,27 @@ class ExperienceService:
         self.reward_service = RewardService()
 
     async def award(self, *, user_id: int, kind: XpKind) -> XpEvent | None:
-        """활동 EXP 적립. 1일 1회 제한 활동은 중복 시 None 반환."""
+        """활동 EXP 적립. 1일 1회 제한 활동은 중복 시 None 반환.
+
+        XpEvent.create 가 IntegrityError 를 던질 때 outer 트랜잭션(예: 라우터의
+        async with in_transaction(), 또는 TestCase 의 BEGIN)이 abort 상태로
+        남아 다음 SQL 이 "current transaction is aborted" 로 실패하지 않도록
+        in_transaction() (savepoint) 으로 감싸 explicit ROLLBACK TO SAVEPOINT.
+        """
         week_id = current_week_id()
         dedupe_key = _today_dedupe_key(kind) if kind in _ONCE_PER_DAY_KINDS else None
         # HEALTH_INPUT/VIEW 는 user 별로도 dedupe 필요 — kind:date:user_id 로 구성.
         if dedupe_key is not None:
             dedupe_key = f"{dedupe_key}:{user_id}"
         try:
-            return await XpEvent.create(
-                user_id=user_id,
-                kind=kind,
-                points=XP_PER_EVENT,
-                week_id=week_id,
-                dedupe_key=dedupe_key,
-            )
+            async with in_transaction():
+                return await XpEvent.create(
+                    user_id=user_id,
+                    kind=kind,
+                    points=XP_PER_EVENT,
+                    week_id=week_id,
+                    dedupe_key=dedupe_key,
+                )
         except IntegrityError:
             return None  # 이미 오늘 적립됨
 

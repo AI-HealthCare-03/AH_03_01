@@ -43,7 +43,9 @@ class TestUserMeApis(TestCase):
             "birth_date": "1990-10-10",
             "phone_number": "01077778888",
         }
-        update_data = {"name": "수정후"}
+        # 사양상 name 은 변경 불가 (UserUpdateRequest 는 nickname/phone_number/avatar_file_id 만 허용).
+        # 닉네임 변경으로 PATCH 동작 검증.
+        update_data = {"nickname": "수정후닉"}
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             await client.post("/api/v1/auth/signup", json=signup_data)
 
@@ -54,7 +56,7 @@ class TestUserMeApis(TestCase):
             headers = {"Authorization": f"Bearer {access_token}"}
             response = await client.patch("/api/v1/users/me", json=update_data, headers=headers)
         assert response.status_code == status.HTTP_200_OK
-        assert response.json()["name"] == "수정후"
+        assert response.json()["nickname"] == "수정후닉"
 
     async def test_get_user_me_unauthorized(self):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
