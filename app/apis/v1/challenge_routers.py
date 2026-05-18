@@ -333,6 +333,37 @@ async def respond_to_pending(
     )
 
 
+@challenge_invitations_router.get(
+    "",
+    status_code=status.HTTP_200_OK,
+)
+async def list_my_invitations(
+    user: Annotated[User, Depends(get_request_user)],
+    service: Annotated[ParticipantService, Depends(ParticipantService)],
+    status_q: Annotated[str | None, Query(alias="status")] = None,
+) -> Response:
+    """내가 받은 직접 초대(invitee=me) 목록. status=PENDING 으로 응답 대기만 필터링 가능."""
+    invites = await service.list_my_invitations(user, status_filter=status_q)
+    # 챌린지 메타 같이 채워 한 번에 화면에 그릴 수 있게.
+    items: list[dict[str, Any]] = []
+    for inv in invites:
+        await inv.fetch_related("challenge", "inviter")
+        items.append(
+            {
+                "id": inv.id,
+                "challenge_id": inv.challenge_id,
+                "challenge_title": inv.challenge.title if inv.challenge else None,
+                "challenge_category": inv.challenge.category.value if inv.challenge and inv.challenge.category else None,
+                "inviter_id": str(inv.inviter_id) if inv.inviter_id else None,  # type: ignore[attr-defined]
+                "inviter_name": (inv.inviter.nickname or inv.inviter.name) if inv.inviter else None,
+                "status": inv.status.value,
+                "expires_at": inv.expires_at.isoformat() if inv.expires_at else None,
+                "created_at": inv.created_at.isoformat(),
+            }
+        )
+    return Response({"items": items}, status_code=status.HTTP_200_OK)
+
+
 @challenge_invitations_router.patch(
     "/{invitation_id}",
     response_model=InvitationActionResponse,

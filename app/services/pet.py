@@ -657,6 +657,7 @@ async def equipped_slots_payload(pet: Pet) -> dict[str, Any]:
                 "name": items_by_id[fid].name,
                 "emoji": (items_by_id[fid].item_metadata or {}).get("emoji"),
                 "slot": (items_by_id[fid].item_metadata or {}).get("slot"),
+                "placement": (items_by_id[fid].item_metadata or {}).get("placement"),
             }
             for fid in furn_ids
             if fid in items_by_id
@@ -666,6 +667,7 @@ async def equipped_slots_payload(pet: Pet) -> dict[str, Any]:
                 "id": did,
                 "name": items_by_id[did].name,
                 "emoji": (items_by_id[did].item_metadata or {}).get("emoji"),
+                "placement": (items_by_id[did].item_metadata or {}).get("placement"),
             }
             for did in deco_ids
             if did in items_by_id

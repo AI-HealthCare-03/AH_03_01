@@ -310,6 +310,34 @@ class ParticipantService:
             }
         )
 
+    async def list_my_invitations(self, user: User, *, status_filter: str | None) -> list[ChallengeInvite]:
+        """내가 받은(invitee) 직접 초대 목록.
+
+        status_filter 가 비어 있으면 전부, 'PENDING' 이면 응답 대기만.
+        만료된 PENDING 은 조회 시점에 EXPIRED 로 자동 전환.
+        """
+        from app.models.challenge import InviteStatus as _IS  # noqa: PLC0415
+
+        enum_status: _IS | None = None
+        if status_filter:
+            try:
+                enum_status = _IS(status_filter)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="status 는 PENDING|ACCEPTED|REJECTED|EXPIRED 입니다.",
+                ) from exc
+        invites = await self.invite_repo.list_for_invitee(user.id, status_filter=enum_status)
+        now = datetime.now(config.TIMEZONE)
+        result: list[ChallengeInvite] = []
+        for inv in invites:
+            if inv.status == _IS.PENDING and inv.expires_at and inv.expires_at < now:
+                await self.invite_repo.update_status(inv, _IS.EXPIRED)
+            result.append(inv)
+        if enum_status == _IS.PENDING:
+            result = [i for i in result if i.status == _IS.PENDING]
+        return result
+
     async def respond_to_direct_invite(
         self,
         user: User,

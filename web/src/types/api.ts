@@ -31,6 +31,8 @@ export interface EquippedItemMeta {
   name: string;
   emoji?: string | null;
   slot?: string | null;
+  /** head | paws | stage_top | stage_bottom */
+  placement?: string | null;
 }
 
 export interface MyPet {

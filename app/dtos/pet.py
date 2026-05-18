@@ -68,6 +68,7 @@ class EquippedItemMeta(BaseModel):
     name: str
     emoji: str | None = None
     slot: str | None = None
+    placement: str | None = None  # head|paws|stage_top|stage_bottom
 
 
 class PetDetailResponse(PetResponse):

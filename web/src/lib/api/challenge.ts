@@ -125,6 +125,52 @@ export async function searchUsersByNickname(
   return data.items;
 }
 
+/* ─── 받은 직접 초대 목록 + 응답 ─── */
+export interface MyInvitationItem {
+  id: number;
+  challenge_id: number;
+  challenge_title: string | null;
+  challenge_category: string | null;
+  inviter_id: string | null;
+  inviter_name: string | null;
+  status: "PENDING" | "ACCEPTED" | "REJECTED" | "EXPIRED";
+  expires_at: string | null;
+  created_at: string;
+}
+export async function fetchMyInvitations(statusFilter?: string): Promise<MyInvitationItem[]> {
+  const { data } = await apiClient.get<{ items: MyInvitationItem[] }>(
+    "/api/v1/challenge-invitations",
+    { params: statusFilter ? { status: statusFilter } : {} },
+  );
+  return data.items;
+}
+export async function respondToInvitation(
+  invitationId: number,
+  action: "accept" | "reject",
+): Promise<{ id: number; status: string }> {
+  const { data } = await apiClient.patch<{ id: number; status: string }>(
+    `/api/v1/challenge-invitations/${invitationId}`,
+    null,
+    { params: { action } },
+  );
+  return data;
+}
+
+/* ─── PENDING 참가 신청 처리 (방장이 수락/거절) ─── */
+export async function respondToPendingParticipant(
+  challengeId: number,
+  targetUserId: string,
+  action: "approve" | "reject",
+  reason?: string,
+): Promise<{ user_id: string; status: string }> {
+  const { data } = await apiClient.patch<{ user_id: string; status: string }>(
+    `/api/v1/challenges/${challengeId}/participants/${targetUserId}`,
+    null,
+    { params: reason ? { action, reason } : { action } },
+  );
+  return data;
+}
+
 /* ─── 사용자에게 직접 초대 발송 ─── */
 export interface DirectInviteResponse {
   invite_id: number;

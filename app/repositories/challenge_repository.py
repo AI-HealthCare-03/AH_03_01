@@ -172,6 +172,17 @@ class ChallengeInviteRepository:
     async def get_by_code(self, invite_code: str) -> ChallengeInvite | None:
         return await self._model.get_or_none(invite_code=invite_code, status=InviteStatus.PENDING)
 
+    async def list_for_invitee(
+        self,
+        invitee_id: Any,
+        *,
+        status_filter: InviteStatus | None = None,
+    ) -> list[ChallengeInvite]:
+        qs = self._model.filter(invitee_id=invitee_id)
+        if status_filter is not None:
+            qs = qs.filter(status=status_filter)
+        return list(await qs.order_by("-created_at"))
+
     async def update_status(self, invite: ChallengeInvite, status: InviteStatus) -> ChallengeInvite:
         invite.status = status
         invite.responded_at = datetime.now(config.TIMEZONE)
