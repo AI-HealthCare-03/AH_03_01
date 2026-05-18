@@ -77,24 +77,23 @@ export default function PhotoVerify({
         </p>
       </div>
 
-      {/* 사진 업로드 영역 */}
-      <div>
+      {/* 사진 업로드 영역
+          - input 은 DOM 에 숨겨두고 별도 "사진 선택" 버튼으로 트리거 (마이페이지 edit 과 동일 패턴)
+          - 박스에 onClick 을 걸지 않아 자동 클릭이 발생하지 않도록 함 */}
+      <div className="space-y-2">
         <input
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          capture="environment"
           onChange={handleFileChange}
-          className="sr-only"
+          className="hidden"
           aria-label="인증 사진 선택"
           id="verify-photo-input"
         />
-        <label
-          htmlFor="verify-photo-input"
+        <div
           className={[
-            "block w-full aspect-video rounded-[16px] border-2 border-dashed",
-            "flex flex-col items-center justify-center cursor-pointer",
-            "transition-colors hover:border-brand-black",
+            "block w-full aspect-video rounded-[16px] border-2 border-dashed overflow-hidden",
+            "flex flex-col items-center justify-center",
             preview ? "border-brand-black" : "border-border",
           ].join(" ")}
         >
@@ -118,7 +117,15 @@ export default function PhotoVerify({
               </p>
             </div>
           )}
-        </label>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          fullWidth
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {preview ? "다른 사진 선택" : "사진 선택"}
+        </Button>
         {preview && (
           <button
             type="button"
@@ -127,9 +134,9 @@ export default function PhotoVerify({
               setSelectedFile(null);
               if (fileInputRef.current) fileInputRef.current.value = "";
             }}
-            className="mt-2 text-xs text-text-tertiary hover:text-text-secondary underline"
+            className="text-xs text-text-tertiary hover:text-text-secondary underline mx-auto block"
           >
-            다시 선택
+            지우기
           </button>
         )}
       </div>

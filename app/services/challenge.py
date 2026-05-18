@@ -452,19 +452,29 @@ class VerificationService:
                 )
                 # ai_worker 가 처리하도록 Redis 큐에 push.
                 # 카테고리/세부카테고리 정보가 SigLIP2 zero-shot 프롬프트에 필요.
+                # Redis 가 없는 로컬 환경에서는 enqueue 실패 → verification 자체는 PENDING 으로 응답하고
+                # AI 검증은 best-effort 로 skip. (운영 환경에서는 Redis 필수)
                 from app.core.queue import enqueue_image_verification  # noqa: PLC0415
 
-                await enqueue_image_verification(
-                    {
-                        "job_id": job.id,
-                        "verification_id": verification.id,
-                        "file_id": data.photo_file_id,
-                        "category": challenge.category.value,
-                        "sub_category": challenge.sub_category.value if challenge.sub_category else None,
-                        # goal_config 도 함께 전달해 SigLIP2 프롬프트 동적 생성에 사용
-                        "goal_config": challenge.goal_config or {},
-                    }
-                )
+                try:
+                    await enqueue_image_verification(
+                        {
+                            "job_id": job.id,
+                            "verification_id": verification.id,
+                            "file_id": data.photo_file_id,
+                            "category": challenge.category.value,
+                            "sub_category": challenge.sub_category.value if challenge.sub_category else None,
+                            # goal_config 도 함께 전달해 SigLIP2 프롬프트 동적 생성에 사용
+                            "goal_config": challenge.goal_config or {},
+                        }
+                    )
+                except Exception:  # pragma: no cover — 로컬 Redis 부재 시 폴백
+                    import logging  # noqa: PLC0415
+
+                    logging.getLogger(__name__).warning(
+                        "enqueue_image_verification failed (redis unavailable). verification=%s",
+                        verification.id,
+                    )
             if data.method == VerificationMethod.SHIELD:
                 await self.rescue_service.consume(user.id, challenge.id, data.verified_date)
             if initial_status == VerificationStatus.APPROVED:
