@@ -12,6 +12,7 @@ class TestJWTTokenRefreshAPI(TestCase):
             "email": "refresh@example.com",
             "password": "Password123!",
             "name": "리프레시테스터",
+            "nickname": "리프레시",
             "gender": "MALE",
             "birth_date": "1990-01-01",
             "phone_number": "01099998888",

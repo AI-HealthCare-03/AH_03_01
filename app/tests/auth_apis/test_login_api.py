@@ -12,6 +12,7 @@ class TestLoginAPI(TestCase):
             "email": "login_test@example.com",
             "password": "Password123!",
             "name": "로그인테스터",
+            "nickname": "로그인테스",
             "gender": "FEMALE",
             "birth_date": "1995-05-05",
             "phone_number": "01011112222",
