@@ -44,13 +44,26 @@ jobs:
   test:
     runs-on: ubuntu-latest
     services:
-      mysql:
-        image: mysql:8.0
+      # 프로젝트가 PostgreSQL 로 전환되어 (UUID PK / JSONB / pgcrypto 등) postgres 컨테이너 사용.
+      postgres:
+        image: postgres:16
         env:
-          MYSQL_ROOT_PASSWORD: pw1234
-          MYSQL_DATABASE: ai_health
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: pw1234
+          POSTGRES_DB: ai_health
         ports:
-          - 3306:3306
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_USER: postgres
+      DB_PASSWORD: pw1234
+      DB_NAME: ai_health
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -67,6 +80,23 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --group app --frozen
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U postgres; then
+              echo "postgres ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "postgres failed to start"; exit 1
+
+      - name: Create test database
+        env:
+          PGPASSWORD: pw1234
+        run: |
+          # conftest.py 는 'test' DB 에 접속하므로 미리 생성
+          psql -h localhost -U postgres -d ai_health -c "CREATE DATABASE test;" || true
 
       - name: Check if tests exist
         id: check_tests

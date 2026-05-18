@@ -27,7 +27,9 @@ venv/
 .venv/
 
 # GitHub
-.github/
+# .github/ 차단 제거 — CI 워크플로우는 트래킹 필요.
+# 로컬에서 개인 settings 만들고 싶으면 .github/.local/ 같은 하위만 따로 ignore.
+!.github/
 
 # IDE
 .vscode/
