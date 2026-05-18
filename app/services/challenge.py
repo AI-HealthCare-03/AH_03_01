@@ -316,7 +316,7 @@ class ParticipantService:
         status_filter 가 비어 있으면 전부, 'PENDING' 이면 응답 대기만.
         만료된 PENDING 은 조회 시점에 EXPIRED 로 자동 전환.
         """
-        from app.models.challenge import InviteStatus as _IS  # noqa: PLC0415
+        from app.models.challenge import InviteStatus as _IS  # noqa: PLC0415, N814
 
         enum_status: _IS | None = None
         if status_filter:
@@ -404,7 +404,7 @@ class VerificationService:
         self.pet_service = PetService()
         self.rescue_service = RescueTicketService()
 
-    async def create(self, user: User, data: VerificationCreateRequest) -> ChallengeVerification:
+    async def create(self, user: User, data: VerificationCreateRequest) -> ChallengeVerification:  # noqa: C901
         challenge = await self.challenge_repo.get(data.challenge_id)
         if challenge is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="챌린지를 찾을 수 없습니다.")

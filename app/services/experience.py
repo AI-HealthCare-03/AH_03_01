@@ -49,7 +49,6 @@ def previous_week_id(now: datetime | None = None) -> str:
     if now.tzinfo is None:
         now = now.replace(tzinfo=SEOUL)
     iso_now = now.astimezone(SEOUL)
-    monday = iso_now - (iso_now - iso_now.replace(hour=0, minute=0, second=0, microsecond=0))
     # 단순화: now - 7일.
     prev = iso_now.timestamp() - 7 * 86400
     return current_week_id(datetime.fromtimestamp(prev, tz=SEOUL))

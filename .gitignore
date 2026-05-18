@@ -47,8 +47,9 @@ Thumbs.db
 # Docker
 *.pid
 
-# Models
+# Models (ML weight 파일 차단). app/ 와 migrations/ 의 Python 소스는 예외.
 models/
+!app/models/
 !migrations/models/
 *.gguf
 *.bin
