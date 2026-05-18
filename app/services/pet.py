@@ -469,8 +469,12 @@ class AttendanceService:
 
     async def list_month(self, user_id: int, year: int, month: int) -> tuple[list[AttendanceCheck], int]:
         records = await self.repo.list_for_month(user_id, year, month)
-        latest = await self.repo.latest_before(user_id, date.today() + timedelta(days=1))
-        current_streak = latest.streak_days if latest and latest.check_date == date.today() else 0
+        # check_in 이 KST 기준으로 today 를 결정하므로 list_month 도 동일 timezone 으로
+        # today 를 결정해야 한다. date.today() (system local — CI 는 UTC) 를 그대로 쓰면
+        # KST 자정 직후 (UTC 15시~24시) 에 streak 가 잘못 0으로 떨어진다.
+        today = datetime.now(config.TIMEZONE).date()
+        latest = await self.repo.latest_before(user_id, today + timedelta(days=1))
+        current_streak = latest.streak_days if latest and latest.check_date == today else 0
         return records, current_streak
 
     async def check_in(self, user: User) -> dict[str, Any]:
