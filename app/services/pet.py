@@ -21,6 +21,7 @@ from app.models.pet import (
     InteractionType,
     Inventory,
     Item,
+    ItemCategory,
     Pet,
     PointSource,
     PointTransaction,
@@ -47,6 +48,22 @@ INTERACTION_STAT_DELTA = {
     InteractionType.PLAY: {"hunger": -5, "cleanliness": -5, "mood": 25},
     InteractionType.WASH: {"hunger": 0, "cleanliness": 25, "mood": 5},
 }
+DECAY_INTERVAL_HOURS = 6
+DECAY_AMOUNT = 10
+MEDICINE_RECOVERY_AMOUNT = 20
+
+# 소비형 아이템 사용 시 스탯 변동 정책: intimacy/hunger/cleanliness/mood/xp_gain
+CONSUMABLE_POLICY: dict[str, dict[str, int]] = {
+    "FOOD_ANIMAL":              {"intimacy": 5,  "hunger": 25, "cleanliness": 0,  "mood": 3,  "xp": 5},
+    "FOOD_ANIMAL_PREMIUM":      {"intimacy": 10, "hunger": 35, "cleanliness": 0,  "mood": 5,  "xp": 10},
+    "SNACK_ANIMAL":             {"intimacy": 8,  "hunger": 10, "cleanliness": 0,  "mood": 15, "xp": 5},
+    "FERTILIZER_PLANT":         {"intimacy": 5,  "hunger": 20, "cleanliness": 0,  "mood": 10, "xp": 5},
+    "FERTILIZER_PLANT_PREMIUM": {"intimacy": 10, "hunger": 30, "cleanliness": 0,  "mood": 20, "xp": 10},
+    "SUPPLEMENT_PLANT":         {"intimacy": 8,  "hunger": 10, "cleanliness": 5,  "mood": 25, "xp": 8},
+    "WATER":                    {"intimacy": 3,  "hunger": 5,  "cleanliness": 25, "mood": 5,  "xp": 3},
+}
+ANIMAL_ONLY_CATEGORIES = {"FOOD_ANIMAL", "FOOD_ANIMAL_PREMIUM", "SNACK_ANIMAL"}
+PLANT_ONLY_CATEGORIES = {"FERTILIZER_PLANT", "FERTILIZER_PLANT_PREMIUM", "SUPPLEMENT_PLANT"}
 
 
 class PetService:
@@ -74,6 +91,65 @@ class PetService:
         pet = await self.repo.get_by_user(user.id)
         if pet is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="펫이 없습니다. 먼저 생성하세요.")
+        return pet
+
+    async def apply_consumable(
+        self,
+        pet: Pet,
+        *,
+        intimacy_delta: int,
+        hunger_delta: int,
+        cleanliness_delta: int,
+        mood_delta: int,
+        xp_gain: int,
+    ) -> tuple[Pet, int]:
+        pet.intimacy = max(0, min(100, pet.intimacy + intimacy_delta))
+        pet.hunger = max(0, min(100, pet.hunger + hunger_delta))
+        pet.cleanliness = max(0, min(100, pet.cleanliness + cleanliness_delta))
+        pet.mood = max(0, min(100, pet.mood + mood_delta))
+        pet.last_interacted_at = datetime.now(config.TIMEZONE)
+        await pet.save(
+            update_fields=["intimacy", "hunger", "cleanliness", "mood", "last_interacted_at"]
+        )
+        gained = 0
+        if xp_gain > 0:
+            pet, gained, _ = await self.repo.add_xp(pet, xp_gain, xp_per_level=XP_PER_LEVEL)
+        return pet, gained
+
+    async def decay_if_needed(self, pet: Pet) -> Pet:
+        """
+        last_decay_at(없으면 created_at) 부터 경과한 DECAY_INTERVAL_HOURS 구간 수만큼
+        hunger/cleanliness/mood 를 DECAY_AMOUNT 씩 차감. hunger 가 0 이 되면 sick=True.
+        """
+        now = datetime.now(config.TIMEZONE)
+        base = pet.last_decay_at or pet.created_at
+        if base is None:
+            pet.last_decay_at = now
+            await pet.save(update_fields=["last_decay_at"])
+            return pet
+        elapsed_hours = (now - base).total_seconds() / 3600
+        steps = int(elapsed_hours // DECAY_INTERVAL_HOURS)
+        if steps <= 0:
+            return pet
+        loss = steps * DECAY_AMOUNT
+        update_fields: list[str] = ["last_decay_at"]
+        new_hunger = max(0, pet.hunger - loss)
+        new_cleanliness = max(0, pet.cleanliness - loss)
+        new_mood = max(0, pet.mood - loss)
+        if new_hunger != pet.hunger:
+            pet.hunger = new_hunger
+            update_fields.append("hunger")
+        if new_cleanliness != pet.cleanliness:
+            pet.cleanliness = new_cleanliness
+            update_fields.append("cleanliness")
+        if new_mood != pet.mood:
+            pet.mood = new_mood
+            update_fields.append("mood")
+        if pet.hunger == 0 and not pet.sick:
+            pet.sick = True
+            update_fields.append("sick")
+        pet.last_decay_at = now
+        await pet.save(update_fields=update_fields)
         return pet
 
     async def update(self, user: User, data: PetUpdateRequest) -> Pet:
@@ -219,9 +295,140 @@ class StoreService:
 class InventoryService:
     def __init__(self) -> None:
         self.repo = InventoryRepository()
+        self.pet_service = PetService()
 
     async def list_items(self, user_id: int, category: str | None) -> list[Inventory]:
         return await self.repo.list_for_user(user_id, category)
+
+    def _check_species_lock(self, item: Item, pet: Pet) -> None:
+        if item.species_lock is None:
+            return
+        if pet.pet_type != item.species_lock:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"이 아이템은 {item.species_lock.value} 펫 전용입니다.",
+            )
+
+    async def use(self, user: User, inventory_id: int) -> dict[str, Any]:
+        inv = await Inventory.get_or_none(id=inventory_id)
+        if inv is None or inv.user_id != user.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="인벤토리를 찾을 수 없습니다.")
+        if inv.quantity <= 0:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="재고가 없습니다.")
+        await inv.fetch_related("item")
+        item = inv.item
+        category_value = item.category.value if hasattr(item.category, "value") else str(item.category)
+
+        async with in_transaction():
+            if category_value == ItemCategory.MEDICINE.value:
+                pet = await self.pet_service.get_or_404(user)
+                pet.sick = False
+                await pet.save(update_fields=["sick"])
+                pet, xp_gained = await self.pet_service.apply_consumable(
+                    pet,
+                    intimacy_delta=5,
+                    hunger_delta=MEDICINE_RECOVERY_AMOUNT,
+                    cleanliness_delta=MEDICINE_RECOVERY_AMOUNT,
+                    mood_delta=MEDICINE_RECOVERY_AMOUNT,
+                    xp_gain=5,
+                )
+                inv.quantity -= 1
+                await inv.save(update_fields=["quantity"])
+                return self._consumable_response(inv, item, pet, xp_gained, suffix="펫이 회복됐어요.")
+
+            if category_value in CONSUMABLE_POLICY:
+                pet = await self.pet_service.get_or_404(user)
+                self._check_species_lock(item, pet)
+                policy = CONSUMABLE_POLICY[category_value]
+                pet, xp_gained = await self.pet_service.apply_consumable(
+                    pet,
+                    intimacy_delta=policy["intimacy"],
+                    hunger_delta=policy["hunger"],
+                    cleanliness_delta=policy["cleanliness"],
+                    mood_delta=policy["mood"],
+                    xp_gain=policy["xp"],
+                )
+                inv.quantity -= 1
+                await inv.save(update_fields=["quantity"])
+                return self._consumable_response(inv, item, pet, xp_gained)
+
+            if category_value == ItemCategory.BACKGROUND.value:
+                pet = await self.pet_service.get_or_404(user)
+                pet.equipped_background_id = item.id
+                await pet.save(update_fields=["equipped_background_id"])
+                return self._equip_response(inv, item, pet, suffix="배경을 적용했어요.")
+
+            if category_value in {ItemCategory.FURNITURE.value, ItemCategory.DECORATION.value}:
+                pet = await self.pet_service.get_or_404(user)
+                attr = (
+                    "equipped_furniture_ids"
+                    if category_value == ItemCategory.FURNITURE.value
+                    else "equipped_decoration_ids"
+                )
+                current: list[int] = list(getattr(pet, attr) or [])
+                toggled_on: bool
+                if item.id in current:
+                    current.remove(item.id)
+                    toggled_on = False
+                else:
+                    current.append(item.id)
+                    # 슬롯 최대 2개 유지 (오래된 것 제거)
+                    current = current[-2:]
+                    toggled_on = True
+                setattr(pet, attr, current)
+                await pet.save(update_fields=[attr])
+                suffix = "장착했어요." if toggled_on else "장착을 해제했어요."
+                return self._equip_response(inv, item, pet, suffix=suffix)
+
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail="이 카테고리는 아직 사용할 수 없습니다.",
+            )
+
+    @staticmethod
+    def _equip_response(inv: Inventory, item: Item, pet: Pet, *, suffix: str = "") -> dict[str, Any]:
+        message = f"{item.name}을(를) {suffix}".rstrip()
+        return {
+            "inventory_id": inv.id,
+            "item_id": item.id,
+            "category": item.category,
+            "remaining_quantity": inv.quantity,
+            "pet_id": pet.id,
+            "sick": pet.sick,
+            "hunger": pet.hunger,
+            "cleanliness": pet.cleanliness,
+            "mood": pet.mood,
+            "intimacy": pet.intimacy,
+            "message": message,
+        }
+
+    @staticmethod
+    def _consumable_response(
+        inv: Inventory,
+        item: Item,
+        pet: Pet,
+        xp_gained: int,
+        *,
+        suffix: str = "",
+    ) -> dict[str, Any]:
+        message = f"{item.name}을(를) 사용했어요."
+        if suffix:
+            message = f"{message} {suffix}"
+        return {
+            "inventory_id": inv.id,
+            "item_id": item.id,
+            "category": item.category,
+            "remaining_quantity": inv.quantity,
+            "pet_id": pet.id,
+            "sick": pet.sick,
+            "hunger": pet.hunger,
+            "cleanliness": pet.cleanliness,
+            "mood": pet.mood,
+            "intimacy": pet.intimacy,
+            "xp_gained": xp_gained,
+            "level": pet.level,
+            "message": message,
+        }
 
 
 class PointService:
@@ -415,3 +622,52 @@ async def equipped_items_payload(user_id: int) -> list[dict[str, Any]]:
             }
         )
     return payload
+
+
+async def equipped_slots_payload(pet: Pet) -> dict[str, Any]:
+    """Pet.equipped_* 필드를 Item 메타와 함께 dict 로 반환.
+
+    응답 형태:
+      equipped_background: {id, name, gradient} | None
+      equipped_furniture : [{id, name, emoji, slot}, ...]
+      equipped_decoration: [{id, name, emoji}, ...]
+    """
+    bg_id = pet.equipped_background_id
+    furn_ids: list[int] = list(pet.equipped_furniture_ids or [])
+    deco_ids: list[int] = list(pet.equipped_decoration_ids or [])
+    needed_ids = {*([bg_id] if bg_id else []), *furn_ids, *deco_ids}
+    if not needed_ids:
+        return {"equipped_background": None, "equipped_furniture": [], "equipped_decoration": []}
+    items_by_id: dict[int, Item] = {
+        i.id: i for i in await Item.filter(id__in=needed_ids)
+    }
+    bg = items_by_id.get(bg_id) if bg_id else None
+    bg_payload = None
+    if bg:
+        bg_payload = {
+            "id": bg.id,
+            "name": bg.name,
+            "gradient": (bg.item_metadata or {}).get("gradient"),
+        }
+    return {
+        "equipped_background": bg_payload,
+        "equipped_furniture": [
+            {
+                "id": fid,
+                "name": items_by_id[fid].name,
+                "emoji": (items_by_id[fid].item_metadata or {}).get("emoji"),
+                "slot": (items_by_id[fid].item_metadata or {}).get("slot"),
+            }
+            for fid in furn_ids
+            if fid in items_by_id
+        ],
+        "equipped_decoration": [
+            {
+                "id": did,
+                "name": items_by_id[did].name,
+                "emoji": (items_by_id[did].item_metadata or {}).get("emoji"),
+            }
+            for did in deco_ids
+            if did in items_by_id
+        ],
+    }

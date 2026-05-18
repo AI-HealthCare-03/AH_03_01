@@ -11,6 +11,7 @@ import { ME_QUERY_KEY } from "@/hooks/queries/useMe";
 import { updateMe } from "@/lib/api/user";
 import type { UpdateMeRequest } from "@/lib/api/user";
 import { uploadFile } from "@/lib/api/files";
+import { resolveMediaUrl } from "@/lib/api/media";
 import { extractErrorMessage } from "@/lib/api/client";
 
 /* =========================================
@@ -39,7 +40,7 @@ export default function MyPageEditPage() {
     if (me) {
       setNickname(me.nickname ?? "");
       setPhone(me.phone_number ?? "");
-      setAvatarPreview(me.avatar_url ?? null);
+      setAvatarPreview(resolveMediaUrl(me.avatar_url) ?? null);
       setAvatarFileId(me.avatar_file_id ?? null);
     }
   }, [me]);

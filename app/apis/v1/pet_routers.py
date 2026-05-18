@@ -14,6 +14,7 @@ from app.dtos.pet import (
     InteractionResponse,
     InventoryItemResponse,
     InventoryListResponse,
+    InventoryUseResponse,
     ItemResponse,
     PetCreateRequest,
     PetDetailResponse,
@@ -37,6 +38,7 @@ from app.services.pet import (
     RewardClaimService,
     StoreService,
     equipped_items_payload,
+    equipped_slots_payload,
     xp_to_next_level,
 )
 
@@ -69,8 +71,10 @@ async def get_my_pet(
     service: Annotated[PetService, Depends(PetService)],
 ) -> Response:
     pet = await service.get_or_404(user)
+    pet = await service.decay_if_needed(pet)
     payload = PetDetailResponse.model_validate(pet).model_dump(mode="json")
     payload["equipped_items"] = await equipped_items_payload(user.id)
+    payload.update(await equipped_slots_payload(pet))
     payload["xp_to_next_level"] = xp_to_next_level(pet.current_xp)
     return Response(payload, status_code=status.HTTP_200_OK)
 
@@ -84,6 +88,7 @@ async def update_my_pet(
     pet = await service.update(user, body)
     payload = PetDetailResponse.model_validate(pet).model_dump(mode="json")
     payload["equipped_items"] = await equipped_items_payload(user.id)
+    payload.update(await equipped_slots_payload(pet))
     payload["xp_to_next_level"] = xp_to_next_level(pet.current_xp)
     return Response(payload, status_code=status.HTTP_200_OK)
 
@@ -145,6 +150,20 @@ async def purchase_item(
 # ---------------------------------------------------------------------------
 # /inventory
 # ---------------------------------------------------------------------------
+
+
+@inventory_router.post(
+    "/{inventory_id}/use",
+    response_model=InventoryUseResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def use_inventory_item(
+    inventory_id: int,
+    user: Annotated[User, Depends(get_request_user)],
+    service: Annotated[InventoryService, Depends(InventoryService)],
+) -> Response:
+    payload = await service.use(user, inventory_id)
+    return Response(payload, status_code=status.HTTP_200_OK)
 
 
 @inventory_router.get("", response_model=InventoryListResponse, status_code=status.HTTP_200_OK)

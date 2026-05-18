@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/auth";
 import { ROUTES } from "@/constants";
 
@@ -16,14 +17,17 @@ export function useAuth() {
   const { token, isAuthenticated, setAuth, clearAuth, hydrate } =
     useAuthStore();
   const router = useRouter();
+  const qc = useQueryClient();
 
   /* 최초 마운트 시 localStorage 에서 토큰 복원 */
   useEffect(() => {
     hydrate();
   }, [hydrate]);
 
+  /* 로그아웃 시 React Query 캐시를 완전히 비워 다음 계정 데이터가 섞이지 않게 한다. */
   const logout = () => {
     clearAuth();
+    qc.clear();
     router.push(ROUTES.LOGIN);
   };
 

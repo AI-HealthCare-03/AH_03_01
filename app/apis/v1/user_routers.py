@@ -1,4 +1,5 @@
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -24,7 +25,7 @@ user_router = APIRouter(prefix="/users", tags=["users"])
 
 
 class UserSearchItem(BaseModel):
-    id: int
+    id: UUID
     name: str
 
 
@@ -67,11 +68,11 @@ async def search_users(
     )
     payload = UserSearchResponse(
         items=[
-            UserSearchItem(id=int(r["id"]), name=str(r["nickname"] or r["name"]))
+            UserSearchItem(id=r["id"], name=str(r["nickname"] or r["name"]))
             for r in rows
         ],
     )
-    return Response(payload.model_dump(), status_code=status.HTTP_200_OK)
+    return Response(payload.model_dump(mode="json"), status_code=status.HTTP_200_OK)
 
 
 @user_router.patch("/me", response_model=UserInfoResponse, status_code=status.HTTP_200_OK)

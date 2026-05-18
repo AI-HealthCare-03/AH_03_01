@@ -27,7 +27,7 @@ export default function HealthRecordsTabs({ activeTab }: HealthRecordsTabsProps)
   };
 
   return (
-    <div className="bg-white border-b border-border sticky top-16 z-30 md:top-0">
+    <div className="bg-white border-b border-border sticky top-0 z-30 md:top-16">
       <div className="max-w-5xl mx-auto px-4">
         <nav
           className="flex overflow-x-auto scrollbar-hide gap-0 -mb-px"

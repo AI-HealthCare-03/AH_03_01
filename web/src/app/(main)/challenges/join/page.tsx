@@ -2,10 +2,14 @@
 
 import { Suspense } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useMutation } from "@tanstack/react-query";
 import InviteCodeInput from "@/components/challenges/InviteCodeInput";
 import ChallengeCard from "@/components/challenges/ChallengeCard";
 import { useChallenges } from "@/hooks/queries/useChallenges";
 import { useToast } from "@/components/ui/Toast";
+import { joinChallengeByCode } from "@/lib/api/challenge";
+import { extractErrorMessage } from "@/lib/api/client";
 
 /* =========================================
    챌린지 검색 / 코드 참가 (10-C02)
@@ -15,6 +19,7 @@ import { useToast } from "@/components/ui/Toast";
 
 function JoinContent() {
   const { showToast } = useToast();
+  const router = useRouter();
 
   /* 그룹 모집중 챌린지 목록 */
   const { data, isLoading } = useChallenges({
@@ -25,17 +30,20 @@ function JoinContent() {
 
   const groupItems = data?.items ?? [];
 
+  /* 코드만으로 참가 mutation — 백엔드가 invite 로 challenge_id 찾고 처리 */
+  const joinMutation = useMutation({
+    mutationFn: (code: string) => joinChallengeByCode(code),
+    onSuccess: (res) => {
+      showToast("챌린지 참가 신청이 완료됐어요", "success");
+      router.push(`/challenges/${res.challenge_id}`);
+    },
+    onError: (err) => {
+      showToast(extractErrorMessage(err), "error");
+    },
+  });
+
   const handleCodeSubmit = (code: string) => {
-    /*
-     * 코드만으로 challenge_id를 알 수 없는 API 구조 한계.
-     * 백엔드 ParticipantService.join_by_code는 invite_code만으로 찾을 수 있으므로,
-     * 현재는 "카드에서 직접 참가" 흐름으로 안내.
-     * 초대 링크(/challenges/[id]?invite=CODE)로 진입하면 자동 처리됨.
-     */
-    showToast(
-      `코드 ${code}로 된 챌린지를 아래 목록에서 찾아 참가해주세요. 초대 링크로 바로 접속할 수도 있어요.`,
-      "info"
-    );
+    joinMutation.mutate(code);
   };
 
   return (

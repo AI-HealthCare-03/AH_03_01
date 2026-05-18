@@ -7,6 +7,7 @@ import { usePointBalance } from "@/hooks/queries/usePointBalance";
 import { useWeeklyXp } from "@/hooks/queries/useWeeklyXp";
 import { useQuery } from "@tanstack/react-query";
 import { fetchHealthProfileDetail } from "@/lib/api/health";
+import { resolveMediaUrl } from "@/lib/api/media";
 import { useAuth } from "@/hooks/useAuth";
 
 /* =========================================
@@ -65,10 +66,10 @@ export default function MyPage() {
       <section className="bg-white border border-border rounded-[16px] p-5 flex items-center gap-4 shadow-sm">
         {/* 아바타 */}
         <div className="w-20 h-20 rounded-full bg-brand flex items-center justify-center text-2xl font-black shrink-0 overflow-hidden">
-          {me?.avatar_url ? (
+          {resolveMediaUrl(me?.avatar_url) ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={me.avatar_url}
+              src={resolveMediaUrl(me?.avatar_url)}
               alt="프로필 사진"
               className="w-full h-full object-cover"
             />
@@ -217,6 +218,7 @@ export default function MyPage() {
         {[
           { href: "/mypage/edit", label: "프로필 편집", icon: "✏️" },
           { href: "/mypage/password", label: "비밀번호 변경", icon: "🔒" },
+          { href: "/mypage/points", label: "포인트 내역", icon: "💰" },
           { href: "/attendance", label: "출석 체크", icon: "📅" },
           { href: "/leaderboard", label: "주간 리더보드", icon: "🏆" },
           { href: "/withdrawal", label: "회원 탈퇴", icon: "🗑️" },

@@ -20,6 +20,19 @@ export interface Me {
 }
 
 /* 펫 (GET /api/v1/pets/me) */
+export interface EquippedBackground {
+  id: number;
+  name: string;
+  gradient?: string | null;
+}
+
+export interface EquippedItemMeta {
+  id: number;
+  name: string;
+  emoji?: string | null;
+  slot?: string | null;
+}
+
 export interface MyPet {
   id: number;
   name: string;
@@ -31,6 +44,11 @@ export interface MyPet {
   hunger?: number;
   cleanliness?: number;
   mood?: number;
+  intimacy?: number;
+  sick?: boolean;
+  equipped_background?: EquippedBackground | null;
+  equipped_furniture?: EquippedItemMeta[];
+  equipped_decoration?: EquippedItemMeta[];
   created_at: string;
 }
 
@@ -147,10 +165,28 @@ export interface AttendanceCheckResponse {
 }
 
 /* 포인트 잔액 (GET /api/v1/points/transactions) */
+export type PointTransactionType = "EARN" | "SPEND";
+export type PointSource =
+  | "CHALLENGE_DAILY"
+  | "CHALLENGE_PERIOD"
+  | "CHALLENGE_GROUP"
+  | "CHALLENGE_WEEKLY_RANK"
+  | "ATTENDANCE_DAILY"
+  | "ATTENDANCE_BONUS"
+  | "QUIZ"
+  | "STORE_PURCHASE"
+  | "PET_INTERACTION"
+  | "REFUND"
+  | "ETC";
+
 export interface PointTransaction {
   id: number;
+  type?: PointTransactionType;
   amount: number;
-  description: string;
+  balance_after?: number;
+  source?: PointSource;
+  source_id?: number | null;
+  description: string | null;
   created_at: string;
 }
 
@@ -181,4 +217,64 @@ export interface MetricSeriesPoint {
 export interface MetricStatResponse {
   metric: string;
   series: MetricSeriesPoint[];
+}
+
+/* =========================================
+   상점 / 인벤토리 관련 타입
+   ========================================= */
+
+export type ItemCategory =
+  | "BACKGROUND" | "FURNITURE" | "PET" | "TICKET" | "MEDICINE"
+  | "DECORATION" | "FOOD_ANIMAL" | "FOOD_ANIMAL_PREMIUM" | "SNACK_ANIMAL"
+  | "FERTILIZER_PLANT" | "FERTILIZER_PLANT_PREMIUM" | "SUPPLEMENT_PLANT" | "WATER";
+
+export type SpeciesLock = "DOG" | "CAT" | "PLANT" | null;
+
+export interface StoreItem {
+  id: number;
+  category: ItemCategory;
+  name: string;
+  description?: string | null;
+  price: number;
+  thumbnail_file_id?: number | null;
+  item_metadata: Record<string, unknown>;
+  species_lock?: SpeciesLock;
+}
+
+export interface StoreItemsResponse { items: StoreItem[]; }
+
+export interface InventoryItem {
+  id: number;
+  item_id: number;
+  category: ItemCategory;
+  name: string;
+  quantity: number;
+  is_equipped: boolean;
+  acquired_at: string;
+}
+
+export interface InventoryListResponse { items: InventoryItem[]; }
+
+export interface PurchaseResponse {
+  purchase_id: number;
+  item_id: number;
+  quantity: number;
+  point_spent: number;
+  point_balance: number;
+}
+
+export interface InventoryUseResponse {
+  inventory_id: number;
+  item_id: number;
+  category: ItemCategory;
+  remaining_quantity: number;
+  pet_id?: number | null;
+  sick?: boolean | null;
+  hunger?: number | null;
+  cleanliness?: number | null;
+  mood?: number | null;
+  intimacy?: number | null;
+  xp_gained?: number | null;
+  level?: number | null;
+  message: string;
 }

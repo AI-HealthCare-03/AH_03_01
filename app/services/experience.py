@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from tortoise.exceptions import IntegrityError

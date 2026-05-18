@@ -48,12 +48,33 @@ class PetResponse(BaseSerializerModel):
     hunger: int
     cleanliness: int
     mood: int
+    intimacy: int = 0
+    sick: bool = False
+    equipped_background_id: int | None = None
+    equipped_furniture_ids: list[int] = []
+    equipped_decoration_ids: list[int] = []
     last_interacted_at: datetime | None
     created_at: datetime
 
 
+class EquippedBackgroundMeta(BaseModel):
+    id: int
+    name: str
+    gradient: str | None = None
+
+
+class EquippedItemMeta(BaseModel):
+    id: int
+    name: str
+    emoji: str | None = None
+    slot: str | None = None
+
+
 class PetDetailResponse(PetResponse):
     equipped_items: list[EquippedItem] = []
+    equipped_background: EquippedBackgroundMeta | None = None
+    equipped_furniture: list[EquippedItemMeta] = []
+    equipped_decoration: list[EquippedItemMeta] = []
     xp_to_next_level: int = 100
 
 
@@ -100,6 +121,7 @@ class ItemResponse(BaseSerializerModel):
     price: int
     thumbnail_file_id: int | None
     item_metadata: dict[str, Any]
+    species_lock: PetType | None = None
 
 
 class StoreItemsResponse(BaseModel):
@@ -131,6 +153,22 @@ class InventoryItemResponse(BaseSerializerModel):
 
 class InventoryListResponse(BaseModel):
     items: list[InventoryItemResponse]
+
+
+class InventoryUseResponse(BaseModel):
+    inventory_id: int
+    item_id: int
+    category: ItemCategory
+    remaining_quantity: int
+    pet_id: int | None = None
+    sick: bool | None = None
+    hunger: int | None = None
+    cleanliness: int | None = None
+    mood: int | None = None
+    intimacy: int | None = None
+    xp_gained: int | None = None
+    level: int | None = None
+    message: str
 
 
 class PointTransactionResponse(BaseSerializerModel):

@@ -105,3 +105,8 @@ wheels/
 *.coverage
 .coverage.*
 .claude/
+
+# 로컬 스크린샷·플레이라이트 캐시·원본 PNG 보관 폴더
+.playwright-mcp/
+pets-*.png
+/pets/

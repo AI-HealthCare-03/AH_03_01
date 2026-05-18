@@ -96,6 +96,19 @@ export async function leaveChallenge(challengeId: number): Promise<void> {
   await apiClient.delete(`/api/v1/challenges/${challengeId}/participants`);
 }
 
+/* ─── 코드만으로 챌린지 참가 (코드 입력형) ─── */
+export interface JoinByCodeResponse {
+  challenge_id: number;
+  status: string;
+}
+export async function joinChallengeByCode(inviteCode: string): Promise<JoinByCodeResponse> {
+  const { data } = await apiClient.post<JoinByCodeResponse>(
+    "/api/v1/challenges/join-by-code",
+    { invite_code: inviteCode },
+  );
+  return data;
+}
+
 /* ─── 사용자 닉네임 검색 (초대 대상 찾기) ─── */
 export interface UserSearchItem {
   id: string; /* UUID */

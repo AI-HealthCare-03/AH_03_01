@@ -97,6 +97,20 @@ export async function fetchPointBalance(
   return data;
 }
 
+/** 포인트 거래 내역 (필터링). type/source/기간 지원. */
+export async function fetchPointTransactions(filter?: {
+  type?: "EARN" | "SPEND";
+  source?: string;
+  from?: string;
+  to?: string;
+}): Promise<PointBalanceResponse> {
+  const { data } = await apiClient.get<PointBalanceResponse>(
+    "/api/v1/points/transactions",
+    { params: filter ?? {} }
+  );
+  return data;
+}
+
 /** 건강 프로필 (신장·체중).
  *  백엔드는 recordType=profile 일 때 단일 객체를 반환 (배열 아님). */
 export async function fetchHealthProfile(): Promise<HealthProfileRecord | null> {

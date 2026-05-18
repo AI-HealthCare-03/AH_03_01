@@ -223,6 +223,34 @@ async def list_participants(
 
 
 @challenges_router.post(
+    "/join-by-code",
+    status_code=status.HTTP_201_CREATED,
+)
+async def join_challenge_by_code(
+    user: Annotated[User, Depends(get_request_user)],
+    service: Annotated[ParticipantService, Depends(ParticipantService)],
+    invite_code_q: Annotated[str | None, Query(alias="inviteCode")] = None,
+    request: Request = None,  # type: ignore[assignment]
+) -> Response:
+    """invite_code 만으로 챌린지를 찾아 참가. 코드형 입력 화면(/challenges/join)에서 사용."""
+    code = invite_code_q
+    if code is None and request is not None:
+        try:
+            body = await request.json()
+        except ValueError:
+            body = {}
+        if isinstance(body, dict):
+            code = body.get("invite_code")
+    if not code:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invite_code 가 필요합니다.")
+    participant = await service.join_by_code_only(user, code)
+    return Response(
+        ParticipantResponse.model_validate(participant).model_dump(mode="json"),
+        status_code=status.HTTP_201_CREATED,
+    )
+
+
+@challenges_router.post(
     "/{challenge_id}/participants",
     status_code=status.HTTP_201_CREATED,
 )

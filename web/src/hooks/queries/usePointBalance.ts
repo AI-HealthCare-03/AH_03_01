@@ -11,5 +11,9 @@ export function usePointBalance(size = 3) {
   return useQuery({
     queryKey: [...POINT_BALANCE_KEY, size],
     queryFn: () => fetchPointBalance(size),
+    /* 잔액은 다른 화면 활동에 의해 자주 바뀐다. 캐시 freshness 강화. */
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 }

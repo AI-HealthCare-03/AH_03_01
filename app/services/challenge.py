@@ -218,6 +218,13 @@ class ParticipantService:
         await self._ensure_access(user, challenge)
         return await self.repo.list_for_challenge(challenge_id)
 
+    async def join_by_code_only(self, user: User, invite_code: str) -> ChallengeParticipant:
+        """invite_code 만으로 챌린지를 찾아 join 처리. (코드 입력형 참가)"""
+        invite = await self.invite_repo.get_by_code(invite_code)
+        if invite is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="유효한 초대 코드가 아닙니다.")
+        return await self.join_by_code(user, invite.challenge_id, invite_code)
+
     async def join_by_code(self, user: User, challenge_id: int, invite_code: str) -> ChallengeParticipant:
         invite = await self.invite_repo.get_by_code(invite_code)
         if invite is None or invite.challenge_id != challenge_id:
