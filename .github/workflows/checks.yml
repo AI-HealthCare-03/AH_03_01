@@ -44,9 +44,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
     services:
-      # 프로젝트가 PostgreSQL 로 전환되어 (UUID PK / JSONB / pgcrypto 등) postgres 컨테이너 사용.
+      # 프로젝트가 PostgreSQL + pgvector(RAG embedding) 사용.
+      # 일반 postgres:16 에는 pgvector 가 없어 `type "vector" does not exist` 발생 →
+      # ankane/pgvector 또는 pgvector/pgvector 의 사전 빌드 이미지 사용.
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: pw1234
@@ -94,14 +96,18 @@ jobs:
           done
           echo "postgres failed to start"; exit 1
 
-      - name: Create test database + pgcrypto extension
+      - name: Create test database + pgcrypto/vector extensions
         env:
           PGPASSWORD: pw1234
         run: |
-          # conftest.py 는 'test' DB 에 접속한다. 미리 생성하고 pgcrypto(gen_random_uuid) 도 활성화.
+          # conftest.py 는 'test' DB 에 접속한다. 미리 생성하고 필수 확장 활성화.
+          # - pgcrypto: UUID PK 마이그레이션의 gen_random_uuid()
+          # - vector  : app/models/rag.py 의 VectorField(dimensions=768)
           psql -h localhost -U postgres -d ai_health -c "CREATE DATABASE test;" || true
-          psql -h localhost -U postgres -d test -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;" || true
-          psql -h localhost -U postgres -d ai_health -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;" || true
+          for db in ai_health test; do
+            psql -h localhost -U postgres -d "$db" -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;"
+            psql -h localhost -U postgres -d "$db" -c "CREATE EXTENSION IF NOT EXISTS vector;"
+          done
 
       - name: Check if tests exist
         id: check_tests
