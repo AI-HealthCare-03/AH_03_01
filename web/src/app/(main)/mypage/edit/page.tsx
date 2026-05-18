@@ -61,7 +61,7 @@ export default function MyPageEditPage() {
     try {
       const uploaded = await uploadFile(file, "profile");
       setAvatarFileId(uploaded.id);
-      setAvatarPreview(uploaded.access_url);
+      setAvatarPreview(resolveMediaUrl(uploaded.access_url) ?? null);
       showToast("이미지를 업로드했어요. 저장하면 반영됩니다.", "info");
     } catch (err) {
       showToast(extractErrorMessage(err), "error");

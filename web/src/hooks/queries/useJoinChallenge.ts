@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { joinChallenge } from "@/lib/api/challenge";
 import { CHALLENGES_KEY } from "./useChallenges";
 import { PARTICIPANTS_KEY } from "./useChallengeParticipants";
+import { MY_ACTIVE_CHALLENGES_KEY } from "./useMyActiveChallenges";
 
 export function useJoinChallenge() {
   const qc = useQueryClient();
@@ -16,6 +17,7 @@ export function useJoinChallenge() {
     onSuccess: (_, { challengeId }) => {
       qc.invalidateQueries({ queryKey: [CHALLENGES_KEY] });
       qc.invalidateQueries({ queryKey: [PARTICIPANTS_KEY, challengeId] });
+      qc.invalidateQueries({ queryKey: MY_ACTIVE_CHALLENGES_KEY });
     },
   });
 }

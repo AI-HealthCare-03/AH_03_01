@@ -21,12 +21,22 @@ const apiClient: AxiosInstance = axios.create({
   },
 });
 
-/* 요청 인터셉터: Authorization 헤더 자동 첨부 */
+/* 요청 인터셉터: Authorization 헤더 자동 첨부 + FormData 일 때 Content-Type 제거
+   (axios 가 FormData 를 감지해 boundary 포함된 multipart/form-data 헤더를 자동 설정한다) */
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = getToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    if (
+      typeof FormData !== "undefined" &&
+      config.data instanceof FormData
+    ) {
+      // 기본 Content-Type(application/json) 을 제거해 axios 가 boundary 를 자동 설정하게 한다.
+      // setContentType(null) 도 AxiosHeaders 에서 동일하게 동작.
+      delete (config.headers as Record<string, unknown>)["Content-Type"];
+      delete (config.headers as Record<string, unknown>)["content-type"];
     }
     return config;
   },

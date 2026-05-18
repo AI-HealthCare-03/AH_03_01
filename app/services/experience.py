@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from tortoise.exceptions import IntegrityError
@@ -74,7 +76,7 @@ class WeeklySummary:
 
 @dataclass(slots=True)
 class LeaderboardEntry:
-    user_id: int
+    user_id: Any  # UUID (직렬화는 str 로) — int 시절 시그니처 호환 위해 Any
     user_name: str
     points: int
     rank: int
@@ -130,7 +132,7 @@ class ExperienceService:
         self,
         *,
         week_id: str | None = None,
-        my_user_id: int,
+        my_user_id: Any,
         limit: int = 10,
     ) -> LeaderboardResult:
         week_id = week_id or current_week_id()
@@ -140,26 +142,32 @@ class ExperienceService:
             .group_by("user_id")
             .values("user_id", "total")
         )
-        # 정렬
         rows_sorted = sorted(rows, key=lambda r: r["total"] or 0, reverse=True)
-        # user name lookup
-        from app.models.users import User
-        users_map = {u.id: u.name for u in await User.filter(id__in=[r["user_id"] for r in rows_sorted]).all()}
+        from app.models.users import User  # noqa: PLC0415
+        users_map = {
+            u.id: (u.nickname or u.name)
+            for u in await User.filter(id__in=[r["user_id"] for r in rows_sorted]).all()
+        }
+        # UUID 비교를 위해 모두 UUID 객체로 정규화
+        my_uid: UUID | None = None
+        if my_user_id is not None:
+            my_uid = my_user_id if isinstance(my_user_id, UUID) else UUID(str(my_user_id))
 
         entries: list[LeaderboardEntry] = []
         my_rank: int | None = None
         my_points = 0
         for idx, r in enumerate(rows_sorted, start=1):
-            uid = int(r["user_id"])
+            uid_raw = r["user_id"]
+            uid = uid_raw if isinstance(uid_raw, UUID) else UUID(str(uid_raw))
             pts = int(r["total"] or 0)
-            if uid == my_user_id:
+            if my_uid is not None and uid == my_uid:
                 my_rank = idx
                 my_points = pts
             if idx <= limit:
                 entries.append(
                     LeaderboardEntry(
                         user_id=uid,
-                        user_name=users_map.get(uid, f"user-{uid}"),
+                        user_name=users_map.get(uid, "익명"),
                         points=pts,
                         rank=idx,
                     )

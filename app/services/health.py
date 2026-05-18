@@ -144,12 +144,13 @@ class HealthStatisticsService:
 
     @classmethod
     def parse_metric(cls, metric: str) -> tuple[RecordType, RecordSubType | None]:
-        if metric not in cls._METRIC_MAP:
+        key = (metric or "").lower()
+        if key not in cls._METRIC_MAP:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"지원하지 않는 metric: {metric}",
             )
-        return cls._METRIC_MAP[metric]
+        return cls._METRIC_MAP[key]
 
     @staticmethod
     def _period_to_dates(period: str | None) -> tuple[date | None, date | None]:

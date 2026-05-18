@@ -119,7 +119,7 @@ class ChallengeParticipantRepository:
         challenge_id: int,
         status: str | None = None,
     ) -> list[ChallengeParticipant]:
-        qs = self._model.filter(challenge_id=challenge_id)
+        qs = self._model.filter(challenge_id=challenge_id).prefetch_related("user")
         if status:
             qs = qs.filter(status=status)
         return list(await qs.order_by("joined_at"))

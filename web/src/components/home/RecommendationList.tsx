@@ -17,6 +17,10 @@ interface RecommendationListProps {
   items: ChallengeRecommendationItem[];
   isLoading: boolean;
   hasPrediction: boolean;
+  /** true 면 1컬럼 세로 리스트(우측 사이드 패널용). 기본은 3컬럼 그리드. */
+  dense?: boolean;
+  /** false 면 상단 헤더("맞춤 추천 챌린지" 타이틀) 숨김 — aside 에 자체 헤더 있을 때 */
+  showHeader?: boolean;
 }
 
 /* 우선순위 → 배지 스타일. 백엔드 TOP/OPTIONAL 와 구 별칭 HIGHEST/SUPPLEMENTAL 모두 매핑 */
@@ -45,7 +49,7 @@ function RecommendationCard({ item }: { item: ChallengeRecommendationItem }) {
   const rewardLabel = `${item.reward_points ?? 200}P`;
 
   return (
-    <div className="snap-start shrink-0 w-[240px] md:w-auto bg-white rounded-[16px] border border-border p-4 flex flex-col gap-3 shadow-sm">
+    <div className="snap-start shrink-0 w-[240px] md:w-auto bg-white rounded-[16px] border border-border p-4 flex flex-col gap-3 shadow-sm min-w-0">
       {/* 헤더 행 */}
       <div className="flex items-center justify-between gap-2">
         <span
@@ -90,23 +94,27 @@ export default function RecommendationList({
   items,
   isLoading,
   hasPrediction,
+  dense = false,
+  showHeader = true,
 }: RecommendationListProps) {
   return (
     <section aria-labelledby="recommendation-heading">
-      <div className="flex items-center justify-between mb-4">
-        <h2
-          id="recommendation-heading"
-          className="text-base font-bold text-text-primary"
-        >
-          맞춤 추천 챌린지
-        </h2>
-        <Link
-          href="/challenges"
-          className="text-xs font-medium text-text-tertiary hover:text-text-primary transition-colors"
-        >
-          전체 보기 →
-        </Link>
-      </div>
+      {showHeader && (
+        <div className="flex items-center justify-between mb-4">
+          <h2
+            id="recommendation-heading"
+            className="text-base font-bold text-text-primary"
+          >
+            맞춤 추천 챌린지
+          </h2>
+          <Link
+            href="/challenges"
+            className="text-xs font-medium text-text-tertiary hover:text-text-primary transition-colors"
+          >
+            전체 보기 →
+          </Link>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -138,6 +146,16 @@ export default function RecommendationList({
           <p className="text-sm text-text-tertiary">
             현재 추천 챌린지가 없어요
           </p>
+        </div>
+      ) : dense ? (
+        /* 사이드 패널: 세로 1컬럼 */
+        <div className="flex flex-col gap-3">
+          {items.map((item, idx) => (
+            <RecommendationCard
+              key={item.template_id ?? item.challenge_id ?? item.id ?? idx}
+              item={item}
+            />
+          ))}
         </div>
       ) : (
         /* 데스크탑: grid, 모바일: 가로 스크롤 */

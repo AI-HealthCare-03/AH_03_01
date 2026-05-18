@@ -30,8 +30,8 @@ export async function uploadFile(
   form.append("file", file);
   form.append("purpose", purpose);
 
-  const { data } = await apiClient.post<UploadedFile>("/api/v1/files", form, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  /* client.ts 의 request 인터셉터가 FormData 감지 시 Content-Type 을 자동 제거하므로
+     axios 가 boundary 포함된 multipart/form-data 헤더를 알아서 설정한다. */
+  const { data } = await apiClient.post<UploadedFile>("/api/v1/files", form);
   return data;
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { useMe } from "@/hooks/queries/useMe";
 import { useWeeklyXp } from "@/hooks/queries/useWeeklyXp";
+import { resolveMediaUrl } from "@/lib/api/media";
 
 /* =========================================
    헤더 우측 프로필 아바타 + 드롭다운
@@ -52,18 +53,24 @@ export default function ProfileDropdown() {
 
   const initial = (me?.nickname?.[0] ?? me?.name?.[0] ?? "U").toUpperCase();
   const displayName = me?.nickname ?? me?.name ?? "사용자";
+  const avatarSrc = resolveMediaUrl(me?.avatar_url);
 
   return (
     <div ref={wrapRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-xs font-bold hover:ring-2 hover:ring-brand/40 focus:outline-none focus:ring-2 focus:ring-brand"
+        className="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-xs font-bold hover:ring-2 hover:ring-brand/40 focus:outline-none focus:ring-2 focus:ring-brand overflow-hidden"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="내 메뉴 열기"
       >
-        {initial}
+        {avatarSrc ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img src={avatarSrc} alt="프로필" className="w-full h-full object-cover" />
+        ) : (
+          initial
+        )}
       </button>
 
       {open && (

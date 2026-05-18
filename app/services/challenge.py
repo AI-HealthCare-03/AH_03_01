@@ -383,7 +383,12 @@ class ParticipantService:
         if challenge.creator_id == user.id:
             return
         participant = await self.repo.get_by_user(challenge.id, user.id)
-        if participant is None or participant.status != ParticipantStatus.APPROVED:
+        # APPROVED 외에 PENDING(참가 신청 중) 도 챌린지 상세/멤버 목록 조회 허용
+        # — 본인의 신청 상태를 확인할 수 있어야 한다
+        if participant is None or participant.status not in {
+            ParticipantStatus.APPROVED,
+            ParticipantStatus.PENDING,
+        }:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="접근 권한이 없습니다.")
 
 

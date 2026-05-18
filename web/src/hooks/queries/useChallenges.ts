@@ -14,5 +14,8 @@ export function useChallenges(params: {
   return useQuery({
     queryKey: [CHALLENGES_KEY, params],
     queryFn: () => fetchChallenges(params),
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 }

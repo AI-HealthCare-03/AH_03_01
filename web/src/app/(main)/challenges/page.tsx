@@ -159,7 +159,7 @@ function ChallengeListContent() {
           )}
         </div>
 
-        {/* 데스크탑 우측: 위험도 기반 추천 */}
+        {/* 데스크탑 우측: 위험도 기반 추천 (세로 1컬럼 dense 모드) */}
         {tab !== "recommended" && (
           <aside className="hidden md:block w-72 shrink-0">
             <div className="bg-white border border-border rounded-[16px] p-5 shadow-sm">
@@ -170,6 +170,8 @@ function ChallengeListContent() {
                 items={recommendationItems.slice(0, 3)}
                 isLoading={recLoading}
                 hasPrediction={!!latestPredictionId}
+                dense
+                showHeader={false}
               />
             </div>
           </aside>

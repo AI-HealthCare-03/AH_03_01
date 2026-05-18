@@ -218,8 +218,26 @@ async def list_participants(
     service: Annotated[ParticipantService, Depends(ParticipantService)],
 ) -> Response:
     participants = await service.list_participants(user, challenge_id)
-    payload = [ParticipantResponse.model_validate(p).model_dump() for p in participants]
-    return Response({"participants": payload}, status_code=status.HTTP_200_OK)
+    # ParticipantResponse 에는 user 필드가 없으므로, 직렬화한 dict 에 user 메타를 inline 추가
+    payload: list[dict[str, Any]] = []
+    for p in participants:
+        item = ParticipantResponse.model_validate(p).model_dump(mode="json")
+        u = getattr(p, "user", None)
+        item["user"] = (
+            {
+                "id": str(u.id),
+                "name": u.name,
+                "nickname": u.nickname,
+            }
+            if u is not None
+            else None
+        )
+        payload.append(item)
+    # 프론트(ParticipantListResponse)는 items 키를 기대한다. participants 별칭은 호환용.
+    return Response(
+        {"items": payload, "participants": payload, "total": len(payload)},
+        status_code=status.HTTP_200_OK,
+    )
 
 
 @challenges_router.post(
@@ -585,7 +603,7 @@ async def get_challenge_recommendations(
     user: Annotated[User, Depends(get_request_user)],
     service: Annotated[ChallengeRecommendationService, Depends(ChallengeRecommendationService)],
     prediction_id: Annotated[int, Query(alias="predictionId")],
-    limit: Annotated[int, Query(ge=1, le=5)] = 3,
+    limit: Annotated[int, Query(ge=1, le=20)] = 3,
 ) -> Response:
     items = await service.for_prediction(user, prediction_id, limit)
     payload = ChallengeRecommendationResponse(
