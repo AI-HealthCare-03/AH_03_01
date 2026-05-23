@@ -423,6 +423,20 @@ class VerificationService:
                 detail=f"이 챌린지는 {challenge.verification_type.value} 인증만 허용합니다.",
             )
 
+        # 동일 일자/메서드 중복 인증 방지. unique_together(participant, verified_date, method)
+        # 가 DB 레벨에 걸려있어 그대로 두면 IntegrityError → 500 으로 떨어지고 클라이언트는
+        # "네트워크 오류" 를 보게 된다. 명시적으로 409 + 한국어 사유로 반환한다.
+        existing = await ChallengeVerification.filter(
+            participant_id=participant.id,
+            verified_date=data.verified_date,
+            method=data.method,
+        ).first()
+        if existing is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="오늘은 이미 해당 챌린지의 인증을 완료했습니다.",
+            )
+
         initial_status = VerificationStatus.PENDING
         if data.method == VerificationMethod.CHECK and data.checked is True:
             initial_status = VerificationStatus.APPROVED
