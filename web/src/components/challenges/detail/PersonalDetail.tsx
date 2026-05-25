@@ -6,7 +6,7 @@ import ChallengeCategoryIcon, { CATEGORY_CONFIG } from "@/components/challenges/
 import ChallengeProgressBar from "@/components/challenges/common/ChallengeProgressBar";
 import ChallengeStatusBadge from "@/components/challenges/common/ChallengeStatusBadge";
 import WeekStrip from "./WeekStrip";
-import { dDayLabel } from "@/lib/dateUtils";
+import { dDayLabel, format } from "@/lib/dateUtils";
 import type { Challenge } from "@/types/challenge";
 
 /* =========================================
@@ -30,8 +30,11 @@ export default function PersonalDetail({
       ? Math.round(((challenge.my_progress ?? 0) / challenge.total_days) * 100)
       : 0;
 
-  /* 오늘 인증 여부 확인 */
-  const todayStr = new Date().toISOString().split("T")[0];
+  /* 오늘 인증 여부 확인.
+     toISOString() 은 UTC 기준이라 KST 자정 직후(00~09시)에는 하루 어긋나
+     verifiedDates(백엔드가 +09:00 로 내려준 KST 일자)와 비교가 빗나간다.
+     로컬 타임존 기준으로 today 를 만들어 비교한다. */
+  const todayStr = format(new Date(), "yyyy-MM-dd");
   const verifiedToday = verifiedDates.includes(todayStr);
 
   return (
