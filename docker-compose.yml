@@ -3,6 +3,7 @@ services:
   redis:
     image: redis:alpine
     container_name: redis
+    restart: always  # 큐 브로커. 멈추면 사진 인증 파이프라인이 끊기므로 항상 자동 복구.
     networks:
       - ws
     ports:
