@@ -1,9 +1,6 @@
 """
 CRAG (Corrective RAG) + LangGraph
 ======================================
-설치:
-    pip install langgraph langchain langchain-openai tavily-python
-
 환경변수 (.env):
     OPENAI_API_KEY=sk-...
     TAVILY_API_KEY=tvly-...
@@ -185,7 +182,18 @@ def retrieve(state: CRAGState) -> dict:
 
     print(f"\n[검색] '{query}'")
     docs = hybrid_search(query)
-    print(f"  → {len(docs)}개 청크 검색됨")
+
+    # 중복 청크 제거 (같은 section_id 중복 방지)
+    seen_sections = set()
+    unique_docs   = []
+    for doc in docs:
+        section_id = doc.get("metadata", {}).get("section_id", "")
+        if section_id not in seen_sections:
+            seen_sections.add(section_id)
+            unique_docs.append(doc)
+    docs = unique_docs
+
+    print(f"  → {len(docs)}개 청크 검색됨 (중복 제거 후)")
     for i, d in enumerate(docs):
         meta = d.get("metadata", {})
         print(f"    [{i+1}] {meta.get('source_id','?')} | {meta.get('section_title','?')}")
@@ -197,7 +205,7 @@ def retrieve(state: CRAGState) -> dict:
 # ─────────────────────────────────────────────
 # 노드 2: 답변 생성 (Generate)
 # ─────────────────────────────────────────────
-SYSTEM_PROMPT = """당신은 만성질환(고혈압·당뇨·이상지질혈증) 생활습관 관리 서비스의 전문 챗봇입니다.
+SYSTEM_PROMPT_MEDICAL = """당신은 만성질환(고혈압·당뇨·이상지질혈증) 생활습관 관리 서비스의 전문 챗봇입니다.
 
 ## 답변 규칙
 1. 반드시 제공된 [참고 자료]만을 근거로 답변하세요.
@@ -209,6 +217,24 @@ SYSTEM_PROMPT = """당신은 만성질환(고혈압·당뇨·이상지질혈증)
 
 ## 면책 문구 (항상 포함)
 > ⚠️ 본 답변은 일반적인 건강 정보 제공을 목적으로 하며, 의료적 진단·처방·치료를 대체하지 않습니다. 정확한 진단과 치료는 반드시 의료 전문가에게 문의하세요."""
+
+SYSTEM_PROMPT_SERVICE = """당신은 만성질환 생활습관 관리 서비스의 친절한 안내 챗봇입니다.
+
+## 답변 규칙
+1. 반드시 제공된 [참고 자료]만을 근거로 답변하세요.
+2. 참고 자료에 없는 내용은 "제공된 자료에서 확인할 수 없습니다"라고 답하세요.
+3. 친절하고 명확하게 안내해주세요.
+4. 한국어로 답변하세요."""
+
+
+def classify_question(docs: list[dict]) -> str:
+    """
+    검색된 청크의 source_id 기반으로 질문 유형 분류
+    GUIDE 청크가 과반수면 서비스 질문, 아니면 의료 질문
+    """
+    source_ids  = [d.get("metadata", {}).get("source_id", "") for d in docs]
+    guide_count = sum(1 for s in source_ids if s == "GUIDE")
+    return "service" if guide_count > len(source_ids) / 2 else "medical"
 
 def generate(state: CRAGState) -> dict:
     print("\n[답변 생성]")
@@ -233,6 +259,11 @@ def generate(state: CRAGState) -> dict:
 
     context = "\n\n".join(context_parts) if context_parts else "관련 자료를 찾을 수 없습니다."
 
+    # 질문 유형 분류 → 조건부 프롬프트 선택
+    q_type      = classify_question(state["retrieved_context"])
+    system_prompt = SYSTEM_PROMPT_MEDICAL if q_type == "medical" else SYSTEM_PROMPT_SERVICE
+    print(f"  질문 유형: {q_type}")
+
     # 평가자 피드백 있으면 프롬프트에 반영
     feedback    = state.get("eval_feedback", "")
     extra_guide = f"\n\n## 추가 지침 (이전 답변 보완)\n{feedback}" if feedback else ""
@@ -243,7 +274,7 @@ def generate(state: CRAGState) -> dict:
     print("  " + "─" * 55)
     full_answer = ""
     for chunk in llm.stream([
-        SystemMessage(content=SYSTEM_PROMPT + extra_guide),
+        SystemMessage(content=system_prompt + extra_guide),
         HumanMessage(content=user_prompt),
     ]):
         print(chunk.content, end="", flush=True)

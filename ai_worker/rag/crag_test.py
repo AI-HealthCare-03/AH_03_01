@@ -4,9 +4,14 @@ CRAG 파이프라인 테스트
 from crag_pipeline import build_crag_graph, CRAGState
 
 TEST_CASES = [
+    # 의료 질문
     ("당뇨병 환자의 혈당 조절 목표가 어떻게 돼?", None),
     ("고혈압 환자는 혈압을 얼마나 낮춰야 해?",    None),
+    ("이상지질혈증 환자의 LDL 콜레스테롤 목표는?", None),  
+    # 서비스 질문 (면책 문구 없어야 함)
     ("챌린지 인증 실패하면 어떻게 해?",           None),
+    ("포인트는 어떻게 사용해?",                   None), 
+    # ML 예측 결과 연동
     ("나한테 맞는 챌린지 추천해줘", {
         "diabetes":       62.3,
         "hypertension":   44.1,
@@ -34,6 +39,8 @@ if __name__ == "__main__":
             "retrieved_context":    [],
             "web_results":          [],
             "final_recommendation": "",
+            "eval_feedback":        "",   
+            "retry_count":          0,   
             "rewrite_count":        0,
         }
 
