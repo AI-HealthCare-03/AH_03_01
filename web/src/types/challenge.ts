@@ -130,8 +130,6 @@ export interface ChallengeVerification {
   photo_file_id?: number | null;
   shield_inventory_id?: number | null;
   memo?: string | null;
-  /* REJECTED 시 SigLIP2 판정 사유(점수/임계값) */
-  rejection_reason?: string | null;
   verified_at?: string | null;
   created_at: string;
 }
