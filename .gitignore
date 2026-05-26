@@ -4,7 +4,7 @@ preprocessed/
 *.npy
 references/
 docs/
-RAG/
+/RAG/
 test_imgs/
 ai_worker/rag/chroma_db/
 ai_worker/rag/output/chunks.json
