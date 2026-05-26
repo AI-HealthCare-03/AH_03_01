@@ -15,56 +15,39 @@ _CATEGORY_PROMPTS: dict[str, list[str]] = {
         "a glass of water",
         "a water bottle",
         "a clear cup of water",
-        "a reusable water tumbler",
-        "a person holding a water bottle",
     ],
     "DIET": [
         "a photo of a healthy meal",
         "a bowl of vegetables",
         "a plate of food",
         "a salad",
-        "a home-cooked healthy meal on a table",
-        "a lunch box packed with vegetables and rice",
     ],
-    # 자고 있는 자신을 직접 찍을 수 없으므로 수면앱 스크린샷/잠자리 환경 사진 위주.
     "SLEEP": [
+        "a photo of someone sleeping in bed",
         "a bedroom at night",
-        "a dark bedroom ready for sleep with the lights off",
-        "a screenshot of a sleep tracking app showing sleep hours",
-        "a smartwatch screen showing a sleep score",
-        "an alarm clock on a nightstand at bedtime",
-        "a neatly made bed ready for sleep",
+        "a person resting in bed",
     ],
     "NO_SMOKING": [
         "a nicotine patch on skin",
         "a no smoking sign",
         "a photo of stopping smoking",
         "a photo of a quit smoking aid",
-        "a screenshot of a quit-smoking app showing smoke-free days",
-        "nicotine gum or a quit-smoking lozenge",
     ],
     "NO_ALCOHOL": [
         "a photo of non-alcoholic drink",
         "a glass of water instead of alcohol",
         "a no alcohol sign",
-        "a can or bottle of non-alcoholic beer",
-        "a glass of juice or tea instead of alcohol",
     ],
     "DISEASE_CARE": [
         "a photo of taking medication",
         "a pill or tablet",
         "a blood pressure cuff",
         "a glucometer",
-        "a blood pressure monitor showing a reading",
-        "a glucometer showing a blood sugar number",
-        "a weekly pill organizer with medication",
     ],
     "MEDITATION": [
         "a photo of meditation",
         "a person sitting cross-legged with eyes closed",
         "a yoga mat",
-        "a screenshot of a meditation app",
-        "a calm quiet room with a candle",
     ],
     # EXERCISE 는 sub_category 우선
     "EXERCISE": [
@@ -80,41 +63,27 @@ _EXERCISE_SUB_PROMPTS: dict[str, list[str]] = {
         "walking shoes on a path",
         "a screenshot of a walking app",
         "step counter showing steps",
-        "a smartwatch or fitness band showing the step count",
-        "an outdoor walking trail or park path",
     ],
     "RUNNING": [
         "a photo of someone running",
         "a running track",
         "a screenshot of a running app",
         "running shoes on pavement",
-        "a screenshot of a running route map with distance",
-        "a treadmill display showing distance and time",
     ],
     "STRENGTH": [
         "a photo of weight training",
         "a person lifting dumbbells",
         "a barbell on a gym floor",
-        "a gym interior with weight machines",
-        "a screenshot of a workout log app",
     ],
     "CYCLING": [
         "a photo of cycling",
         "a person on a bicycle",
         "a road bike",
-        "a screenshot of a cycling route map",
-        "a stationary spin bike at a gym",
-        "a bicycle parked outdoors",
     ],
     "SWIMMING": [
         "a photo of swimming in a pool",
         "a swimmer doing freestyle",
         "a swimming lane",
-        # 실제 인증은 풀장 내 촬영이 어려워 수영장 간판/센터 입구를 찍는 경우가 많다.
-        "a swimming pool",
-        "a sign or banner of a swimming pool",
-        "the entrance of a swimming center or sports center",
-        "a poster of children swimming",
     ],
     "OTHER": [
         "a photo of exercising",
@@ -132,17 +101,12 @@ _NEGATIVE_PROMPTS: list[str] = [
 # 카테고리별 threshold override. 비어있으면 SIGLIP_APPROVE_THRESHOLD 사용.
 # 더 엄격(↑) / 관대(↓) 가 필요한 카테고리만 명시.
 _CATEGORY_THRESHOLDS: dict[str, float] = {
-    # 지나치게 보편적인 객체(물잔 등)라 오탐이 쉬운 카테고리는 임계값 ↑ (엄격)
+    # 사진 검증이 까다로운 카테고리 (지나치게 보편적 객체) 는 임계값 ↑
     "WATER": 0.25,
     "NO_ALCOHOL": 0.25,
-    # 사진 다양성이 큰 카테고리는 임계값 ↓ (관대)
+    # 사진 다양성이 큰 카테고리는 임계값 ↓
     "DIET": 0.18,
     "EXERCISE": 0.18,
-    # 직접 촬영이 어려워 앱 스크린샷/환경 사진 등 프록시 인증이 많은 카테고리.
-    # 절대 점수는 낮을 수 있어 floor 를 낮추되, negative 대비 margin(0.05)으로 오탐을 거른다.
-    "SLEEP": 0.18,
-    "MEDITATION": 0.18,
-    "NO_SMOKING": 0.18,
 }
 
 

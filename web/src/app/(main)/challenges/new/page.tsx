@@ -29,12 +29,9 @@ import type {
    ========================================= */
 
 /* ─── verification_type 자동 추론 ─── */
-/* 사진으로 인증하기 어려운 카테고리는 체크 버튼 기반 인증을 사용한다.
-   금주(NO_ALCOHOL) / 수면(SLEEP) / 질환 관리(DISEASE_CARE). */
 function inferVerificationType(category: ChallengeCategory): "CHECK" | "PHOTO" {
   if (category === "NO_ALCOHOL") return "CHECK";
   if (category === "DISEASE_CARE") return "CHECK";
-  if (category === "SLEEP") return "CHECK";
   return "PHOTO";
 }
 

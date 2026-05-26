@@ -13,7 +13,7 @@ import ShieldModal from "@/components/challenges/verify/ShieldModal";
 import { useCreateVerification } from "@/hooks/queries/useCreateVerification";
 import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 /* =========================================
@@ -51,30 +51,6 @@ function ChallengeDetailContent({
     verificationsData?.items
       .filter((v) => v.status === "APPROVED")
       .map((v) => v.created_at.split("T")[0]) ?? [];
-
-  /* 사진 인증 결과(완료/실패) 알림.
-     verify 페이지가 PHOTO 제출 후 ?pending={verificationId} 로 돌려보내면,
-     useVerifications 의 폴링이 ai_worker(SigLIP2) 판정 결과를 받아온다.
-     PENDING → APPROVED/REJECTED 로 확정되는 순간 1회만 토스트로 결과를 띄운다. */
-  const pendingId = searchParams.get("pending");
-  const notifiedRef = useRef(false);
-  useEffect(() => {
-    if (!pendingId) return;
-    const pid = parseInt(pendingId, 10);
-    const v = verificationsData?.items.find((it) => it.id === pid);
-    if (!v || v.status === "PENDING" || notifiedRef.current) return;
-    notifiedRef.current = true;
-    if (v.status === "APPROVED") {
-      showToast("인증 완료! 사진이 챌린지에 맞게 확인되었어요 🎉", "success");
-    } else {
-      showToast(
-        `인증 실패: ${v.rejection_reason ?? "사진이 챌린지와 맞지 않아요. 다시 시도해 주세요."}`,
-        "error",
-      );
-    }
-    /* ?pending 제거 — 새로고침/재진입 시 중복 알림 방지 */
-    router.replace(`/challenges/${challengeId}`);
-  }, [pendingId, verificationsData, challengeId, router, showToast]);
 
   /* 로딩 */
   if (isLoading) {
