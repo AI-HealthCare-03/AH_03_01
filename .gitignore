@@ -4,6 +4,7 @@ preprocessed/
 *.npy
 references/
 docs/
+prediction model/
 RAG/
 test_imgs/
 
