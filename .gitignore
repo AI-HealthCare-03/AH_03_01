@@ -21,6 +21,7 @@ __pycache__/
 .env
 .env.*
 *.env
+envs/.local.env
 # 예시 env 파일은 트래킹 (placeholder 만 들어 있음)
 !envs/example.*.env
 
