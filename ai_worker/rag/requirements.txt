@@ -1,0 +1,26 @@
+#  첫 세팅 시 - pip install -r requirements.txt
+
+# RAG 파싱 & 청킹
+langchain-text-splitters
+python-frontmatter
+
+# 벡터DB & 임베딩
+chromadb
+openai
+
+# BM25 + 한국어 형태소 분석
+rank_bm25
+kiwipiepy
+
+# LangGraph & LangChain
+langgraph==0.2.28
+langchain
+langchain-openai
+langchain-community
+
+# 웹 검색 (CRAG)
+tavily-python
+
+# RAGAS 평가
+ragas==0.2.6
+datasets
