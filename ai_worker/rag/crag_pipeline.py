@@ -1,6 +1,9 @@
 """
 CRAG (Corrective RAG) + LangGraph
 ======================================
+설치:
+    pip install langgraph langchain langchain-openai tavily-python
+
 환경변수 (.env):
     OPENAI_API_KEY=sk-...
     TAVILY_API_KEY=tvly-...
@@ -183,7 +186,7 @@ def retrieve(state: CRAGState) -> dict:
     print(f"\n[검색] '{query}'")
     docs = hybrid_search(query)
 
-    # 중복 청크 제거 (같은 section_id 중복 방지)
+    # ④ 중복 청크 제거 (같은 section_id 중복 방지)
     seen_sections = set()
     unique_docs   = []
     for doc in docs:
@@ -259,7 +262,7 @@ def generate(state: CRAGState) -> dict:
 
     context = "\n\n".join(context_parts) if context_parts else "관련 자료를 찾을 수 없습니다."
 
-    # 질문 유형 분류 → 조건부 프롬프트 선택
+    # ⑦ 질문 유형 분류 → 조건부 프롬프트 선택
     q_type      = classify_question(state["retrieved_context"])
     system_prompt = SYSTEM_PROMPT_MEDICAL if q_type == "medical" else SYSTEM_PROMPT_SERVICE
     print(f"  질문 유형: {q_type}")
