@@ -41,7 +41,7 @@ export async function fetchInventory(category?: ItemCategory): Promise<Inventory
   return data;
 }
 
-export async function useInventoryItemApi(inventoryId: number): Promise<InventoryUseResponse> {
+export async function consumeInventoryItems(inventoryId: number): Promise<InventoryUseResponse> {
   const { data } = await apiClient.post<InventoryUseResponse>(`/api/v1/inventory/${inventoryId}/use`);
   return data;
 }
