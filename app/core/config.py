@@ -52,3 +52,8 @@ class Config(BaseSettings):
     # AI 모델
     SIGLIP_MODEL_NAME: str = "google/siglip2-base-patch16-224"
     SIGLIP_APPROVE_THRESHOLD: float = 0.20  # softmax 후 매칭 점수 임계
+
+    # RAG / LLM (OpenAI) — 인덱싱·ChatRAGGraph 공용
+    OPENAI_API_KEY: str = ""
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"  # 1536d
+    OPENAI_CHAT_MODEL: str = "gpt-4o-mini"

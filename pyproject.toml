@@ -33,10 +33,17 @@ app = [
     "bcrypt<=4.0.1",
     "fastapi[standard]>=0.128.0",
     "httpx>=0.28.1",
+    "kiwipiepy>=0.20.0",                # RAG: BM25 한국어 형태소 (Step A 하이브리드 검색)
+    "langchain-openai>=0.2.0",          # RAG/LangGraph: OpenAI chat/embedding wrapper (Step A)
+    "langchain-text-splitters>=0.3.0",  # RAG: 문서 청킹 (인덱싱)
+    "langgraph>=0.2.0",                 # RAG: ChatRAGGraph (Step A)
+    "openai>=1.50.0",                   # RAG: 임베딩/LLM API (인덱싱·Step A)
     "orjson>=3.11.5",
     "passlib[bcrypt]>=1.7.4",
     "pgvector>=0.3.6",
     "pyjwt>=2.10.1",
+    "python-frontmatter>=1.1.0",        # RAG: 문서 frontmatter 파싱 (인덱싱)
+    "rank-bm25>=0.2.2",                 # RAG: BM25 검색 (Step A 하이브리드 검색)
     "tortoise-orm[asyncpg]>=0.25.3",
     "uvicorn>=0.40.0",
 ]
