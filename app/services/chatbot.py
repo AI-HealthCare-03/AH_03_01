@@ -54,10 +54,26 @@ class ChatbotConversationService:
         if mode not in {"faq", "rag"}:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="mode 는 faq|rag 입니다.")
 
+        if mode == "faq":
+            # FAQ 모드는 LLM 호출이 없어 트랜잭션 안에서 완결.
+            async with in_transaction():
+                session = await self._resolve_session(user, data)
+                await self.message_repo.create(
+                    data={
+                        "session_id": session.id,
+                        "role": ChatMessageRole.USER,
+                        "message_type": ChatMessageType.TEXT,
+                        "content": data.message,
+                    }
+                )
+                bot_message = await self._answer_with_faq(session, data)
+                await self.session_repo.touch(session, message_increment=2)
+            return self._build_response(session.id, bot_message)
+
+        # RAG 모드: ChatRAGGraph(OpenAI 외부 호출) 는 트랜잭션 바깥에서 수행해
+        # DB 커넥션 점유 시간을 최소화한다 (API 계약 §9 트랜잭션 정책).
         async with in_transaction():
             session = await self._resolve_session(user, data)
-
-            # 사용자 메시지 기록
             await self.message_repo.create(
                 data={
                     "session_id": session.id,
@@ -67,15 +83,23 @@ class ChatbotConversationService:
                 }
             )
 
-            if mode == "faq":
-                bot_message = await self._answer_with_faq(session, data)
-            else:
-                bot_message = await self._answer_with_rag(session, data)
+        rag_result = await self.rag.answer(
+            query=data.message,
+            user_id=user.id,
+            thread_id=str(session.id),
+        )
 
+        async with in_transaction():
+            bot_message = await self._persist_rag_message(session, rag_result)
             await self.session_repo.touch(session, message_increment=2)
 
+        return self._build_response(session.id, bot_message)
+
+    @staticmethod
+    def _build_response(conversation_id: int, bot_message: ChatbotMessage) -> dict[str, Any]:
+        extra = bot_message.extra_data or {}
         return {
-            "conversation_id": session.id,
+            "conversation_id": conversation_id,
             "message_id": bot_message.id,
             "role": bot_message.role,
             "message_type": bot_message.message_type,
@@ -83,6 +107,14 @@ class ChatbotConversationService:
             "sources": bot_message.sources,
             "confidence": bot_message.confidence,
             "model_version": bot_message.model_version,
+            # 신규 7필드 — extra_data 가 없으면(faq 모드 등) 기본값으로 채워져 역호환성 유지
+            "disclaimer": extra.get("disclaimer", "본 답변은 의학적 진단을 대체하지 않습니다."),
+            "intent": extra.get("intent"),
+            "needs_health_data": bool(extra.get("needs_health_data", False)),
+            "missing_fields": list(extra.get("missing_fields") or []),
+            "action_hint": extra.get("action_hint"),
+            "is_fallback": bool(extra.get("is_fallback", False)),
+            "eval_revision_count": extra.get("eval_revision_count"),
         }
 
     async def _resolve_session(self, user: User, data: ChatMessageRequest) -> ChatbotSession:
@@ -129,16 +161,38 @@ class ChatbotConversationService:
             }
         )
 
-    async def _answer_with_rag(self, session: ChatbotSession, data: ChatMessageRequest) -> ChatbotMessage:
-        rag_result: RAGAnswer = await self.rag.answer(query=data.message)
+    async def _persist_rag_message(self, session: ChatbotSession, rag_result: RAGAnswer) -> ChatbotMessage:
+        """ChatRAGGraph 결과를 ChatbotMessage 로 저장.
+
+        message_type 분기 (API 계약 §6 매핑):
+        - needs_health_data=true  → SYSTEM (개인화 건강 정보 안내)
+        - is_fallback=true        → SYSTEM (Evaluator 한도 초과 폴백)
+        - 그 외                   → RAG
+        """
+        if rag_result.needs_health_data or rag_result.fallback:
+            message_type = ChatMessageType.SYSTEM
+        else:
+            message_type = ChatMessageType.RAG
+
+        extra_data = {
+            "intent": rag_result.intent,
+            "needs_health_data": rag_result.needs_health_data,
+            "missing_fields": list(rag_result.missing_fields),
+            "action_hint": rag_result.action_hint,
+            "is_fallback": rag_result.fallback,
+            "eval_revision_count": rag_result.eval_revision_count,
+            "disclaimer": rag_result.disclaimer,
+        }
+
         return await self.message_repo.create(
             data={
                 "session_id": session.id,
                 "role": ChatMessageRole.BOT,
-                "message_type": ChatMessageType.RAG,
+                "message_type": message_type,
                 "content": rag_result.answer,
                 "sources": [s.to_dict() for s in rag_result.sources],
                 "confidence": rag_result.confidence,
                 "model_version": rag_result.model_version,
+                "extra_data": extra_data,
             }
         )

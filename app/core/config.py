@@ -57,3 +57,7 @@ class Config(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"  # 1536d
     OPENAI_CHAT_MODEL: str = "gpt-4o-mini"
+    # 호출당 타임아웃(초). API 계약 §11 가이드(LLM 호출당 20초, 전체 ~45초)와 일치.
+    # 그래프 노드가 fallback 으로 흡수하므로 SDK 재시도는 짧게(1).
+    OPENAI_REQUEST_TIMEOUT: float = 20.0
+    OPENAI_MAX_RETRIES: int = 1

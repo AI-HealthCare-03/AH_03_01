@@ -33,6 +33,7 @@ class ChatSourceItem(BaseModel):
 
 
 class ChatMessageResponse(BaseModel):
+    # ── 기존 필드 (변경 없음) ────────────────────────────────
     conversation_id: int
     message_id: int
     role: ChatMessageRole
@@ -42,6 +43,13 @@ class ChatMessageResponse(BaseModel):
     confidence: float | None = None
     model_version: str | None = None
     disclaimer: str = "본 답변은 의학적 진단을 대체하지 않습니다."
+    # ── 신규 필드 (ChatRAGGraph 결과 표현, API 계약 v1) ───────
+    intent: str | None = None
+    needs_health_data: bool = False
+    missing_fields: list[str] = []
+    action_hint: str | None = None
+    is_fallback: bool = False
+    eval_revision_count: int | None = None
 
 
 class ChatSessionListItem(BaseModel):

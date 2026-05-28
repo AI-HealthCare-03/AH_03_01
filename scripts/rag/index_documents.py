@@ -53,8 +53,12 @@ DOCS_DIR = PROJECT_ROOT / "RAG" / "final docs"
 FILES: list[Path] = [
     DOCS_DIR / "KDA2025_section_documentation_요약.md",
     DOCS_DIR / "KSH2022_section_documentation_요약.md",
-    DOCS_DIR / "이상지질혈증_치료지침_RAG_요약.md",
+    # 이상지질혈증: 기존 DYS_GUIDELINE(figure 7개) 을 흡수·확장한 KSOLA2022(섹션 + 동일 figure)
+    # 로 일원화. DB 의 기존 DYS_GUIDELINE 행은 인덱싱 전에 별도 삭제 필요.
+    DOCS_DIR / "KSOLA2022_section_documentation_요약.md",
     DOCS_DIR / "서비스_이용_가이드_20260522.md",
+    # 챌린지 카탈로그 — service 카테고리(GUIDE 와 함께)로 적재되어 질환 횡단으로 검색됨.
+    DOCS_DIR / "CHALLENGE_CATALOG_documentation.md",
 ]
 
 # ─────────────────────────────────────────────
@@ -74,16 +78,18 @@ splitter = RecursiveCharacterTextSplitter(
     separators=["\n\n", "\n", "。", ".", " ", ""],
 )
 
-# `## KDA2025_SEC_0001 — 당뇨병`, `## DYS_FIG_001 — ...`, `## GUIDE_SEC_001 — ...` 매칭
+# `## KDA2025_SEC_0001 — 당뇨병`, `## DYS_FIG_001 — ...`, `## GUIDE_SEC_001 — ...`,
+# 그리고 `## KSOLA2022_SEC_0020_A — ...` (숫자 뒤 _접미사) 형태까지 모두 매칭.
 SEC_HEADER = re.compile(
-    r"^## ([A-Z][A-Z0-9_]+(?:_SEC_\d+|_FIG_\d+|FIG_\d+)) — (.+)$",
+    r"^## ([A-Z][A-Z0-9_]+(?:_SEC_\d+(?:_[A-Z0-9]+)?|_FIG_\d+|FIG_\d+)) — (.+)$",
     re.MULTILINE,
 )
 
-# 서비스 가이드는 GUIDELINE 이 아니라 OTHER 로 적재하고 metadata.doc_type 으로 구분한다.
+# 서비스 가이드 + 챌린지 카탈로그는 GUIDELINE(의료 진료지침) 이 아니라 OTHER 로 적재하고
+# metadata.doc_type 으로 구분한다. retrieve 의 source_type="service" 필터에서 둘 다 매치.
 # (`DocumentType` enum 에 SERVICE_GUIDE 신규 값을 추가하려면 컬럼 길이도 ALTER 가 필요해
-#  최소 변경 원칙상 OTHER + metadata 로 우회. retrieve 필터는 document_type+source 인덱스 활용 가능.)
-SERVICE_GUIDE_SOURCES = {"GUIDE"}
+#  최소 변경 원칙상 OTHER + metadata + source 로 우회.)
+SERVICE_GUIDE_SOURCES = {"GUIDE", "CHALLENGE_CATALOG"}
 
 
 # ─────────────────────────────────────────────
@@ -427,7 +433,14 @@ async def main(  # noqa: C901 — 일회성 ops 스크립트, 단계별 분기�
             grand_total += inserted
             print(f"    ✅ {source_id}: {inserted}행 적재")
 
-        # 5) 리포트 — 이번 실행에서 적재된 source 들의 누적 행 수
+        # 5) BM25 인덱스 무효화 — 같은 프로세스 안에서만 즉시 효과. FastAPI 워커는
+        # 별도 프로세스라 자동 반영되지 않으므로, 운영 워커 재시작 또는 admin
+        # reload 신호가 별도로 필요하다는 점을 경고로 남긴다.
+        from app.services.ml.retrieval import invalidate_bm25_index
+
+        invalidate_bm25_index()
+
+        # 6) 리포트 — 이번 실행에서 적재된 source 들의 누적 행 수
         print("\n" + "=" * 60)
         print(f"  🎉 적재 완료: 이번 실행 {grand_total}행")
         print("  소스별 누적 행 수 (rag_documents 전체):")
@@ -435,6 +448,8 @@ async def main(  # noqa: C901 — 일회성 ops 스크립트, 단계별 분기�
             cnt = await RAGDocument.filter(source=src).count()
             print(f"    {src:18s}: {cnt}행")
         print("=" * 60)
+        print("  ⚠️  운영 FastAPI 워커는 BM25 인덱스를 부팅 시점에 메모리에 적재하므로")
+        print("     본 인덱싱 결과를 즉시 반영하려면 워커 재시작이 필요합니다.")
         return 0
     finally:
         await Tortoise.close_connections()
