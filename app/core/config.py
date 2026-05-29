@@ -52,3 +52,12 @@ class Config(BaseSettings):
     # AI 모델
     SIGLIP_MODEL_NAME: str = "google/siglip2-base-patch16-224"
     SIGLIP_APPROVE_THRESHOLD: float = 0.20  # softmax 후 매칭 점수 임계
+
+    # RAG / LLM (OpenAI) — 인덱싱·ChatRAGGraph 공용
+    OPENAI_API_KEY: str = ""
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"  # 1536d
+    OPENAI_CHAT_MODEL: str = "gpt-4o-mini"
+    # 호출당 타임아웃(초). API 계약 §11 가이드(LLM 호출당 20초, 전체 ~45초)와 일치.
+    # 그래프 노드가 fallback 으로 흡수하므로 SDK 재시도는 짧게(1).
+    OPENAI_REQUEST_TIMEOUT: float = 20.0
+    OPENAI_MAX_RETRIES: int = 1

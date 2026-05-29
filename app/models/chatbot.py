@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from tortoise import fields, models
 
@@ -75,6 +75,9 @@ class ChatbotMessage(models.Model):
     sources = fields.JSONField(default=list)  # type: ignore[var-annotated]
     confidence = fields.FloatField(null=True)
     model_version = fields.CharField(max_length=40, null=True)
+    # ChatRAGGraph 결과의 부가 메타 (intent/needs_health_data/missing_fields/action_hint/
+    # is_fallback/eval_revision_count/disclaimer). 이력 조회·디버깅·평가용. null 허용.
+    extra_data: dict[str, Any] | None = fields.JSONField(null=True)  # type: ignore[assignment]
     created_at = fields.DatetimeField(auto_now_add=True)
 
     class Meta:
