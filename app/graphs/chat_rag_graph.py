@@ -54,6 +54,19 @@ from langgraph.graph import END, START, StateGraph
 from openai import AsyncOpenAI
 
 from app.core import config
+from app.graphs._shared.medical_evaluator import (
+    _MEDICAL_TOPIC_KEYWORDS,
+    EvalInput,
+    EvalResultLiteral,
+    EvalStageLiteral,
+    extract_user_numbers,  # noqa: F401 — 외부 호환 (옛 위치 import 보존)
+)
+from app.graphs._shared.medical_evaluator import (
+    evaluate as run_evaluator,
+)
+from app.graphs._shared.medical_evaluator import (
+    format_context as _format_context,
+)
 from app.models.health import (
     DiseaseRisk,
     DiseaseType,
@@ -73,7 +86,7 @@ RETRIEVE_TOP_K = 5  # 일반/서비스 기본
 # medical_inquiry 는 생활요법·약물·추적·위험도 4측면이 한 번에 잡혀야 답변 완전성↑.
 # top_k 를 5→8 로 확장 (broader context). RRF 후보 풀도 자동으로 늘어남.
 RETRIEVE_TOP_K_MEDICAL = 8
-MIN_ANSWER_LEN = 30  # 1차 Rule R2: 답변 최소 글자 수
+# MIN_ANSWER_LEN 등 evaluator Rule 상수는 app/graphs/_shared/medical_evaluator.py 로 이동.
 
 MEDICAL_DISCLAIMER = "본 답변은 의학적 진단을 대체하지 않습니다."
 SERVICE_DISCLAIMER = ""
@@ -95,52 +108,7 @@ FALLBACK_SERVICE = (
 # 호환: 기존 import 경로 (`from app.graphs.chat_rag_graph import FALLBACK_MESSAGE`) 유지.
 FALLBACK_MESSAGE = FALLBACK_MEDICAL
 
-# 1차 Rule R3 — 단정적 진단 표현(수치/상태) 정규식.
-# "정상이에요"/"위험해요"/"비정상이네요" 같은 다양한 한국어 어미 변형을 한 번에 잡되,
-# "정상 범위" 처럼 평가가 아닌 표현은 일부러 제외 (false positive 회피).
-_DIAGNOSTIC_ASSERTION_PATTERN = re.compile(
-    r"(정상이|비정상이|위험하|안전하|확진(하|되|이))"
-    r"(다|에요|네요|어요|군요|시네요|시군요|시다|었|시었|니까|시니까)"
-    r"|확진입니다|당신은 환자|단언"
-)
-
-# 1차 Rule R3 — 약물 직접 권고 패턴 (특정 약/용법을 직접 권유). 일반적 한국어 변형 다수 커버.
-_DRUG_DIRECT_RECOMMENDATIONS = (
-    "을 드세요",
-    "를 드세요",
-    "을 복용하세요",
-    "를 복용하세요",
-    "복용을 권합니다",
-    "복용을 권장합니다",
-    "처방받으세요",
-    "처방을 받으세요",
-    "약을 추천",
-)
-
-# 1차 Rule R4 — 의료 답변에 있어야 하는 권고 키워드 (하나라도 있으면 OK)
-_MEDICAL_REQUIRED_PHRASES = ("의사", "전문의", "전문가", "상담", "병원")
-
-# 1차 Rule R4 — intent=general 로 (오)분류돼도 답변에 의료 토픽이 등장하면 권고를 강제.
-# classify_intent 의 single point of failure 를 방어한다.
-_MEDICAL_TOPIC_KEYWORDS = (
-    "당뇨",
-    "고혈압",
-    "혈압",
-    "혈당",
-    "HbA1c",
-    "당화혈색소",
-    "콜레스테롤",
-    "LDL",
-    "HDL",
-    "중성지방",
-    "이상지질혈증",
-    "심혈관",
-    "약물",
-    "복용",
-    "처방",
-    "인슐린",
-    "스타틴",
-)
+# 1차 Rule (R1~R5) 상수·정규식·약물 권고 패턴은 모두 app/graphs/_shared/medical_evaluator.py 로 이동.
 
 # classify_intent prefilter — 명백한 인사/단답에서 LLM 호출 생략용 보수적 패턴.
 # 매치 조건이 모두 만족할 때만 prefilter 적용 (의료/서비스 키워드 하나라도 있으면 LLM 으로 fallthrough).
@@ -197,8 +165,7 @@ def _looks_like_personal_status_question(text: str) -> bool:
 
 
 IntentLiteral = Literal["medical_inquiry", "service_guide", "general"]
-EvalResultLiteral = Literal["pass", "generation_problem", "retrieval_problem"]
-EvalStageLiteral = Literal["rule", "llm"]
+# EvalResultLiteral / EvalStageLiteral 은 _shared.medical_evaluator 에서 re-export.
 # classify_intent 가 분류해 retrieve.disease 필터로 전달하는 질환 키.
 DiseaseLiteral = Literal["diabetes", "hypertension", "dyslipidemia", "general"]
 
@@ -729,17 +696,7 @@ _SERVICE_SYSTEM = """당신은 만성질환 생활습관 관리 서비스의 사
 4. 의료 면책 문구는 포함하지 않습니다."""
 
 
-def _format_context(docs: list[RetrievedChunk]) -> str:
-    if not docs:
-        return "(검색된 컨텍스트가 없습니다.)"
-    parts: list[str] = []
-    for i, d in enumerate(docs, start=1):
-        meta = d.metadata or {}
-        title = d.title or meta.get("section_title") or d.source
-        pages = meta.get("source_pages")
-        header = f"[자료 {i}] 출처: {d.source}" + (f" / p.{pages}" if pages else "") + f" — {title}"
-        parts.append(header + "\n" + d.chunk_text)
-    return "\n\n".join(parts)
+# _format_context 는 _shared.medical_evaluator 에서 import (위 import 블록 참조).
 
 
 def _format_profile_block(profile: dict[str, Any]) -> list[str]:  # noqa: C901 — 필드 합치는 평면 흐름
@@ -856,222 +813,26 @@ async def generate_node(state: ChatState) -> dict[str, Any]:
 
 
 # ─────────────────────────────────────────────
-# 노드: evaluate (2-stage)
+# 노드: evaluate (2-stage) — 의료 가드 다층 구조는 _shared.medical_evaluator 로 추출됨.
+# 본 노드는 ChatState → EvalInput 변환 + 결과 → ChatState 업데이트만 담당.
 # ─────────────────────────────────────────────
-def _rule_evaluate(state: ChatState) -> tuple[EvalResultLiteral, str]:
-    """1차 결정적 평가. (eval_result, feedback) 반환. pass 면 feedback="".
-
-    실패 조건 (하나라도 걸리면 즉시 분류):
-      R1. retrieved_docs == [] → retrieval_problem
-      R2. draft 길이 < MIN_ANSWER_LEN → generation_problem
-      R3. 금지 표현(단정/약물 직접 권고) 포함 → generation_problem
-      R4. medical_inquiry 인데 의사 상담 권고 키워드 모두 누락 → generation_problem
-    """
-    draft = state.get("draft_answer", "")
-    docs = state.get("retrieved_docs", [])
-    intent: IntentLiteral = state.get("intent", "general")  # type: ignore[assignment]
-
-    # R1: 문서 없음
-    if not docs:
-        return (
-            "retrieval_problem",
-            "[Rule R1] 검색 결과가 비어 있음. 핵심 키워드/동의어로 쿼리 재작성 필요.",
-        )
-
-    # R2: 답변 길이 부족 (generate 가 빈 답을 돌려준 경우 포함)
-    stripped = draft.strip()
-    if len(stripped) < MIN_ANSWER_LEN:
-        return (
-            "generation_problem",
-            f"[Rule R2] 답변이 너무 짧음 ({len(stripped)}자). "
-            f"컨텍스트를 인용해 단계별로 다시 작성하고 의사 상담 권고 포함.",
-        )
-
-    # R3: 단정적 진단 표현 (정규식 — 한국어 어미 변형 커버)
-    diag_match = _DIAGNOSTIC_ASSERTION_PATTERN.search(draft)
-    if diag_match:
-        return (
-            "generation_problem",
-            f"[Rule R3] 단정적 진단 표현 '{diag_match.group(0)}' 사용 금지. "
-            f"'경향/범위' 표현으로 바꾸고 의사 상담 권고 추가하여 재작성.",
-        )
-    # R3: 약물 직접 권고
-    for phrase in _DRUG_DIRECT_RECOMMENDATIONS:
-        if phrase in draft:
-            return (
-                "generation_problem",
-                f"[Rule R3] 약물 직접 권고 '{phrase}' 금지. 일반 정보 안내 + '담당 의사·약사 상담' 권고로 재작성.",
-            )
-
-    # R4: 의료 답변에 의사 상담 권고 필수.
-    # medical_inquiry 또는 intent=general 인데 본문에 의료 토픽이 등장하면 권고를 강제
-    # (classify_intent 오분류 방어).
-    needs_advice = intent == "medical_inquiry" or (
-        intent == "general" and any(k in draft for k in _MEDICAL_TOPIC_KEYWORDS)
-    )
-    if needs_advice and not any(p in draft for p in _MEDICAL_REQUIRED_PHRASES):
-        return (
-            "generation_problem",
-            "[Rule R4] 의료 답변에 '의사/전문의/전문가/상담/병원' 권고 누락. 답변 끝에 의사 상담 권고 추가하여 재작성.",
-        )
-
-    # R5: 사용자 건강 데이터가 제공됐는데 답변이 본인 실제 수치를 인용하지 않으면 일반론
-    # 으로 전락한 것으로 간주 (검수 P7 + 보안 리뷰 M-1).
-    # 단순 "숫자 1개라도 있으면 OK" 는 챕터 번호/일반 임계값(120/80)이 우연히 들어와도
-    # 통과시켜 약함 → 사용자 스냅샷의 실제 측정값 중 하나라도 답변에 인용됐는지 검사.
-    if state.get("has_health_data"):
-        snap = state.get("health_data") or {}
-        user_numbers = _extract_user_numbers(snap)
-        if user_numbers and not any(n in draft for n in user_numbers):
-            return (
-                "generation_problem",
-                "[Rule R5] 사용자 본인 데이터의 실제 수치(예: 혈압 130/85, 체중 70 kg, "
-                "BMI 22.5) 가 답변에 인용되지 않음. 사용자 데이터를 본문에 그대로 인용하여 재작성.",
-            )
-
-    return ("pass", "")
-
-
-def _extract_user_numbers(snap: dict[str, Any]) -> set[str]:
-    """사용자 health snapshot 에서 실제 수치 토큰을 추출 (답변 인용 여부 검사용).
-
-    프로필 키(height_cm/weight_kg/waist_cm) + 측정값(primary_value/secondary_value).
-    숫자는 `f"{v:g}"` 로 정수·소수 둘 다 자연스러운 표기로.
-    """
-    numbers: set[str] = set()
-    profile = snap.get("profile") or {}
-    for key in ("height_cm", "weight_kg", "waist_cm"):
-        v = profile.get(key)
-        if v is not None:
-            numbers.add(f"{float(v):g}")
-    for rec in (snap.get("recent_records") or {}).values():
-        for key in ("primary_value", "secondary_value"):
-            v = rec.get(key)
-            if v is not None:
-                numbers.add(f"{float(v):g}")
-    return numbers
-
-
-_LLM_EVAL_PROMPT = """당신은 의료/서비스 RAG 답변 품질 평가자입니다. 질문·컨텍스트·답변(필요 시 사용자 건강 정보 포함)을 검토하고 6가지 기준으로 진단하세요.
-
-JSON 만 응답하세요:
-{{
-  "result": "pass" | "generation_problem" | "retrieval_problem",
-  "criteria": {{
-    "answers_question": true | false,
-    "grounded_in_context": true | false,
-    "numeric_interpretation_correct": true | false | null,
-    "no_risk_exaggeration": true | false,
-    "recommendations_specific": true | false,
-    "warnings_appropriate": true | false
-  }},
-  "reason": "한 줄 평가",
-  "feedback": "result≠pass 일 때 다음 단계 보강 지시. pass 면 빈 문자열."
-}}
-
-평가 기준:
-1. answers_question: 질문에 직접 답했는가? (질문과 무관한 일반론만 늘어놓진 않았는가)
-2. grounded_in_context: 컨텍스트 근거 안에서 답했는가? (환각·근거 외 사실 인용 없음)
-3. numeric_interpretation_correct: 사용자 건강 수치가 제공된 경우 정확히 해석했는가? 건강정보 미제공이면 null.
-4. no_risk_exaggeration: 위험도/심각도를 과장하지 않았는가? (불필요한 공포 조장 없음)
-5. recommendations_specific (의료 답변 핵심 — 엄격하게 판단):
-   - **컨텍스트에 수치·임계값·정량 권고가 있는데 답변이 모호한 일반론만 담고 있으면 false.**
-   - 예시: 컨텍스트에 "LDL-C 100 mg/dL 미만" 또는 "유산소 운동 주 5~7회 30분 이상" 같은 정량
-     정보가 있는데 답변엔 "콜레스테롤 관리가 중요" / "운동을 늘리세요" 정도만 있으면 false.
-   - 의료 답변의 4측면(관리 목표·생활요법·약물·추적 관리) 중 컨텍스트에 있는데 누락된 측면이
-     있으면 false (특히 "관리 목표 수치" 누락은 의료 도메인에서 치명적).
-   - 컨텍스트 자체가 수치를 안 가지면 true (답변이 일반론이어도 retrieval_problem).
-6. warnings_appropriate: 금기/주의 문구가 필요한 상황(약물·임신·증상 등)에서 포함됐는가? 불필요하면 true 처리.
-
-분류 매핑:
-- 1·5번이 false → generation_problem (재생성으로 보강 — 5번이면 feedback 에 누락된 수치/측면을 명시)
-- 2번이 false 이고 답변이 컨텍스트와 완전히 동떨어졌으면 → retrieval_problem (재검색 필요)
-- 2번이 false 이지만 환각만 있고 컨텍스트는 관련 있음 → generation_problem
-- 3·4·6번이 false → generation_problem
-- 전부 true (또는 3번 null) → pass
-
-feedback 은 한국어로 명확히 어떤 항목이 어떻게 보강돼야 하는지 적으세요. 특히 5번 fail 의 경우
-"컨텍스트에 ~ 수치가 있으니 답변에 인용 필요" 형태로 구체적으로 지시.
-
-질문: {question}
-{health_block}컨텍스트:
-{context}
-
-답변:
-{answer}
-"""
-
-
-async def _llm_evaluate(state: ChatState) -> tuple[EvalResultLiteral, str]:
-    """2차 LLM 평가. 1차 통과 시에만 호출."""
-    docs = state.get("retrieved_docs", [])
-    draft = state.get("draft_answer", "")
-    health_block = _format_health_snapshot(state.get("health_data"))
-
-    try:
-        client = _get_client()
-        resp = await client.chat.completions.create(
-            model=config.OPENAI_CHAT_MODEL,
-            messages=[
-                {"role": "system", "content": "JSON 으로만 답하는 RAG 평가자."},
-                {
-                    "role": "user",
-                    "content": _LLM_EVAL_PROMPT.format(
-                        question=state["original_question"],
-                        health_block=health_block,
-                        context=_format_context(docs),
-                        answer=draft,
-                    ),
-                },
-            ],
-            temperature=0.0,
-            response_format={"type": "json_object"},
-        )
-        data = json.loads(resp.choices[0].message.content or "{}")
-    except Exception as e:  # noqa: BLE001
-        _logger.warning("llm_evaluate 실패, 통과로 간주: %s", _safe_err_repr(e))
-        return ("pass", "")
-
-    result = data.get("result")
-    if result not in ("pass", "generation_problem", "retrieval_problem"):
-        result = "pass"  # 분류 실패 시 보수적으로 통과 (불필요 루프 회피)
-
-    feedback = str(data.get("feedback") or "")
-    return (result, feedback)
-
-
 async def evaluate_node(state: ChatState) -> dict[str, Any]:
-    revision_count = int(state.get("eval_revision_count", 0))
-
-    # 1차: Rule
-    rule_result, rule_feedback = _rule_evaluate(state)
-    if rule_result != "pass":
-        return {
-            "eval_result": rule_result,
-            "eval_stage": "rule",
-            "eval_revision_count": revision_count + 1,
-            "eval_feedback": rule_feedback,
-        }
-
-    # 서비스 가이드 답변은 의료 가드(수치 해석·위험도 과장·금기 문구) 가 무관하므로
-    # 6기준 LLM 평가를 생략한다. 1차 Rule 만으로 통과 → 속도·과민 fail 모두 개선.
-    # medical_inquiry / general 만 LLM 평가를 거친다.
     intent: IntentLiteral = state.get("intent", "general")  # type: ignore[assignment]
-    if intent == "service_guide":
-        return {
-            "eval_result": "pass",
-            "eval_stage": "rule",
-            "eval_revision_count": revision_count,
-            "eval_feedback": "",
-        }
-
-    # 2차: LLM (medical_inquiry / general)
-    llm_result, llm_feedback = await _llm_evaluate(state)
+    inp = EvalInput(
+        question=state["original_question"],
+        draft=state.get("draft_answer", ""),
+        docs=state.get("retrieved_docs", []),
+        intent=intent,
+        has_health_data=bool(state.get("has_health_data", False)),
+        health_data=state.get("health_data"),
+        revision_count=int(state.get("eval_revision_count", 0)),
+    )
+    out = await run_evaluator(inp)
     return {
-        "eval_result": llm_result,
-        "eval_stage": "llm",
-        "eval_revision_count": revision_count + (0 if llm_result == "pass" else 1),
-        "eval_feedback": llm_feedback,
+        "eval_result": out.eval_result,
+        "eval_stage": out.eval_stage,
+        "eval_revision_count": out.eval_revision_count,
+        "eval_feedback": out.eval_feedback,
     }
 
 
