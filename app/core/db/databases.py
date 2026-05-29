@@ -19,6 +19,7 @@ TORTOISE_APP_MODELS = [
     "app.models.chatbot",
     "app.models.files",
     "app.models.experience",
+    "app.models.ml_inference",
 ]
 
 
