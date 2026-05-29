@@ -13,12 +13,12 @@ from openai import OpenAI
 # ─────────────────────────────────────────────
 # 경로 설정
 # ─────────────────────────────────────────────
-BASE       = Path(__file__).parent
+BASE = Path(__file__).parent
 CHROMA_DIR = BASE / "chroma_db"
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 COLLECTION_NAME = "chronic_disease_rag"
-TOP_K           = 5  # 상위 몇 개 청크 가져올지
+TOP_K = 5  # 상위 몇 개 청크 가져올지
 
 # ─────────────────────────────────────────────
 # 테스트 쿼리 목록
@@ -30,6 +30,7 @@ TEST_QUERIES = [
     "챌린지 인증 실패하면 어떻게 해?",
     "이상지질혈증 LDL 콜레스테롤 치료 목표",
 ]
+
 
 # ─────────────────────────────────────────────
 # 클라이언트 초기화
@@ -69,7 +70,7 @@ def get_embedding(client: OpenAI, text: str) -> list[float]:
 # ─────────────────────────────────────────────
 def search(collection, openai_client, query: str, top_k: int = TOP_K):
     embedding = get_embedding(openai_client, query)
-    results   = collection.query(
+    results = collection.query(
         query_embeddings=[embedding],
         n_results=top_k,
         include=["documents", "metadatas", "distances"],
@@ -82,13 +83,13 @@ def print_results(query: str, results: dict):
     print(f"  🔍 쿼리: {query}")
     print(f"{'=' * 60}")
 
-    docs      = results["documents"][0]
+    docs = results["documents"][0]
     metadatas = results["metadatas"][0]
     distances = results["distances"][0]
 
-    for i, (doc, meta, dist) in enumerate(zip(docs, metadatas, distances)):
+    for i, (doc, meta, dist) in enumerate(zip(docs, metadatas, distances, strict=False)):
         similarity = 1 - dist  # 코사인 거리 → 유사도
-        print(f"\n  [{i+1}위] 유사도: {similarity:.4f}")
+        print(f"\n  [{i + 1}위] 유사도: {similarity:.4f}")
         print(f"  출처: {meta.get('source_id', '?')} | {meta.get('section_title', '?')}")
         print(f"  파일: {meta.get('file', '?')} | 페이지: {meta.get('source_pages', '?')}")
         print(f"  내용: {doc[:150]}{'...' if len(doc) > 150 else ''}")
@@ -104,9 +105,7 @@ if __name__ == "__main__":
     print("=" * 60)
 
     if not CHROMA_DIR.exists():
-        raise FileNotFoundError(
-            f"chroma_db/ 없음. chroma_loader.py 먼저 실행하세요."
-        )
+        raise FileNotFoundError("chroma_db/ 없음. chroma_loader.py 먼저 실행하세요.")
 
     openai_client, chroma_client = init_clients()
     collection = chroma_client.get_collection(name=COLLECTION_NAME)

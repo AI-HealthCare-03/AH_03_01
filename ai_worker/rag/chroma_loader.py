@@ -15,17 +15,18 @@ from openai import OpenAI
 # ─────────────────────────────────────────────
 # 경로 설정
 # ─────────────────────────────────────────────
-BASE        = Path(__file__).parent
+BASE = Path(__file__).parent
 CHUNKS_PATH = BASE / "output" / "chunks.json"
-CHROMA_DIR  = BASE / "chroma_db"
+CHROMA_DIR = BASE / "chroma_db"
 
 # ─────────────────────────────────────────────
 # 설정
 # ─────────────────────────────────────────────
-EMBEDDING_MODEL  = "text-embedding-3-small"
-COLLECTION_NAME  = "chronic_disease_rag"
-BATCH_SIZE       = 50    # 한 번에 임베딩 요청할 청크 수 (API 제한 고려)
-RETRY_DELAY      = 5     # 오류 시 재시도 대기 시간 (초)
+EMBEDDING_MODEL = "text-embedding-3-small"
+COLLECTION_NAME = "chronic_disease_rag"
+BATCH_SIZE = 50  # 한 번에 임베딩 요청할 청크 수 (API 제한 고려)
+RETRY_DELAY = 5  # 오류 시 재시도 대기 시간 (초)
+
 
 # ─────────────────────────────────────────────
 # 클라이언트 초기화
@@ -133,18 +134,18 @@ if __name__ == "__main__":
 
     # 배치 단위로 임베딩 & 적재
     total_batches = (len(new_chunks) + BATCH_SIZE - 1) // BATCH_SIZE
-    total_added   = 0
+    total_added = 0
 
     for batch_idx in range(total_batches):
         start = batch_idx * BATCH_SIZE
-        end   = min(start + BATCH_SIZE, len(new_chunks))
+        end = min(start + BATCH_SIZE, len(new_chunks))
         batch = new_chunks[start:end]
 
         print(f"  배치 {batch_idx + 1}/{total_batches} ({len(batch)}개) 임베딩 중...")
 
-        texts      = [c["content"] for c in batch]
-        ids        = [c["_id"] for c in batch]
-        metadatas  = [clean_metadata(c) for c in batch]
+        texts = [c["content"] for c in batch]
+        ids = [c["_id"] for c in batch]
+        metadatas = [clean_metadata(c) for c in batch]
         embeddings = get_embeddings(openai_client, texts)
 
         collection.add(
@@ -160,7 +161,7 @@ if __name__ == "__main__":
     # 최종 확인
     final_count = collection.count()
     print()
-    print(f"  🎉 적재 완료!")
+    print("  🎉 적재 완료!")
     print(f"  컬렉션 총 청크 수: {final_count}개")
     print(f"  저장 경로: {CHROMA_DIR}")
     print("=" * 55)

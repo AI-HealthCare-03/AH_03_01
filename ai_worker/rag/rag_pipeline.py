@@ -12,31 +12,31 @@ RAG 프롬프트 + LLM 답변 생성 (스트리밍)
     - 의료 면책 문구 자동 포함
 """
 
-import os
 import json
+import os
 from pathlib import Path
 
 import chromadb
 from chromadb.config import Settings
+from kiwipiepy import Kiwi
 from openai import OpenAI
 from rank_bm25 import BM25Okapi
-from kiwipiepy import Kiwi
 
 # ─────────────────────────────────────────────
 # 경로 설정
 # ─────────────────────────────────────────────
-BASE        = Path(__file__).parent
-CHROMA_DIR  = BASE / "chroma_db"
+BASE = Path(__file__).parent
+CHROMA_DIR = BASE / "chroma_db"
 CHUNKS_PATH = BASE / "output" / "chunks.json"
 
 # ─────────────────────────────────────────────
 # 설정
 # ─────────────────────────────────────────────
 EMBEDDING_MODEL = "text-embedding-3-small"
-LLM_MODEL       = "gpt-4o-mini"
+LLM_MODEL = "gpt-4o-mini"
 COLLECTION_NAME = "chronic_disease_rag"
-TOP_K           = 5    # 검색할 청크 수
-RRF_K           = 60   # RRF 상수
+TOP_K = 5  # 검색할 청크 수
+RRF_K = 60  # RRF 상수
 
 # ─────────────────────────────────────────────
 # 프롬프트 템플릿
@@ -100,6 +100,7 @@ def init_clients():
 # ─────────────────────────────────────────────
 kiwi = Kiwi()
 
+
 def tokenize(text: str) -> list[str]:
     tokens = []
     for token in kiwi.tokenize(text):
@@ -121,11 +122,9 @@ def build_bm25_index(chunks: list[dict]):
 # Hybrid 검색
 # ─────────────────────────────────────────────
 def dense_search(collection, openai_client, query, top_k):
-    response  = openai_client.embeddings.create(
-        model=EMBEDDING_MODEL, input=[query]
-    )
+    response = openai_client.embeddings.create(model=EMBEDDING_MODEL, input=[query])
     embedding = response.data[0].embedding
-    results   = collection.query(
+    results = collection.query(
         query_embeddings=[embedding],
         n_results=top_k,
         include=["documents", "metadatas", "distances"],
@@ -135,34 +134,35 @@ def dense_search(collection, openai_client, query, top_k):
         results["documents"][0],
         results["metadatas"][0],
         results["distances"][0],
+        strict=False,
     ):
         output.append({"content": doc, "metadata": meta, "score": 1 - dist})
     return output
 
 
 def sparse_search(bm25, chunks, query, top_k):
-    scores      = bm25.get_scores(tokenize(query))
+    scores = bm25.get_scores(tokenize(query))
     top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
     return [
         {
-            "content":  chunks[idx]["content"],
+            "content": chunks[idx]["content"],
             "metadata": {k: v for k, v in chunks[idx].items() if k != "content"},
-            "score":    float(scores[idx]),
+            "score": float(scores[idx]),
         }
         for idx in top_indices
     ]
 
 
 def rrf_merge(dense_results, sparse_results, top_k, k=RRF_K):
-    rrf_scores  = {}
+    rrf_scores = {}
     content_map = {}
     for rank, item in enumerate(dense_results):
-        key              = item["content"][:100]
-        rrf_scores[key]  = rrf_scores.get(key, 0) + 1 / (k + rank + 1)
+        key = item["content"][:100]
+        rrf_scores[key] = rrf_scores.get(key, 0) + 1 / (k + rank + 1)
         content_map[key] = item
     for rank, item in enumerate(sparse_results):
-        key              = item["content"][:100]
-        rrf_scores[key]  = rrf_scores.get(key, 0) + 1 / (k + rank + 1)
+        key = item["content"][:100]
+        rrf_scores[key] = rrf_scores.get(key, 0) + 1 / (k + rank + 1)
         if key not in content_map:
             content_map[key] = item
     sorted_keys = sorted(rrf_scores, key=lambda k: rrf_scores[k], reverse=True)
@@ -170,7 +170,7 @@ def rrf_merge(dense_results, sparse_results, top_k, k=RRF_K):
 
 
 def hybrid_search(collection, openai_client, bm25, chunks, query, top_k=TOP_K):
-    dense_results  = dense_search(collection, openai_client, query, top_k * 2)
+    dense_results = dense_search(collection, openai_client, query, top_k * 2)
     sparse_results = sparse_search(bm25, chunks, query, top_k * 2)
     return rrf_merge(dense_results, sparse_results, top_k)
 
@@ -182,15 +182,13 @@ def build_context(search_results: list[dict]) -> str:
     """검색 결과를 LLM 컨텍스트 문자열로 변환"""
     parts = []
     for i, item in enumerate(search_results):
-        meta    = item.get("metadata", {})
-        source  = meta.get("source_id", "?")
-        title   = meta.get("section_title", "?")
-        pages   = meta.get("source_pages", "")
+        meta = item.get("metadata", {})
+        source = meta.get("source_id", "?")
+        title = meta.get("section_title", "?")
+        pages = meta.get("source_pages", "")
         page_str = f" (p.{pages})" if pages and pages != "?" else ""
 
-        parts.append(
-            f"[자료 {i+1}] {source} — {title}{page_str}\n{item['content']}"
-        )
+        parts.append(f"[자료 {i + 1}] {source} — {title}{page_str}\n{item['content']}")
     return "\n\n".join(parts)
 
 
@@ -208,10 +206,10 @@ def generate_answer_stream(openai_client, question: str, context: str):
         model=LLM_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": user_prompt},
+            {"role": "user", "content": user_prompt},
         ],
         stream=True,
-        temperature=0.3,   # 낮을수록 일관된 답변
+        temperature=0.3,  # 낮을수록 일관된 답변
         max_tokens=1000,
     )
 
@@ -225,12 +223,12 @@ def generate_answer_stream(openai_client, question: str, context: str):
 # RAG 파이프라인 전체 실행
 # ─────────────────────────────────────────────
 def rag_answer(
-    question:     str,
+    question: str,
     collection,
     openai_client,
     bm25,
-    chunks:       list[dict],
-    verbose:      bool = True,
+    chunks: list[dict],
+    verbose: bool = True,
 ) -> str:
     """
     질문 → Hybrid 검색 → 컨텍스트 구성 → LLM 스트리밍 답변
@@ -244,7 +242,7 @@ def rag_answer(
         print("\n  📚 참고 청크:")
         for i, item in enumerate(search_results):
             meta = item.get("metadata", {})
-            print(f"    [{i+1}] {meta.get('source_id','?')} | {meta.get('section_title','?')}")
+            print(f"    [{i + 1}] {meta.get('source_id', '?')} | {meta.get('section_title', '?')}")
         print()
 
     # 3. 컨텍스트 구성
