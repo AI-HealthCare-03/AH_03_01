@@ -778,6 +778,11 @@ def _format_health_snapshot(snap: dict[str, Any] | None) -> str:
 async def generate_node(state: ChatState) -> dict[str, Any]:
     intent: IntentLiteral = state.get("intent", "general")  # type: ignore[assignment]
     docs = state.get("retrieved_docs", [])
+    # H-5: 빈 컨텍스트로 LLM 호출하면 hallucination + 무의미 토큰 비용. evaluator R1
+    # (retrieval_problem) 이 다음 노드에서 라우팅을 잡아주므로 빈 draft 만 반환.
+    if not docs:
+        _logger.info("generate skip — retrieved_docs 비어있음 (evaluator R1 위임)")
+        return {"draft_answer": ""}
     system = _SERVICE_SYSTEM if intent == "service_guide" else _MEDICAL_SYSTEM
     context = _format_context(docs)
     health_block = _format_health_snapshot(state.get("health_data"))

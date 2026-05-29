@@ -46,6 +46,7 @@ from typing import Any, Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from openai import AsyncOpenAI
+from tortoise.transactions import in_transaction
 
 from app.core import config
 from app.graphs._shared.medical_evaluator import (
@@ -414,26 +415,30 @@ async def persist_disease_risk(state: RiskState) -> dict[str, Any]:
     predictions = state.get("predictions") or []
     snapshot = state.get("feature_snapshot") or {}
 
+    # H-3: 같은 호출의 3 disease persist 를 한 트랜잭션으로 묶어 부분 실패 시
+    # row 가 일부만 남는 일관성 깨짐을 차단. (노드 간 gap — ml_inference SUCCESS
+    # 후 그래프 crash 시나리오는 backlog: monitoring 으로 보정 예정.)
     row_ids: list[int] = []
-    for p in predictions:
-        try:
-            disease_type = DiseaseType(p["disease_type"])
-            risk_level = RiskLevel(p["risk_level"])
-        except (KeyError, ValueError):
-            continue
-        # guideline 매칭 (없으면 null)
-        guideline = await DiseaseRiskGuideline.filter(disease_type=disease_type, risk_level=risk_level).first()
-        row = await DiseaseRisk.create(
-            user_id=user_id,
-            disease_type=disease_type,
-            risk_score=Decimal(str(p["risk_score"])),
-            risk_level=risk_level,
-            contributing_factors=p.get("contributing_factors") or [],
-            input_snapshot=snapshot,
-            model_version=p.get("model_version", "rule-v1"),
-            guideline_id=guideline.id if guideline else None,
-        )
-        row_ids.append(row.id)
+    async with in_transaction():
+        for p in predictions:
+            try:
+                disease_type = DiseaseType(p["disease_type"])
+                risk_level = RiskLevel(p["risk_level"])
+            except (KeyError, ValueError):
+                continue
+            # guideline 매칭 (없으면 null)
+            guideline = await DiseaseRiskGuideline.filter(disease_type=disease_type, risk_level=risk_level).first()
+            row = await DiseaseRisk.create(
+                user_id=user_id,
+                disease_type=disease_type,
+                risk_score=Decimal(str(p["risk_score"])),
+                risk_level=risk_level,
+                contributing_factors=p.get("contributing_factors") or [],
+                input_snapshot=snapshot,
+                model_version=p.get("model_version", "rule-v1"),
+                guideline_id=guideline.id if guideline else None,
+            )
+            row_ids.append(row.id)
     return {"disease_risk_row_ids": row_ids}
 
 
@@ -596,6 +601,11 @@ def _format_context(docs: list[RetrievedChunk]) -> str:
 async def generate_recommendation(state: RiskState) -> dict[str, Any]:
     predictions = state.get("predictions") or []
     docs = state.get("retrieved_docs") or []
+    # H-5: 빈 컨텍스트면 LLM 호출 skip — evaluator R1 가 retrieval_problem 으로
+    # 잡아 rewrite/fallback 라우팅. (ChatRAG 와 동일 정책)
+    if not docs:
+        _logger.info("generate_recommendation skip — retrieved_docs 비어있음 (evaluator R1 위임)")
+        return {"draft_answer": ""}
     feedback = state.get("eval_feedback", "")
     feedback_hint = f"\n\n[Evaluator 피드백] 이전 답변에서 보완할 점: {feedback}" if feedback else ""
 
