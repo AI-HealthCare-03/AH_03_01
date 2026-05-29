@@ -1,0 +1,68 @@
+"""DTO — POST /api/v1/risk-recommendations 요청·응답.
+
+설계 문서: `RAG/LangGraph_마이그레이션_계획.md` 5장 2단계.
+
+요청 body 는 없음(사용자 ID 만 JWT 에서 추출, 입력 데이터는 DB 자동 fetch).
+응답에 위험도 예측 결과 (3 질환) + LLM 권고·챌린지 추천 본문 + sources + 메타.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class ContributingFactorItem(BaseModel):
+    """위험도 산출에 기여한 요인 단위. RiskPredictor 출력 그대로."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    factor: str
+    weight: float
+    description: str | None = None
+
+
+class RiskPredictionItem(BaseModel):
+    """질환별 위험도 예측 결과."""
+
+    disease_type: str = Field(description='"DIABETES" / "HYPERTENSION" / "CARDIOVASCULAR"')
+    risk_score: float = Field(description="0~100 위험도 점수")
+    risk_level: str = Field(description='"NORMAL"/"CAUTION"/"RISK"/"HIGH_RISK"')
+    contributing_factors: list[ContributingFactorItem] = Field(default_factory=list)
+
+
+class RecommendationSourceItem(BaseModel):
+    """답변 생성에 사용된 RAG 청크 출처 (frontend 표시용)."""
+
+    title: str | None = None
+    document_id: int | None = None
+    snippet: str | None = None
+    source: str | None = None  # 예: "KSOLA2022" / "CHALLENGE_CATALOG"
+
+
+class RiskRecommendationResponse(BaseModel):
+    """`POST /api/v1/risk-recommendations` 응답.
+
+    필드 매트릭스:
+      - has_required_data=false → predictions=[], answer=MISSING_INFO, missing_fields 채움
+      - has_required_data=true + is_fallback=false → 정상 답변
+      - has_required_data=true + is_fallback=true  → fallback 메시지
+    """
+
+    answer: str = Field(description="LLM 생성 권고·챌린지 추천 본문")
+    predictions: list[RiskPredictionItem] = Field(default_factory=list)
+    sources: list[RecommendationSourceItem] = Field(default_factory=list)
+    has_required_data: bool = True
+    missing_fields: list[str] = Field(default_factory=list)
+    action_hint: str | None = Field(
+        default=None,
+        description='has_required_data=false 일 때 "navigate_to_health_info"',
+    )
+    is_fallback: bool = False
+    eval_revision_count: int | None = None
+    disclaimer: str = "본 결과는 의학적 진단이 아닌 참고용 위험도 지표입니다."
+    model_version: str = "risk-graph-v1"
+
+    # extra dict (디버깅·확장용 — 운영에선 사용 안 함)
+    extra: dict[str, Any] = Field(default_factory=dict)
