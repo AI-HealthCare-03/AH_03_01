@@ -32,9 +32,10 @@ class RAGSource:
     snippet: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        # url 은 항상 None 인 죽은 필드 — 응답·DB 직렬화에서 제거.
+        # 외부 URL 자료가 들어오면 향후 부활.
         return {
             "title": self.title,
-            "url": self.url,
             "document_id": self.document_id,
             "snippet": self.snippet,
         }
@@ -72,12 +73,13 @@ def _to_source(c: Any) -> RAGSource:
     """RetrievedChunk → RAGSource 어댑터.
 
     chunk_text 의 앞부분만 스니펫으로 사용 (길이 _SNIPPET_MAX_LEN 자 제한).
+    url 은 내부 진료지침/서비스 가이드 답변에선 항상 None — 응답 직렬화 시 제거.
     """
     text = getattr(c, "chunk_text", "") or ""
     snippet = text[:_SNIPPET_MAX_LEN] + ("…" if len(text) > _SNIPPET_MAX_LEN else "")
     return RAGSource(
         title=getattr(c, "title", None),
-        url=None,  # 내부 진료지침/서비스 가이드는 외부 URL 없음
+        url=None,
         document_id=getattr(c, "document_id", None),
         snippet=snippet,
     )

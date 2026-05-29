@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -21,6 +22,8 @@ from app.repositories.chatbot_repository import (
     ChatbotSessionRepository,
 )
 from app.services.ml import ChatbotRAG, RAGAnswer
+
+_logger = logging.getLogger(__name__)
 
 MAX_TITLE_LENGTH = 30
 
@@ -83,11 +86,28 @@ class ChatbotConversationService:
                 }
             )
 
-        rag_result = await self.rag.answer(
-            query=data.message,
-            user_id=user.id,
-            thread_id=str(session.id),
-        )
+        # ChatRAGGraph 내부 예외는 run_chat_rag 의 try/except 가 fallback 으로 흡수하지만,
+        # 그래프 진입 전(예: import 단계) 또는 SDK 가 예외를 raise 하는 케이스를 위해
+        # 한 단계 더 방어. 어떤 경우에도 사용자 메시지만 남는 고아 세션이 생기지 않도록
+        # SYSTEM placeholder 응답을 보장한다.
+        try:
+            rag_result = await self.rag.answer(
+                query=data.message,
+                user_id=user.id,
+                thread_id=str(session.id),
+            )
+        except Exception as e:  # noqa: BLE001 — 모든 예외를 SYSTEM placeholder 로 흡수
+            _logger.error("rag.answer 실패, SYSTEM placeholder 저장: %s", type(e).__name__)
+            from app.graphs.chat_rag_graph import FALLBACK_MEDICAL, MEDICAL_DISCLAIMER
+            from app.services.ml.chatbot_rag import RAGAnswer
+
+            rag_result = RAGAnswer(
+                answer=FALLBACK_MEDICAL,
+                confidence=0.0,
+                model_version="chatragraph-v1",
+                fallback=True,
+                disclaimer=MEDICAL_DISCLAIMER,
+            )
 
         async with in_transaction():
             bot_message = await self._persist_rag_message(session, rag_result)

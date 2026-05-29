@@ -135,6 +135,17 @@ _MEDICAL_TOPIC_KEYWORDS = (
     "스타틴",
 )
 
+# classify_intent prefilter — 명백한 인사/단답에서 LLM 호출 생략용 보수적 패턴.
+# 매치 조건이 모두 만족할 때만 prefilter 적용 (의료/서비스 키워드 하나라도 있으면 LLM 으로 fallthrough).
+_GREETING_PATTERN = re.compile(
+    r"^(안녕|안뇽|하이|hi|hello|반가|반갑|좋은(아침|오후|저녁|밤)|"
+    r"고마|감사|땡큐|thanks|thank|잘가|잘자|굿모닝|굿나잇)"
+    r"[\s가-힣\w!?.,]*[?.!]?$",
+    re.IGNORECASE,
+)
+# prefilter 활성 글자 수 상한 — 길어지면 의도 모호해지므로 LLM 으로.
+_PREFILTER_MAX_LEN = 15
+
 IntentLiteral = Literal["medical_inquiry", "service_guide", "general"]
 EvalResultLiteral = Literal["pass", "generation_problem", "retrieval_problem"]
 EvalStageLiteral = Literal["rule", "llm"]
@@ -308,7 +319,53 @@ needs_health_data=false 면 missing_fields=[].
 """
 
 
+def _heuristic_prefilter(question: str) -> dict[str, Any] | None:
+    """LLM 호출 없이 즉시 결정 가능한 매우 보수적 케이스만 prefilter.
+
+    적용 조건 (모두 만족):
+      1. 메시지 길이 ≤ _PREFILTER_MAX_LEN 자
+      2. 의료 토픽 키워드 / 서비스(챌린지·포인트·인증·로그인 등) 키워드 미포함
+      3. 인사·감사·작별 표현 정규식과 매치
+
+    매치되면 intent=general / needs_health_data=false 로 즉시 반환.
+    불일치하면 None 을 돌려 LLM 으로 위임.
+
+    목적: 단답·인사로 인한 불필요한 LLM 비용·지연 제거 (정확도 손실 거의 없음).
+    """
+    stripped = question.strip()
+    if len(stripped) > _PREFILTER_MAX_LEN:
+        return None
+
+    # 의료/서비스 토픽 단어가 하나라도 있으면 LLM 분류로 위임.
+    lowered = stripped.lower()
+    for kw in _MEDICAL_TOPIC_KEYWORDS:
+        if kw.lower() in lowered:
+            return None
+    # 서비스 의심 키워드 — 일부만 (포인트/챌린지/인증/로그인/회원). 명백한 service_guide
+    # 판단도 LLM 에 맡겨 보수적으로 처리.
+    for kw in ("챌린지", "포인트", "인증", "로그인", "회원", "알림", "예측"):
+        if kw in stripped:
+            return None
+
+    if not _GREETING_PATTERN.match(stripped):
+        return None
+
+    return {
+        "intent": "general",
+        "disease": None,
+        "needs_health_data": False,
+        "missing_fields": [],
+        "action_hint": None,
+    }
+
+
 async def classify_intent(state: ChatState) -> dict[str, Any]:
+    # 보수적 휴리스틱으로 명백한 인사·단답은 LLM 호출 없이 즉시 결정.
+    prefilter = _heuristic_prefilter(state["original_question"])
+    if prefilter is not None:
+        _logger.info("classify_intent prefilter hit (skip LLM)")
+        return prefilter
+
     try:
         client = _get_client()
         resp = await client.chat.completions.create(
@@ -535,18 +592,9 @@ def _format_context(docs: list[RetrievedChunk]) -> str:
     return "\n\n".join(parts)
 
 
-def _format_health_snapshot(snap: dict[str, Any] | None) -> str:  # noqa: C901 — 필드별 직렬화 헬퍼
-    """ChatState.health_data 를 LLM 컨텍스트용 텍스트 블록으로 직렬화.
-
-    진단·단정 표현 없이 raw 수치와 정적 프로필만 노출. 진료지침과 대조한 "경향" 표현은
-    system prompt 가 강제한다.
-    """
-    if not snap:
-        return ""
-
-    lines: list[str] = ["[사용자 건강 정보 — 진단 아님, 참고용]"]
-    profile = snap.get("profile") or {}
-
+def _format_profile_block(profile: dict[str, Any]) -> list[str]:  # noqa: C901 — 필드 합치는 평면 흐름
+    """UserHealthInfo 정적 프로필 직렬화."""
+    lines: list[str] = []
     h = profile.get("height_cm")
     w = profile.get("weight_kg")
     if h and w:
@@ -578,8 +626,12 @@ def _format_health_snapshot(snap: dict[str, Any] | None) -> str:  # noqa: C901 �
     medications = profile.get("medications") or []
     if medications:
         lines.append(f"- 복용 약물: {', '.join(str(m) for m in medications)}")
+    return lines
 
-    records = snap.get("recent_records") or {}
+
+def _format_records_block(records: dict[str, dict[str, Any]]) -> list[str]:
+    """HealthRecord type 별 최근 측정값 직렬화."""
+    lines: list[str] = []
     for rt, rec in records.items():
         v = rec["primary_value"]
         v2 = rec.get("secondary_value")
@@ -589,11 +641,30 @@ def _format_health_snapshot(snap: dict[str, Any] | None) -> str:  # noqa: C901 �
         val = f"{v}/{v2}" if v2 is not None else f"{v}"
         sub_str = f" ({sub})" if sub else ""
         lines.append(f"- 최근 {rt}{sub_str}: {val} {unit} ({ts})")
+    return lines
 
-    risks = snap.get("disease_risks") or {}
-    for dt, r in risks.items():
-        lines.append(f"- 최근 {dt} 위험도: {r['risk_level']} (점수 {r['risk_score']:.1f}, {r['calculated_at'][:10]})")
 
+def _format_risks_block(risks: dict[str, dict[str, Any]]) -> list[str]:
+    """DiseaseRisk 질환별 최근 위험도 직렬화."""
+    return [
+        f"- 최근 {dt} 위험도: {r['risk_level']} (점수 {r['risk_score']:.1f}, {r['calculated_at'][:10]})"
+        for dt, r in risks.items()
+    ]
+
+
+def _format_health_snapshot(snap: dict[str, Any] | None) -> str:
+    """ChatState.health_data 를 LLM 컨텍스트용 텍스트 블록으로 직렬화.
+
+    진단·단정 표현 없이 raw 수치와 정적 프로필만 노출. 진료지침과 대조한 "경향" 표현은
+    system prompt 가 강제한다. 필드별 분리 헬퍼(_format_*_block)로 구성 (L-1).
+    """
+    if not snap:
+        return ""
+
+    lines: list[str] = ["[사용자 건강 정보 — 진단 아님, 참고용]"]
+    lines.extend(_format_profile_block(snap.get("profile") or {}))
+    lines.extend(_format_records_block(snap.get("recent_records") or {}))
+    lines.extend(_format_risks_block(snap.get("disease_risks") or {}))
     return "\n".join(lines) + "\n\n"
 
 
@@ -888,10 +959,16 @@ def _disclaimer_for(intent: IntentLiteral) -> str:
 
 
 def _confidence_for(docs: list[RetrievedChunk], revision_count: int) -> float:
+    """검색 결과 강도와 재시도 횟수로 거친 신뢰도.
+
+    top-3 청크의 dense_similarity 평균 (Dense 미스 시 0 으로 간주) 을 베이스로 사용.
+    1위만 보면 Sparse-only hit 케이스에서 일률적인 0.4 가 나오는 문제를 완화 (L-3).
+    """
     if not docs:
         return 0.2
-    top_sim = docs[0].dense_similarity or 0.0
-    base = min(0.95, max(0.4, float(top_sim)))
+    sims = [(d.dense_similarity or 0.0) for d in docs[:3]]
+    avg = sum(sims) / len(sims) if sims else 0.0
+    base = min(0.95, max(0.4, float(avg)))
     return max(0.0, base - 0.1 * revision_count)
 
 
