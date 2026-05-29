@@ -83,10 +83,13 @@ class TestChatbotMessagesApi(TestCase):
             )
             assert res.status_code == status.HTTP_200_OK
             body = res.json()
-            assert body["message_type"] == "RAG"
-            # 모델 미연동 상태에서는 폴백 메시지 + confidence 0.0
+            # ChatRAGGraph 가 OPENAI_API_KEY 없는 환경(CI)에서 RuntimeError 를
+            # 던지면 service 가 SYSTEM placeholder + fallback=True 로 흡수한다.
+            # 사양 §6: fallback → SYSTEM 매핑 (app/services/chatbot.py 참고).
+            assert body["message_type"] == "SYSTEM"
             assert body["confidence"] == 0.0
-            assert body["model_version"] == "rag-stub-v0"
+            assert body["model_version"] == "chatragraph-v1"
+            assert body["is_fallback"] is True
             assert body["disclaimer"]
 
     async def test_message_creates_session_and_history(self):
