@@ -182,12 +182,13 @@ async def _embed_query(query: str) -> list[float]:
 SERVICE_SOURCES: tuple[str, ...] = ("GUIDE", "CHALLENGE_CATALOG")
 
 
-def _build_filter_sql(source_type: SourceType, disease: str | None) -> tuple[str, list[Any]]:
+def _build_filter_sql(source_type: SourceType, diseases: list[str] | None) -> tuple[str, list[Any]]:
     """source_type + disease 필터에 해당하는 WHERE 절 추가분 + bind 인자.
 
     바인드 인자 인덱스는 $2 부터 사용 (호출 측에서 $1 은 쿼리 임베딩).
     source_type="service" 일 때는 GUIDE/CHALLENGE_CATALOG 둘 다 매치하고 disease 필터를
     무시한다 (서비스 가이드·챌린지 카탈로그는 질환 횡단 자료).
+    diseases 는 list — 1개면 단일 질환, 2개 이상이면 OR 매치 (multi-disease 라우팅).
     """
     clauses: list[str] = []
     args: list[Any] = []
@@ -198,7 +199,6 @@ def _build_filter_sql(source_type: SourceType, disease: str | None) -> tuple[str
         args.append("GUIDELINE")
         next_idx += 1
     elif source_type == "service":
-        # placeholder 순서와 args 순서를 직관적으로 일치 ($next_idx = OTHER, 이어서 source IN).
         doc_type_idx = next_idx
         args.append("OTHER")
         next_idx += 1
@@ -209,12 +209,13 @@ def _build_filter_sql(source_type: SourceType, disease: str | None) -> tuple[str
         # service 카테고리는 disease 필터 비활성 (질환 횡단)
         return ("".join(clauses), args)
 
-    if disease:
-        # metadata 는 jsonb. ->> 연산자로 텍스트 추출 후 비교. 인덱스는 안 타지만 수백
-        # 청크 규모에선 전체 스캔 비용이 무시 가능.
-        clauses.append(f" AND (\"metadata\" ->> 'disease') = ${next_idx} ")
-        args.append(disease)
-        next_idx += 1
+    if diseases:
+        # metadata 는 jsonb. ->> 'disease' 텍스트 추출 후 IN 매치. 수백 청크 규모에서
+        # 인덱스 안 타도 비용 무시.
+        disease_placeholders = ", ".join(f"${next_idx + i}" for i in range(len(diseases)))
+        clauses.append(f" AND (\"metadata\" ->> 'disease') IN ({disease_placeholders}) ")
+        args.extend(diseases)
+        next_idx += len(diseases)
 
     return ("".join(clauses), args)
 
@@ -223,10 +224,10 @@ async def _dense_search(
     query_embedding: list[float],
     top_k: int,
     source_type: SourceType,
-    disease: str | None,
+    diseases: list[str] | None,
 ) -> list[tuple[int, float]]:
     """(document_id, cosine_similarity) 튜플 리스트, 유사도 내림차순."""
-    filter_sql, filter_args = _build_filter_sql(source_type, disease)
+    filter_sql, filter_args = _build_filter_sql(source_type, diseases)
     # asyncpg 는 vector 컬럼 코덱 등록되어 있어 list[float] 그대로 전달 가능 (databases.py 의 init).
     sql = f"""
         SELECT "id", 1 - ("embedding" <=> $1) AS similarity
@@ -249,12 +250,12 @@ def _sparse_search(
     query: str,
     top_k: int,
     source_type: SourceType,
-    disease: str | None,
+    diseases: list[str] | None,
 ) -> list[tuple[int, float]]:
     """BM25 점수 기준 상위 top_k (document_id, score).
 
     source_type="service" 는 GUIDE/CHALLENGE_CATALOG 둘 다 통과시키고 disease 필터를
-    무시한다 (질환 횡단). _build_filter_sql 과 동일 정책.
+    무시한다 (질환 횡단). _build_filter_sql 과 동일 정책. diseases 가 list 면 OR 매치.
     """
     tokens = _tokenize(query)
     scores = bm.bm25.get_scores(tokens)
@@ -269,10 +270,11 @@ def _sparse_search(
             elif source_type == "service" and not (dt == "OTHER" and bm.sources[i] in SERVICE_SOURCES):
                 scores[i] = mask_value
 
-    # disease 필터 (medical/all 케이스에만 — service 는 횡단)
-    if disease and source_type != "service":
+    # disease 필터 (medical/all 케이스에만 — service 는 횡단). list 면 OR 매치.
+    if diseases and source_type != "service":
+        disease_set = set(diseases)
         for i, d in enumerate(bm.diseases):
-            if d != disease:
+            if d not in disease_set:
                 scores[i] = mask_value
 
     # 마스크되지 않은 점수만 상위 top_k. BM25 음수 점수도 정상 결과로 인정 (corpus
@@ -322,7 +324,7 @@ class RetrievalDebug:
 
     query: str
     source_type: SourceType
-    disease: str | None = None
+    diseases: list[str] | None = None
     dense_hits: int = 0
     sparse_hits: int = 0
     merged_returned: int = 0
@@ -341,7 +343,7 @@ async def retrieve(
     top_k: int = DEFAULT_TOP_K,
     candidate_k: int = DEFAULT_CANDIDATE_K,
     source_type: SourceType = "all",
-    disease: str | None = None,
+    disease: str | list[str] | None = None,
 ) -> RetrievalResult:
     """하이브리드 검색.
 
@@ -351,16 +353,22 @@ async def retrieve(
         candidate_k: 각 채널(Dense/Sparse) 에서 가져올 후보 수. RRF 안정성을 위해
             보통 top_k 의 2배 이상.
         source_type: "medical" (의료 진료지침) / "service" (서비스 가이드) / "all"
-        disease: classify_intent 가 분류한 질환. "diabetes" / "hypertension" /
-            "dyslipidemia" / "general" / None. 지정 시 해당 질환의 청크만 검색.
-            None / "general" 은 필터 없음 (전체).
+        disease: classify_intent 가 분류한 질환. 단일 문자열 또는 list (multi-disease).
+            "diabetes" / "hypertension" / "dyslipidemia" / "general" / None / list.
+            None / "general" / 빈 리스트 는 필터 없음.
 
     Returns:
         RetrievalResult — chunks (rrf_score 내림차순) + debug 메트릭
     """
-    # "general" 은 사실상 필터 없음 (서비스 가이드만 general 인데 source_type 로 이미 분리됨)
-    effective_disease = disease if disease and disease != "general" else None
-    debug = RetrievalDebug(query=query, source_type=source_type, disease=effective_disease)
+    # 정규화: 단일 문자열은 list 로 wrap, "general" 은 필터 없음.
+    if disease is None:
+        diseases: list[str] | None = None
+    elif isinstance(disease, str):
+        diseases = None if disease == "general" else [disease]
+    else:
+        diseases = [d for d in disease if d and d != "general"] or None
+
+    debug = RetrievalDebug(query=query, source_type=source_type, diseases=diseases)
 
     if not query.strip():
         return RetrievalResult(chunks=[], debug=debug)
@@ -369,8 +377,8 @@ async def retrieve(
     query_emb = await _embed_query(query)
     bm = await _get_bm25_index()
 
-    dense = await _dense_search(query_emb, candidate_k, source_type, effective_disease)
-    sparse = _sparse_search(bm, query, candidate_k, source_type, effective_disease)
+    dense = await _dense_search(query_emb, candidate_k, source_type, diseases)
+    sparse = _sparse_search(bm, query, candidate_k, source_type, diseases)
 
     debug.dense_hits = len(dense)
     debug.sparse_hits = len(sparse)

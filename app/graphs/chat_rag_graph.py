@@ -77,6 +77,10 @@ SERVICE_DISCLAIMER = ""
 GENERAL_DISCLAIMER = MEDICAL_DISCLAIMER
 
 MISSING_INFO_MESSAGE = "개인화된 답변을 드리려면 건강 정보가 필요해요. 건강 정보 입력 페이지로 이동하시겠습니까?"
+# 인사 즉시 응답 — retrieve/generate/evaluate 전부 스킵하여 0.5초 이내 응답.
+GREETING_REPLY = (
+    "안녕하세요! 무엇을 도와드릴까요? 건강 관련 질문이나 챗봇·챌린지 사용법이 궁금하시면 편하게 말씀해 주세요."
+)
 # intent 별 fallback 메시지 — 서비스 가이드 답변에 의료 면책이 끼면 어색하므로 분기.
 FALLBACK_MEDICAL = (
     "현재 해당 질문에 대해 신뢰할 수 있는 답변을 생성하기 어려워요. "
@@ -137,14 +141,21 @@ _MEDICAL_TOPIC_KEYWORDS = (
 
 # classify_intent prefilter — 명백한 인사/단답에서 LLM 호출 생략용 보수적 패턴.
 # 매치 조건이 모두 만족할 때만 prefilter 적용 (의료/서비스 키워드 하나라도 있으면 LLM 으로 fallthrough).
+# `좋은\s*아침` 처럼 띄어쓰기 변형까지 커버. 어미 변형(`~이야`/`~이에요`/`~예요`)은
+# 뒤쪽 `[\s가-힣\w!?.,~]*` 가 흡수.
 _GREETING_PATTERN = re.compile(
-    r"^(안녕|안뇽|하이|hi|hello|반가|반갑|좋은(아침|오후|저녁|밤)|"
-    r"고마|감사|땡큐|thanks|thank|잘가|잘자|굿모닝|굿나잇)"
-    r"[\s가-힣\w!?.,]*[?.!]?$",
+    r"^(안녕|안뇽|하이|hi|hello|반가|반갑|"
+    r"좋은\s*(아침|오후|저녁|밤|하루)|"
+    r"잘\s*(지내|있|있어|있나|있었)|오랜만|처음\s*뵙|"
+    r"고마|감사|땡큐|thanks?|thank|"
+    r"잘가|잘자|굿\s*모닝|굿\s*나잇|굿\s*모닝|"
+    r"수고|수고하|좋은\s*하루)"
+    r"[\s가-힣\w!?.,~^]*[?.!~^]?$",
     re.IGNORECASE,
 )
 # prefilter 활성 글자 수 상한 — 길어지면 의도 모호해지므로 LLM 으로.
-_PREFILTER_MAX_LEN = 15
+# 30자: "좋은 아침이에요 오늘도 잘 부탁드려요" 정도까지 커버.
+_PREFILTER_MAX_LEN = 30
 
 IntentLiteral = Literal["medical_inquiry", "service_guide", "general"]
 EvalResultLiteral = Literal["pass", "generation_problem", "retrieval_problem"]
@@ -168,13 +179,21 @@ class ChatState(TypedDict, total=False):
 
     # classify_intent
     intent: IntentLiteral
-    disease: DiseaseLiteral | None  # retrieve.disease 필터로 전달
+    # diseases — multi-disease 라우팅 지원. 1개면 단일 질환, 2개면 OR 매치.
+    # 예: "당뇨병 환자의 이상지질혈증" → ["diabetes", "dyslipidemia"]
+    diseases: list[str]
     needs_health_data: bool
+    needs_challenge_catalog: bool  # 챌린지 카탈로그를 함께 검색 (medical+service 혼합)
     missing_fields: list[str]
     action_hint: str | None
+    is_greeting: bool  # prefilter hit 신호 — retrieve/generate 모두 스킵하고 final_greeting 으로
 
     # fetch_health_data
     health_data: dict[str, Any] | None
+    # needs_health_data 와 별개: 사용자가 DB 에 의미 있는 건강 데이터를 갖고 있는지.
+    # 분기 매트릭스: needs=true & has=false → MISSING_INFO, needs=true & has=true → 개인화,
+    # needs=false → 일반 RAG (has 무관).
+    has_health_data: bool
 
     # retrieve
     retrieval_query: str
@@ -207,6 +226,7 @@ class ChatRAGResult:
     sources: list[RetrievedChunk] = field(default_factory=list)
     intent: IntentLiteral = "general"
     needs_health_data: bool = False
+    has_health_data: bool = False  # 사용자가 DB 에 의미 있는 건강 데이터를 갖고 있는지
     missing_fields: list[str] = field(default_factory=list)
     action_hint: str | None = None
     is_fallback: bool = False
@@ -272,8 +292,9 @@ _CLASSIFY_PROMPT = """당신은 만성질환(고혈압·당뇨·이상지질혈�
 
 {{
   "intent": "medical_inquiry" | "service_guide" | "general",
-  "disease": "diabetes" | "hypertension" | "dyslipidemia" | "general" | null,
+  "diseases": ["diabetes" | "hypertension" | "dyslipidemia"],
   "needs_health_data": true | false,
+  "needs_challenge_catalog": true | false,
   "missing_fields": [],
   "rationale": "한 줄 설명"
 }}
@@ -284,13 +305,22 @@ _CLASSIFY_PROMPT = """당신은 만성질환(고혈압·당뇨·이상지질혈�
 - "general": 위 둘에 명확히 안 맞거나 인사·잡담
 - 둘 다 관련된 혼합형(예: "내 상태에 맞는 식단·챌린지")은 medical_inquiry 우선.
 
-== disease ==
-질문이 특정 질환에 한정될 때만 그 질환을 지정. 여러 질환·일반 의료·서비스 가이드는 null 또는 "general".
+== needs_challenge_catalog ==
+질문이 **챌린지/운동 프로그램/생활습관 챌린지 추천**을 요구하는지.
+- true: "어떤 챌린지", "챌린지 추천", "운동 프로그램 추천", "식단·챌린지", "생활습관 챌린지" 등
+- false: 챌린지와 무관한 일반 의학 질문 / 서비스 사용법 질문
+true 면 retrieve 가 의료 진료지침과 함께 CHALLENGE_CATALOG 도 함께 검색해 답변 근거로 사용.
+
+== diseases (list) ==
+질문이 관련된 질환들을 list 로 (1개 또는 여러 개). 빈 list 면 질환 비특화 / 서비스 질문.
 - "diabetes": 당뇨·혈당·HbA1c·당화혈색소·인슐린·당뇨병 합병증
 - "hypertension": 고혈압·혈압 (수축기/이완기)·DASH 식단
 - "dyslipidemia": 이상지질혈증·콜레스테롤·LDL·HDL·중성지방·스타틴·동맥경화
-- "general": 만성질환 일반·생활습관·체중·운동 등 질환 비특화
-- null: 서비스 가이드 질문, 또는 여러 질환을 동시에 다루는 질문
+예시:
+- "당뇨병 진단 기준" → ["diabetes"]
+- "당뇨병 환자의 이상지질혈증 관리" → ["diabetes", "dyslipidemia"] (multi-disease 라우팅)
+- "운동 권고" → [] (질환 비특화)
+- "챌린지 인증 방법" → [] (서비스 질문)
 
 == needs_health_data ==
 다음 조건 중 하나라도 해당하면 **true**:
@@ -361,10 +391,11 @@ def _heuristic_prefilter(question: str) -> dict[str, Any] | None:
 
 async def classify_intent(state: ChatState) -> dict[str, Any]:
     # 보수적 휴리스틱으로 명백한 인사·단답은 LLM 호출 없이 즉시 결정.
+    # is_greeting=True 면 decide_after_classify 가 final_greeting 로 곧장 분기해 retrieve/generate 모두 스킵.
     prefilter = _heuristic_prefilter(state["original_question"])
     if prefilter is not None:
-        _logger.info("classify_intent prefilter hit (skip LLM)")
-        return prefilter
+        _logger.info("classify_intent prefilter hit (skip LLM, skip retrieve/generate)")
+        return {**prefilter, "is_greeting": True}
 
     try:
         client = _get_client()
@@ -392,11 +423,18 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:
     if intent not in ("medical_inquiry", "service_guide", "general"):
         intent = "general"
 
-    disease = data.get("disease")
-    if disease not in ("diabetes", "hypertension", "dyslipidemia", "general"):
-        disease = None
+    # diseases — list 로 수신. 단일 문자열로 들어오는 백워드 케이스도 흡수.
+    raw_diseases = data.get("diseases")
+    if raw_diseases is None:
+        # 옛 single-field 케이스 대비
+        legacy_disease = data.get("disease")
+        raw_diseases = [legacy_disease] if legacy_disease else []
+    if not isinstance(raw_diseases, list):
+        raw_diseases = [raw_diseases]
+    diseases = [str(d) for d in raw_diseases if d in ("diabetes", "hypertension", "dyslipidemia")][:3]
 
     needs = bool(data.get("needs_health_data", False))
+    needs_challenge = bool(data.get("needs_challenge_catalog", False))
     missing = data.get("missing_fields") or []
     if not isinstance(missing, list):
         missing = []
@@ -404,15 +442,34 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:
 
     return {
         "intent": intent,
-        "disease": disease,
+        "diseases": diseases,
         "needs_health_data": needs,
+        "needs_challenge_catalog": needs_challenge,
         "missing_fields": missing if needs else [],
         "action_hint": "navigate_to_health_info" if needs else None,
     }
 
 
-def decide_after_classify(state: ChatState) -> Literal["fetch_health_data", "retrieve"]:
+def decide_after_classify(state: ChatState) -> Literal["final_greeting", "fetch_health_data", "retrieve"]:
+    if state.get("is_greeting"):
+        return "final_greeting"
     return "fetch_health_data" if state.get("needs_health_data") else "retrieve"
+
+
+async def final_greeting(state: ChatState) -> dict[str, Any]:
+    """인사/단답 즉시 응답 노드 — retrieve/generate/evaluate 전부 스킵.
+
+    classify_intent prefilter hit 케이스에서만 진입한다. LLM 호출 0회 + DB 조회 0회 →
+    응답 시간 < 0.5초.
+    """
+    return {
+        "final_answer": GREETING_REPLY,
+        "sources": [],
+        "is_fallback": False,
+        "disclaimer": "",  # 인사 답변엔 의료 면책 불필요
+        "confidence": 1.0,
+        "model_version": "chatragraph-v1",
+    }
 
 
 # ─────────────────────────────────────────────
@@ -491,32 +548,37 @@ async def _fetch_user_health_snapshot(user_id: Any) -> dict[str, Any] | None:
 
 
 async def fetch_health_data(state: ChatState) -> dict[str, Any]:
+    """사용자 건강 정보 조회 — has_health_data 플래그를 채워 분기 매트릭스의 한 축을 결정.
+
+    needs_health_data(질문이 요구하는지) 는 classify 결과 그대로 보존.
+    프론트는 (needs && !has) 일 때만 CTA 를 표시하면 된다.
+    missing_fields/action_hint 는 데이터 부재 시에만 활성 (개인화 답변엔 비움).
+    """
     user_id = state.get("user_id")
     if not user_id:
-        # 라우터의 인증 의존성에서 이미 차단되지만, 방어적으로 미입력 처리.
-        return {"health_data": None}
+        return {"health_data": None, "has_health_data": False}
     try:
         snapshot = await _fetch_user_health_snapshot(user_id)
     except Exception as e:  # noqa: BLE001
         _logger.warning("fetch_health_data 실패, 미입력으로 처리: %s", _safe_err_repr(e))
-        return {"health_data": None, "error": _safe_err_repr(e)}
+        return {"health_data": None, "has_health_data": False, "error": _safe_err_repr(e)}
 
     if snapshot is not None:
-        # 데이터를 찾아 개인화 답변이 가능하므로 분류 단계의 "미입력" 신호는 리셋.
-        # API 계약 (RAG/LangGraph_API계약_chat_v1.md): needs_health_data=true 는
-        # **데이터 부재로 개인화 불가** 상태를 의미. 데이터가 있으면 false 로 돌려놔야
-        # 프론트가 CTA 를 표시하지 않는다.
+        # 데이터 보유 → 개인화 답변 경로. needs_health_data 는 분류 결과 그대로 유지.
+        # missing_fields/action_hint 는 비움 (CTA 표시 안 함).
         return {
             "health_data": snapshot,
-            "needs_health_data": False,
+            "has_health_data": True,
             "missing_fields": [],
             "action_hint": None,
         }
-    return {"health_data": None}
+    # 데이터 부재 — needs_health_data 와 결합되면 final_missing_info 로.
+    return {"health_data": None, "has_health_data": False}
 
 
 def decide_after_fetch_health(state: ChatState) -> Literal["retrieve", "final_missing_info"]:
-    return "retrieve" if state.get("health_data") else "final_missing_info"
+    # has_health_data 가 명시적 플래그 — health_data dict 존재 여부와 동치이나 의미를 명확히 함.
+    return "retrieve" if state.get("has_health_data") else "final_missing_info"
 
 
 async def final_missing_info(state: ChatState) -> dict[str, Any]:
@@ -544,10 +606,22 @@ def _intent_to_source_type(intent: IntentLiteral) -> SourceType:
 async def retrieve_node(state: ChatState) -> dict[str, Any]:
     intent: IntentLiteral = state.get("intent", "general")  # type: ignore[assignment]
     source_type = _intent_to_source_type(intent)
-    disease = state.get("disease")
+    diseases = list(state.get("diseases") or [])  # multi-disease 라우팅
     query = state.get("retrieval_query") or state["original_question"]
+    needs_challenge = bool(state.get("needs_challenge_catalog"))
+
+    # medical 인데 챌린지 추천이 필요하면 source_type=all 로 확장해 진료지침 + CHALLENGE_CATALOG
+    # 둘 다 검색. 단일 source 만 잡혀 우리 서비스에 없는 챌린지를 LLM 이 생성하는 할루시 방지.
+    if source_type == "medical" and needs_challenge:
+        source_type = "all"
+
     try:
-        result = await retrieve(query=query, top_k=RETRIEVE_TOP_K, source_type=source_type, disease=disease)
+        result = await retrieve(
+            query=query,
+            top_k=RETRIEVE_TOP_K,
+            source_type=source_type,
+            disease=diseases if diseases else None,
+        )
     except Exception as e:  # noqa: BLE001
         _logger.warning("retrieve 실패, 빈 결과로 진행: %s", _safe_err_repr(e))
         return {"retrieved_docs": [], "retrieval_query": query, "error": _safe_err_repr(e)}
@@ -562,13 +636,19 @@ _MEDICAL_SYSTEM = """당신은 만성질환(고혈압·당뇨·이상지질혈�
 
 규칙:
 1. 제공된 컨텍스트(진료지침)에 근거해서만 답하고, 컨텍스트에 없는 사실은 추측하지 마세요.
-2. [사용자 건강 정보] 블록이 제공되면 진료지침 기준과 비교한 **일반적인 경향**만 설명하세요.
+2. [사용자 건강 정보] 블록이 제공되면 **반드시** 그 데이터를 답변 본문에 명시적으로 인용하고
+   진료지침과 비교한 **일반적인 경향**을 설명하세요.
+   - 예: "사용자의 최근 혈압 130/85 mmHg 는 진료지침 정상 범위(120/80 미만)를 다소 벗어나는 경향입니다."
+   - "[사용자 건강 정보]" 블록의 수치를 그대로 답변에 인용해야 합니다 (모호한 일반론 금지).
    - 절대 단정적 진단/위험 등급 부여 금지 ("당신은 당뇨입니다", "정상입니다", "위험합니다" 같은 표현 금지).
    - "정상 범위", "권고 범위 안/밖" 표현은 사용 가능. "정상이다 / 비정상이다" 단정은 금지.
    - 약물 복용 결정·용량·특정 약 직접 권고 절대 금지.
    - 답변 끝에 반드시 "정확한 평가와 처방은 담당 의사 또는 약사와 상담하세요" 권고 포함.
-3. 답변은 명확하고 간결하게. 불릿/문단 구성으로 읽기 좋게.
-4. 출처는 본문에 넣지 말고, 사용자에겐 사실만 전달."""
+3. [사용자 건강 정보] 블록이 **없으면** 일반 의학 정보로만 답하고, 본인 데이터에 대한 가정·추측 금지.
+4. 답변은 명확하고 간결하게. 불릿/문단 구성으로 읽기 좋게.
+5. [챌린지 카탈로그] 자료가 제공된 경우 그 안에 정의된 챌린지(걷기/러닝/식단/물 마시기 등) 만
+   추천해야 합니다. 카탈로그에 없는 챌린지(예: 임의 "30일 챌린지") 절대 생성 금지.
+6. 출처는 본문에 넣지 말고, 사용자에겐 사실만 전달."""
 
 _SERVICE_SYSTEM = """당신은 만성질환 생활습관 관리 서비스의 사용 안내 챗봇입니다.
 
@@ -763,6 +843,16 @@ def _rule_evaluate(state: ChatState) -> tuple[EvalResultLiteral, str]:
         return (
             "generation_problem",
             "[Rule R4] 의료 답변에 '의사/전문의/전문가/상담/병원' 권고 누락. 답변 끝에 의사 상담 권고 추가하여 재작성.",
+        )
+
+    # R5: 사용자 건강 데이터가 제공됐는데 답변이 수치를 전혀 인용하지 않으면 일반론으로
+    # 전락한 것으로 간주 (검수 P7 — "나에게 맞는" 질문에 사용자 데이터 인용 누락 방지).
+    # 숫자 1개라도 답변에 등장하면 통과. 너무 엄격하지 않게 보수적 기준.
+    if state.get("has_health_data") and not re.search(r"\d", draft):
+        return (
+            "generation_problem",
+            "[Rule R5] 사용자 건강 데이터([사용자 건강 정보])가 제공됐는데 답변에 수치 인용이 없음. "
+            "사용자 BMI/혈압/혈당 등 실제 값을 본문에 명시적으로 인용하여 재작성.",
         )
 
     return ("pass", "")
@@ -1006,6 +1096,7 @@ def _build_graph() -> Any:
     g: StateGraph[ChatState] = StateGraph(ChatState)
     # 각 노드를 _timed_node 로 감싸 노드 소요 시간을 INFO 로그로 가시화 (디버깅·튜닝용).
     g.add_node("classify_intent", _timed_node(classify_intent))
+    g.add_node("final_greeting", _timed_node(final_greeting))
     g.add_node("fetch_health_data", _timed_node(fetch_health_data))
     g.add_node("final_missing_info", _timed_node(final_missing_info))
     g.add_node("retrieve", _timed_node(retrieve_node))
@@ -1019,8 +1110,13 @@ def _build_graph() -> Any:
     g.add_conditional_edges(
         "classify_intent",
         decide_after_classify,
-        {"fetch_health_data": "fetch_health_data", "retrieve": "retrieve"},
+        {
+            "final_greeting": "final_greeting",
+            "fetch_health_data": "fetch_health_data",
+            "retrieve": "retrieve",
+        },
     )
+    g.add_edge("final_greeting", END)
     g.add_conditional_edges(
         "fetch_health_data",
         decide_after_fetch_health,
@@ -1097,6 +1193,7 @@ async def run_chat_rag(
         sources=final_state.get("sources", []),
         intent=intent,
         needs_health_data=bool(final_state.get("needs_health_data", False)),
+        has_health_data=bool(final_state.get("has_health_data", False)),
         missing_fields=list(final_state.get("missing_fields", [])),
         action_hint=final_state.get("action_hint"),
         is_fallback=bool(final_state.get("is_fallback", False)),

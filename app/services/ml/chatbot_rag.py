@@ -58,7 +58,8 @@ class RAGAnswer:
 
     # ── 신규 필드 (ChatRAGGraph 결과 표현) ────────────
     intent: str | None = None
-    needs_health_data: bool = False
+    needs_health_data: bool = False  # 질문이 본인 건강 데이터를 요구하는지 (classify 결과)
+    has_health_data: bool = False  # 사용자가 DB 에 의미 있는 데이터를 갖고 있는지 (fetch 결과)
     missing_fields: list[str] = field(default_factory=list)
     action_hint: str | None = None
     eval_revision_count: int | None = None
@@ -94,6 +95,7 @@ def _result_to_answer(r: ChatRAGResult) -> RAGAnswer:
         fallback=r.is_fallback,
         intent=r.intent,
         needs_health_data=r.needs_health_data,
+        has_health_data=r.has_health_data,
         missing_fields=list(r.missing_fields),
         action_hint=r.action_hint,
         eval_revision_count=r.eval_revision_count,

@@ -127,10 +127,11 @@ class ChatbotConversationService:
             "sources": bot_message.sources,
             "confidence": bot_message.confidence,
             "model_version": bot_message.model_version,
-            # 신규 7필드 — extra_data 가 없으면(faq 모드 등) 기본값으로 채워져 역호환성 유지
+            # 신규 필드 — extra_data 가 없으면(faq 모드 등) 기본값으로 채워져 역호환성 유지
             "disclaimer": extra.get("disclaimer", "본 답변은 의학적 진단을 대체하지 않습니다."),
             "intent": extra.get("intent"),
             "needs_health_data": bool(extra.get("needs_health_data", False)),
+            "has_health_data": bool(extra.get("has_health_data", False)),
             "missing_fields": list(extra.get("missing_fields") or []),
             "action_hint": extra.get("action_hint"),
             "is_fallback": bool(extra.get("is_fallback", False)),
@@ -197,6 +198,7 @@ class ChatbotConversationService:
         extra_data = {
             "intent": rag_result.intent,
             "needs_health_data": rag_result.needs_health_data,
+            "has_health_data": rag_result.has_health_data,
             "missing_fields": list(rag_result.missing_fields),
             "action_hint": rag_result.action_hint,
             "is_fallback": rag_result.fallback,
