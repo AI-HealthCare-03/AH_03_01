@@ -69,7 +69,10 @@ _logger = logging.getLogger(__name__)
 # 상수 / 정책
 # ─────────────────────────────────────────────
 MAX_REVISIONS = 2  # 재검색·재생성 합산 상한 (API 계약 eval_revision_count 0~2)
-RETRIEVE_TOP_K = 5
+RETRIEVE_TOP_K = 5  # 일반/서비스 기본
+# medical_inquiry 는 생활요법·약물·추적·위험도 4측면이 한 번에 잡혀야 답변 완전성↑.
+# top_k 를 5→8 로 확장 (broader context). RRF 후보 풀도 자동으로 늘어남.
+RETRIEVE_TOP_K_MEDICAL = 8
 MIN_ANSWER_LEN = 30  # 1차 Rule R2: 답변 최소 글자 수
 
 MEDICAL_DISCLAIMER = "본 답변은 의학적 진단을 대체하지 않습니다."
@@ -148,7 +151,7 @@ _GREETING_PATTERN = re.compile(
     r"좋은\s*(아침|오후|저녁|밤|하루)|"
     r"잘\s*(지내|있|있어|있나|있었)|오랜만|처음\s*뵙|"
     r"고마|감사|땡큐|thanks?|thank|"
-    r"잘가|잘자|굿\s*모닝|굿\s*나잇|굿\s*모닝|"
+    r"잘가|잘자|굿\s*모닝|굿\s*나잇|"
     r"수고|수고하|좋은\s*하루)"
     r"[\s가-힣\w!?.,~^]*[?.!~^]?$",
     re.IGNORECASE,
@@ -156,6 +159,42 @@ _GREETING_PATTERN = re.compile(
 # prefilter 활성 글자 수 상한 — 길어지면 의도 모호해지므로 LLM 으로.
 # 30자: "좋은 아침이에요 오늘도 잘 부탁드려요" 정도까지 커버.
 _PREFILTER_MAX_LEN = 30
+
+# 본인 상태 평가 요청 강제 가드 — classify LLM 이 needs_health_data=False 로 잘못
+# 분류해도 명백한 1인칭 상태 질문이면 강제로 true 로 끌어올림 (2차 검수 N1 보호 가드).
+# 예: "나 어때?", "내 상태 어때?", "나는?", "나 괜찮아?", "저는 어때요" — 정규식 매치 시 true.
+#
+# false positive 방지 (보안 리뷰 H-1):
+#   - 단독 명사("건강"/"상태"/"컨디션")는 일반 의료 질문과 구분 안 돼 매치하지 않음.
+#     ("내 건강식단" / "나 건강검진" / "저 건강관리법" 등 일반 질문 false positive 차단)
+#   - 평가 동사/형용사(어때/괜찮/평가/봐줘) 결합 케이스만 본인 상태 평가로 인정.
+_PERSONAL_STATUS_PATTERN = re.compile(
+    r"^(나|저|내|제)\s*(는|도|만)?\s*"
+    # 평가 동사·형용사만 허용 — 단독 "건강/상태/컨디션" 명사는 제거
+    r"(어때|어떤가|어떻|괜찮|괜찮은가)"
+    r"[\s가-힣\w!?.,~]*[?.!~]?$"
+)
+# "내/제/나의/저의 + 상태/건강/컨디션 + 평가 동사" — 동사 결합 필수.
+_PERSONAL_STATUS_NOUN_PATTERN = re.compile(
+    r"^(내|제|나의|저의)\s*(상태|건강|건강\s*상태|컨디션)\s+"
+    r"(어때|어떤가|어떻|괜찮|평가|봐줘|봐주세요)"
+    r"[\s가-힣\w!?.,~]*[?.!~]?$"
+)
+# 단독 1인칭 의문문 — "나는?", "저는?", "내가?" (2글자 이상 1인칭만, M-2: "나?"/"저?" 1글자는 제외).
+_PERSONAL_BARE_PATTERN = re.compile(r"^(나는|저는|내가|제가)\s*\?\s*$")
+
+
+def _looks_like_personal_status_question(text: str) -> bool:
+    """LLM 분류 보강 — 명백한 본인 상태 평가 요청 여부 (휴리스틱)."""
+    stripped = text.strip()
+    if len(stripped) > 20:  # 너무 길면 의도 다른 키워드 섞일 가능성 → LLM 신뢰
+        return False
+    return bool(
+        _PERSONAL_STATUS_PATTERN.match(stripped)
+        or _PERSONAL_STATUS_NOUN_PATTERN.match(stripped)
+        or _PERSONAL_BARE_PATTERN.match(stripped)
+    )
+
 
 IntentLiteral = Literal["medical_inquiry", "service_guide", "general"]
 EvalResultLiteral = Literal["pass", "generation_problem", "retrieval_problem"]
@@ -181,7 +220,7 @@ class ChatState(TypedDict, total=False):
     intent: IntentLiteral
     # diseases — multi-disease 라우팅 지원. 1개면 단일 질환, 2개면 OR 매치.
     # 예: "당뇨병 환자의 이상지질혈증" → ["diabetes", "dyslipidemia"]
-    diseases: list[str]
+    diseases: list[DiseaseLiteral]
     needs_health_data: bool
     needs_challenge_catalog: bool  # 챌린지 카탈로그를 함께 검색 (medical+service 혼합)
     missing_fields: list[str]
@@ -323,18 +362,24 @@ true 면 retrieve 가 의료 진료지침과 함께 CHALLENGE_CATALOG 도 함께
 - "챌린지 인증 방법" → [] (서비스 질문)
 
 == needs_health_data ==
-다음 조건 중 하나라도 해당하면 **true**:
-- (a) 1인칭 표현 + 본인 상태/수치 평가: "내", "제", "나는", "나에게", "본인", "나의", "내가" 등이 본인의 건강 상태/측정값/위험도/추천에 결부됨
+다음 조건 중 하나라도 해당하면 **true** (보수적으로 풀게 분류 — 본인 상태 의심되면 true):
+- (a) 1인칭 표현 + 본인 상태/수치 평가: "내", "제", "나는", "나에게", "본인", "나의", "내가"
+  등이 본인의 건강 상태/측정값/위험도/추천에 결부됨
 - (b) 본인 데이터 해석/판단 요청: "내가 위험한지", "나에게 맞는 ~", "내 수치 어때"
 - (c) 본인 측정값을 보고 답해야 하는 질문: "내 혈압이 정상?", "내 BMI 어때?"
+- (d) **짧고 모호한 1인칭 상태 질문도 true** — "나 어때?", "내 상태?", "나는?",
+  "나 괜찮아?", "어떤가요 저는?", "지금 저 어때?" 같이 본인 데이터를 전제로 한
+  포괄적 평가 요청. 의도가 모호해도 **본인 평가/추천을 묻는 뉘앙스면 true**.
 
 다음은 **false**:
 - 일반 의학 정보 질문 ("DASH 식단이란?", "당뇨병 진단 기준은?", "고혈압 약 부작용은?")
-- 일반 권고 질문 ("고혈압 환자는 어떤 운동?")  — 본인이 명시되지 않음
+- 일반 권고 질문 ("고혈압 환자는 어떤 운동?") — 본인이 명시되지 않음
+- 인사/잡담 ("안녕", "고마워")
 
 같은 주제도 1인칭이 붙으면 true 로 전환:
 - "고혈압 식단" → false / "내 고혈압 식단" → true
 - "당뇨 위험" → false / "내가 당뇨 위험군인지" → true
+- "건강 상태 평가법" → false / "나 어때" → **true** (본인 평가 요청)
 
 == missing_fields ==
 needs_health_data=true 일 때 필요한 데이터 필드명을 한국어 키워드 또는 표준 영문 키 중 알아보기 쉬운 쪽으로:
@@ -439,6 +484,15 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:
     if not isinstance(missing, list):
         missing = []
     missing = [str(x) for x in missing][:8]
+
+    # N1 가드: 명백한 본인 상태 평가 요청("나 어때?", "내 상태")은 LLM 결과가 false 여도
+    # 강제 true 로 끌어올려 fetch_health_data 경로로. intent 도 medical_inquiry 로 정규화.
+    if not needs and _looks_like_personal_status_question(state["original_question"]):
+        _logger.info("classify_intent N1 guard hit — 본인 상태 질문 강제 분류")
+        needs = True
+        intent = "medical_inquiry"
+        if not missing:
+            missing = ["profile"]
 
     return {
         "intent": intent,
@@ -606,7 +660,9 @@ def _intent_to_source_type(intent: IntentLiteral) -> SourceType:
 async def retrieve_node(state: ChatState) -> dict[str, Any]:
     intent: IntentLiteral = state.get("intent", "general")  # type: ignore[assignment]
     source_type = _intent_to_source_type(intent)
-    diseases = list(state.get("diseases") or [])  # multi-disease 라우팅
+    # multi-disease 라우팅. ChatState 의 diseases: list[DiseaseLiteral] 을 retrieve 의
+    # `disease: str | list[str] | None` 시그니처와 맞추기 위해 list[str] 로 좁힘.
+    diseases: list[str] = [str(d) for d in (state.get("diseases") or [])]
     query = state.get("retrieval_query") or state["original_question"]
     needs_challenge = bool(state.get("needs_challenge_catalog"))
 
@@ -615,10 +671,13 @@ async def retrieve_node(state: ChatState) -> dict[str, Any]:
     if source_type == "medical" and needs_challenge:
         source_type = "all"
 
+    # medical 영역은 4측면(목표·생활요법·약물·추적) 동시 커버를 위해 broader top_k.
+    top_k = RETRIEVE_TOP_K_MEDICAL if intent == "medical_inquiry" else RETRIEVE_TOP_K
+
     try:
         result = await retrieve(
             query=query,
-            top_k=RETRIEVE_TOP_K,
+            top_k=top_k,
             source_type=source_type,
             disease=diseases if diseases else None,
         )
@@ -636,19 +695,30 @@ _MEDICAL_SYSTEM = """당신은 만성질환(고혈압·당뇨·이상지질혈�
 
 규칙:
 1. 제공된 컨텍스트(진료지침)에 근거해서만 답하고, 컨텍스트에 없는 사실은 추측하지 마세요.
-2. [사용자 건강 정보] 블록이 제공되면 **반드시** 그 데이터를 답변 본문에 명시적으로 인용하고
+2. **수치·정량 정보는 반드시 본문에 인용하세요** (의료 답변의 완전성 핵심):
+   - 진단·관리 목표: 구체 수치 (예: "LDL-C 100 mg/dL 미만, 위험인자 동반 시 70 mg/dL 미만",
+     "가정혈압 135/85 mmHg 미만").
+   - 생활요법: 정량 권고 (예: "나트륨 하루 2,400 mg 미만 / 소금 6 g 미만", "유산소 운동 주 5~7회,
+     하루 30분 이상 중강도", "절주 — 남성 2잔/일, 여성 1잔/일 이하").
+   - 추적 검사 주기 (예: "당뇨 환자 지질 검사 진단 시 + 매년 1회 이상").
+   - "관리가 중요합니다" 같은 모호한 일반론 금지. 컨텍스트에 수치가 있으면 그 수치를 인용.
+3. **의료 질문의 4가지 측면을 모두 다루세요** (해당 컨텍스트 있으면):
+   - (a) 관리 목표 (target — 수치·범위)
+   - (b) 생활요법 (식사·운동·체중·금연·절주 — 정량 권고)
+   - (c) 약물치료 (필요 시점·일반 원칙. 특정 약 직접 권고는 금지)
+   - (d) 추적 관리 (검사 주기·재평가 시점)
+4. [사용자 건강 정보] 블록이 제공되면 **반드시** 그 데이터의 수치를 답변 본문에 명시 인용하고
    진료지침과 비교한 **일반적인 경향**을 설명하세요.
    - 예: "사용자의 최근 혈압 130/85 mmHg 는 진료지침 정상 범위(120/80 미만)를 다소 벗어나는 경향입니다."
-   - "[사용자 건강 정보]" 블록의 수치를 그대로 답변에 인용해야 합니다 (모호한 일반론 금지).
    - 절대 단정적 진단/위험 등급 부여 금지 ("당신은 당뇨입니다", "정상입니다", "위험합니다" 같은 표현 금지).
    - "정상 범위", "권고 범위 안/밖" 표현은 사용 가능. "정상이다 / 비정상이다" 단정은 금지.
    - 약물 복용 결정·용량·특정 약 직접 권고 절대 금지.
-   - 답변 끝에 반드시 "정확한 평가와 처방은 담당 의사 또는 약사와 상담하세요" 권고 포함.
-3. [사용자 건강 정보] 블록이 **없으면** 일반 의학 정보로만 답하고, 본인 데이터에 대한 가정·추측 금지.
-4. 답변은 명확하고 간결하게. 불릿/문단 구성으로 읽기 좋게.
-5. [챌린지 카탈로그] 자료가 제공된 경우 그 안에 정의된 챌린지(걷기/러닝/식단/물 마시기 등) 만
-   추천해야 합니다. 카탈로그에 없는 챌린지(예: 임의 "30일 챌린지") 절대 생성 금지.
-6. 출처는 본문에 넣지 말고, 사용자에겐 사실만 전달."""
+5. 답변 끝에 반드시 "정확한 평가와 처방은 담당 의사 또는 약사와 상담하세요" 권고 포함.
+6. [사용자 건강 정보] 블록이 **없으면** 일반 의학 정보로만 답하고, 본인 데이터에 대한 가정·추측 금지.
+7. [챌린지 카탈로그] 자료가 제공된 경우 그 안에 정의된 챌린지(걷기/러닝/식단/물 마시기 등) 만
+   추천하고, 사용자 상태(가족력·위험도·측정값) 와 매핑된 **구체 목표 예시**(예: "주 5일, 하루 30분 걷기")
+   를 포함하세요. 카탈로그에 없는 챌린지(예: 임의 "30일 챌린지") 절대 생성 금지.
+8. 답변은 명확하고 간결하게. 불릿/문단 구성으로 읽기 좋게. 출처는 본문에 넣지 말고 사실만 전달."""
 
 _SERVICE_SYSTEM = """당신은 만성질환 생활습관 관리 서비스의 사용 안내 챗봇입니다.
 
@@ -845,17 +915,41 @@ def _rule_evaluate(state: ChatState) -> tuple[EvalResultLiteral, str]:
             "[Rule R4] 의료 답변에 '의사/전문의/전문가/상담/병원' 권고 누락. 답변 끝에 의사 상담 권고 추가하여 재작성.",
         )
 
-    # R5: 사용자 건강 데이터가 제공됐는데 답변이 수치를 전혀 인용하지 않으면 일반론으로
-    # 전락한 것으로 간주 (검수 P7 — "나에게 맞는" 질문에 사용자 데이터 인용 누락 방지).
-    # 숫자 1개라도 답변에 등장하면 통과. 너무 엄격하지 않게 보수적 기준.
-    if state.get("has_health_data") and not re.search(r"\d", draft):
-        return (
-            "generation_problem",
-            "[Rule R5] 사용자 건강 데이터([사용자 건강 정보])가 제공됐는데 답변에 수치 인용이 없음. "
-            "사용자 BMI/혈압/혈당 등 실제 값을 본문에 명시적으로 인용하여 재작성.",
-        )
+    # R5: 사용자 건강 데이터가 제공됐는데 답변이 본인 실제 수치를 인용하지 않으면 일반론
+    # 으로 전락한 것으로 간주 (검수 P7 + 보안 리뷰 M-1).
+    # 단순 "숫자 1개라도 있으면 OK" 는 챕터 번호/일반 임계값(120/80)이 우연히 들어와도
+    # 통과시켜 약함 → 사용자 스냅샷의 실제 측정값 중 하나라도 답변에 인용됐는지 검사.
+    if state.get("has_health_data"):
+        snap = state.get("health_data") or {}
+        user_numbers = _extract_user_numbers(snap)
+        if user_numbers and not any(n in draft for n in user_numbers):
+            return (
+                "generation_problem",
+                "[Rule R5] 사용자 본인 데이터의 실제 수치(예: 혈압 130/85, 체중 70 kg, "
+                "BMI 22.5) 가 답변에 인용되지 않음. 사용자 데이터를 본문에 그대로 인용하여 재작성.",
+            )
 
     return ("pass", "")
+
+
+def _extract_user_numbers(snap: dict[str, Any]) -> set[str]:
+    """사용자 health snapshot 에서 실제 수치 토큰을 추출 (답변 인용 여부 검사용).
+
+    프로필 키(height_cm/weight_kg/waist_cm) + 측정값(primary_value/secondary_value).
+    숫자는 `f"{v:g}"` 로 정수·소수 둘 다 자연스러운 표기로.
+    """
+    numbers: set[str] = set()
+    profile = snap.get("profile") or {}
+    for key in ("height_cm", "weight_kg", "waist_cm"):
+        v = profile.get(key)
+        if v is not None:
+            numbers.add(f"{float(v):g}")
+    for rec in (snap.get("recent_records") or {}).values():
+        for key in ("primary_value", "secondary_value"):
+            v = rec.get(key)
+            if v is not None:
+                numbers.add(f"{float(v):g}")
+    return numbers
 
 
 _LLM_EVAL_PROMPT = """당신은 의료/서비스 RAG 답변 품질 평가자입니다. 질문·컨텍스트·답변(필요 시 사용자 건강 정보 포함)을 검토하고 6가지 기준으로 진단하세요.
@@ -880,17 +974,24 @@ JSON 만 응답하세요:
 2. grounded_in_context: 컨텍스트 근거 안에서 답했는가? (환각·근거 외 사실 인용 없음)
 3. numeric_interpretation_correct: 사용자 건강 수치가 제공된 경우 정확히 해석했는가? 건강정보 미제공이면 null.
 4. no_risk_exaggeration: 위험도/심각도를 과장하지 않았는가? (불필요한 공포 조장 없음)
-5. recommendations_specific: 권고사항이 너무 일반적이지 않은가? (질문 맥락에 맞는 구체적 권고인가)
+5. recommendations_specific (의료 답변 핵심 — 엄격하게 판단):
+   - **컨텍스트에 수치·임계값·정량 권고가 있는데 답변이 모호한 일반론만 담고 있으면 false.**
+   - 예시: 컨텍스트에 "LDL-C 100 mg/dL 미만" 또는 "유산소 운동 주 5~7회 30분 이상" 같은 정량
+     정보가 있는데 답변엔 "콜레스테롤 관리가 중요" / "운동을 늘리세요" 정도만 있으면 false.
+   - 의료 답변의 4측면(관리 목표·생활요법·약물·추적 관리) 중 컨텍스트에 있는데 누락된 측면이
+     있으면 false (특히 "관리 목표 수치" 누락은 의료 도메인에서 치명적).
+   - 컨텍스트 자체가 수치를 안 가지면 true (답변이 일반론이어도 retrieval_problem).
 6. warnings_appropriate: 금기/주의 문구가 필요한 상황(약물·임신·증상 등)에서 포함됐는가? 불필요하면 true 처리.
 
 분류 매핑:
-- 1·5번이 false → generation_problem (재생성으로 보강)
+- 1·5번이 false → generation_problem (재생성으로 보강 — 5번이면 feedback 에 누락된 수치/측면을 명시)
 - 2번이 false 이고 답변이 컨텍스트와 완전히 동떨어졌으면 → retrieval_problem (재검색 필요)
 - 2번이 false 이지만 환각만 있고 컨텍스트는 관련 있음 → generation_problem
 - 3·4·6번이 false → generation_problem
 - 전부 true (또는 3번 null) → pass
 
-feedback 은 한국어로 명확히 어떤 항목이 어떻게 보강돼야 하는지 적으세요.
+feedback 은 한국어로 명확히 어떤 항목이 어떻게 보강돼야 하는지 적으세요. 특히 5번 fail 의 경우
+"컨텍스트에 ~ 수치가 있으니 답변에 인용 필요" 형태로 구체적으로 지시.
 
 질문: {question}
 {health_block}컨텍스트:

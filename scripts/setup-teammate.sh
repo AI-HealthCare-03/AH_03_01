@@ -111,6 +111,19 @@ TABLES_EXIST=$(docker exec postgres psql -U "$DB_USER" -d "$DB_NAME" -tAc \
 if [[ -n "$TABLES_EXIST" && "$TABLES_EXIST" != "" ]]; then
   ok "DB schema 이미 존재 (rag_documents 발견) — 복원 skip"
 elif [[ "$HAS_DUMP" == "1" ]]; then
+  # 무결성 검증 (H-3): dump 변조/스왑 방어. dump 옆에 sha256 파일이 있으면 자동 검증,
+  # 없으면 명시적 confirm 받음.
+  if [[ -f infra/db/full_dump.sql.sha256 ]]; then
+    info "dump SHA256 검증..."
+    (cd infra/db && shasum -a 256 -c full_dump.sql.sha256) \
+      || { err "dump 무결성 검증 실패 — Drive 원본·sha256 다시 확인하세요"; exit 1; }
+    ok "SHA256 일치"
+  else
+    warn "infra/db/full_dump.sql.sha256 누락 — 무결성 검증 없이 복원합니다."
+    warn "  운영자(Ariel)에게 sha256 파일 공유 요청 권장."
+    read -rp "  무결성 검증 없이 계속 진행? [y/N]: " ans
+    [[ "${ans:-N}" =~ ^[yY]$ ]] || exit 1
+  fi
   info "infra/db/full_dump.sql 복원 중..."
   docker exec -i postgres psql -U "$DB_USER" -d "$DB_NAME" < infra/db/full_dump.sql > /tmp/setup_restore.log 2>&1 \
     || { err "복원 실패 — /tmp/setup_restore.log 확인"; exit 1; }

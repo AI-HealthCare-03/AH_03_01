@@ -13,6 +13,7 @@ scripts/rag/output/
 
 # DB dumps (PHI 포함 가능 — 절대 커밋 금지, Drive 공유만)
 infra/db/*.sql
+infra/db/*.sql.sha256
 infra/db/*.dump
 infra/db/*.tar
 infra/db/*.backup
