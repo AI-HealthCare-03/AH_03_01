@@ -25,6 +25,8 @@ interface ChatStore {
   setConversationId: (id: number) => void;
   addMessage: (msg: ChatDisplayMessage) => void;
   setMessages: (msgs: ChatDisplayMessage[]) => void;
+  updateMessage: (id: string, patch: Partial<ChatDisplayMessage>) => void;
+  removeMessage: (id: string) => void;
   startNewConversation: () => void;
 }
 
@@ -46,6 +48,14 @@ export const useChatStore = create<ChatStore>((set) => ({
     set((s) => ({ messages: [...s.messages, msg] })),
 
   setMessages: (msgs) => set({ messages: msgs }),
+
+  updateMessage: (id, patch) =>
+    set((s) => ({
+      messages: s.messages.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+    })),
+
+  removeMessage: (id) =>
+    set((s) => ({ messages: s.messages.filter((m) => m.id !== id) })),
 
   startNewConversation: () =>
     set({ conversationId: null, messages: [], view: "chat" }),

@@ -112,4 +112,7 @@ export interface ChatDisplayMessage {
   actionHint?: string | null;
   isFallback?: boolean;
   createdAt: string;
+  /* 스트리밍 전용 (SSE 진행 중에만 사용, done 이벤트 후 제거) */
+  isStreaming?: boolean;
+  stageLabel?: string;
 }

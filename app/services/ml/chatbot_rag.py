@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -131,3 +132,20 @@ class ChatbotRAG:
 
         result = await run_chat_rag(question=query, user_id=user_id, thread_id=thread_id)
         return _result_to_answer(result)
+
+    async def answer_stream(self, *, query: str, user_id: Any, thread_id: str) -> AsyncIterator[tuple[str, Any]]:
+        """ChatRAGGraph 스트리밍 실행 → 단계 이벤트 + 최종 RAGAnswer yield.
+
+        yield 형태 (run_chat_rag_stream 의 형태를 service 가 소비하기 쉽게 변환):
+            ("stage", node_name: str)  — 그래프 노드 진입 시점
+            ("result", RAGAnswer)      — 마지막 1회. ChatRAGResult → RAGAnswer 변환 후.
+
+        answer() 와 동일하게 lazy import 로 순환을 회피한다.
+        """
+        from app.graphs.chat_rag_graph import run_chat_rag_stream
+
+        async for kind, payload in run_chat_rag_stream(question=query, user_id=user_id, thread_id=thread_id):
+            if kind == "result":
+                yield ("result", _result_to_answer(payload))
+            else:
+                yield (kind, payload)

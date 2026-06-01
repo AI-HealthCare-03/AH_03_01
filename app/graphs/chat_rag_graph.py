@@ -46,7 +46,7 @@ import json
 import logging
 import re
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict
 
@@ -1021,6 +1021,51 @@ def ChatRAGGraph() -> Any:  # noqa: N802 — API 계약 문서 명칭 보존
 
 
 # ─────────────────────────────────────────────
+# 공개 진입점용 공통 헬퍼 (run_chat_rag / run_chat_rag_stream 공유)
+# ─────────────────────────────────────────────
+def _build_initial_state(question: str, user_id: Any, thread_id: str) -> ChatState:
+    """그래프 초기 state 구성 — 동기/스트리밍 진입점이 공유."""
+    return {
+        "user_id": user_id,
+        "thread_id": thread_id,
+        "original_question": question,
+        "eval_revision_count": 0,
+    }
+
+
+def _state_to_result(final_state: ChatState) -> ChatRAGResult:
+    """누적된 최종 ChatState → ChatRAGResult 매핑 (run_chat_rag 와 동일 규칙)."""
+    intent: IntentLiteral = final_state.get("intent", "general")  # type: ignore[assignment]
+    return ChatRAGResult(
+        answer=final_state.get("final_answer", FALLBACK_MESSAGE),
+        sources=final_state.get("sources", []),
+        intent=intent,
+        needs_health_data=bool(final_state.get("needs_health_data", False)),
+        has_health_data=bool(final_state.get("has_health_data", False)),
+        missing_fields=list(final_state.get("missing_fields", [])),
+        action_hint=final_state.get("action_hint"),
+        is_fallback=bool(final_state.get("is_fallback", False)),
+        eval_revision_count=int(final_state.get("eval_revision_count", 0)),
+        disclaimer=final_state.get("disclaimer", _disclaimer_for(intent)),
+        confidence=float(final_state.get("confidence", 0.0)),
+        model_version=final_state.get("model_version", "chatragraph-v1"),
+    )
+
+
+# 그래프 노드명 → 사용자에게 보여줄 진행 단계 문구 (백엔드가 canonical 소유).
+# 종료 노드(final_*) 는 의도적으로 매핑에서 제외 — 스트리밍은 token/done 으로 전이한다.
+# 매핑에 없는 노드는 stage 미발행(스킵).
+STAGE_LABELS: dict[str, str] = {
+    "classify_intent": "질문을 분석하고 있어요...",
+    "fetch_health_data": "건강 정보를 확인하고 있어요...",
+    "retrieve": "관련 자료를 검색하고 있어요...",
+    "generate": "답변을 작성하고 있어요...",
+    "rewrite_query": "검색어를 다시 다듬고 있어요...",
+    "evaluate": "정확한 답변을 제공해 드리기 위해 검토중이에요. 조금만 기다려 주세요!",
+}
+
+
+# ─────────────────────────────────────────────
 # 공개 진입점 — ChatbotRAG.answer() 가 호출
 # ─────────────────────────────────────────────
 async def run_chat_rag(
@@ -1037,12 +1082,7 @@ async def run_chat_rag(
         )
 
     graph = ChatRAGGraph()
-    initial: ChatState = {
-        "user_id": user_id,
-        "thread_id": thread_id,
-        "original_question": question,
-        "eval_revision_count": 0,
-    }
+    initial = _build_initial_state(question, user_id, thread_id)
 
     try:
         final_state: ChatState = await graph.ainvoke(initial)
@@ -1054,18 +1094,76 @@ async def run_chat_rag(
             disclaimer=MEDICAL_DISCLAIMER,
         )
 
-    intent: IntentLiteral = final_state.get("intent", "general")  # type: ignore[assignment]
-    return ChatRAGResult(
-        answer=final_state.get("final_answer", FALLBACK_MESSAGE),
-        sources=final_state.get("sources", []),
-        intent=intent,
-        needs_health_data=bool(final_state.get("needs_health_data", False)),
-        has_health_data=bool(final_state.get("has_health_data", False)),
-        missing_fields=list(final_state.get("missing_fields", [])),
-        action_hint=final_state.get("action_hint"),
-        is_fallback=bool(final_state.get("is_fallback", False)),
-        eval_revision_count=int(final_state.get("eval_revision_count", 0)),
-        disclaimer=final_state.get("disclaimer", _disclaimer_for(intent)),
-        confidence=float(final_state.get("confidence", 0.0)),
-        model_version=final_state.get("model_version", "chatragraph-v1"),
-    )
+    return _state_to_result(final_state)
+
+
+# ─────────────────────────────────────────────
+# 스트리밍 진입점 — ChatbotConversationService.handle_message_stream() 이 소비
+# ─────────────────────────────────────────────
+# yield 이벤트 형태:
+#   ("stage", <node_name: str>)  — 그래프 노드 진입 시점 (진행 중 의미). 라우터/서비스가
+#                                  STAGE_LABELS 로 한국어 라벨 매핑.
+#   ("result", ChatRAGResult)    — 마지막 1회. 그래프 완료(또는 fallback) 후 최종 결과.
+async def run_chat_rag_stream(
+    question: str,
+    user_id: Any,
+    thread_id: str,
+) -> AsyncIterator[tuple[str, Any]]:
+    """ChatRAGGraph 를 스트리밍 실행하며 단계 이벤트를 yield, 마지막에 최종 결과 yield.
+
+    스트리밍 방식: `astream_events(version="v2")` 의 `on_chain_start` 이벤트에서
+    노드명이 우리 노드셋에 속할 때 ("stage", node) 를 발행한다. on_chain_start 는 노드
+    **진입** 시점이므로 "지금 ~하고 있어요" 진행 의미와 정확히 맞는다 (노드 완료 delta 인
+    stream_mode="updates" 보다 의미가 자연스러움). 최종 ChatRAGResult 는 루트 그래프 실행
+    (parent_ids == []) 의 on_chain_end 출력(누적 state) 에서 run_chat_rag 와 동일 매핑으로 구성.
+
+    빈 질문/그래프 예외 시 run_chat_rag 와 동일한 fallback 결과를 ("result", ...) 로 yield
+    (stage 없이). 호출 측은 항상 정확히 1개의 ("result", ...) 를 마지막에 받는다.
+    """
+    if not question.strip():
+        yield (
+            "result",
+            ChatRAGResult(answer=FALLBACK_MESSAGE, is_fallback=True, disclaimer=MEDICAL_DISCLAIMER),
+        )
+        return
+
+    graph = ChatRAGGraph()
+    initial = _build_initial_state(question, user_id, thread_id)
+
+    root_run_id: Any = None
+    final_state: ChatState | None = None
+
+    try:
+        async for ev in graph.astream_events(initial, version="v2"):
+            event_type = ev["event"]
+            # 루트 그래프 실행 식별 — parent_ids 가 빈 리스트인 on_chain_start 가 최상위.
+            if event_type == "on_chain_start" and ev.get("parent_ids") == []:
+                root_run_id = ev["run_id"]
+                continue
+            # 노드 진입 → stage 발행 (STAGE_LABELS 에 있는 노드만; 종료 노드는 스킵).
+            if event_type == "on_chain_start" and ev["name"] in STAGE_LABELS:
+                yield ("stage", ev["name"])
+                continue
+            # 루트 그래프 종료 → 누적 최종 state 확보.
+            if event_type == "on_chain_end" and ev["run_id"] == root_run_id:
+                output = ev["data"].get("output")
+                if isinstance(output, dict):
+                    final_state = output  # type: ignore[assignment]
+    except Exception as e:  # noqa: BLE001 — 그래프 자체 예외는 안전 fallback
+        _logger.error("ChatRAGGraph 스트리밍 실행 실패: %s", _safe_err_repr(e))
+        yield (
+            "result",
+            ChatRAGResult(answer=FALLBACK_MESSAGE, is_fallback=True, disclaimer=MEDICAL_DISCLAIMER),
+        )
+        return
+
+    if final_state is None:
+        # on_chain_end 를 못 잡은 비정상 케이스 — fallback.
+        _logger.error("ChatRAGGraph 스트리밍: 최종 state 미확보, fallback")
+        yield (
+            "result",
+            ChatRAGResult(answer=FALLBACK_MESSAGE, is_fallback=True, disclaimer=MEDICAL_DISCLAIMER),
+        )
+        return
+
+    yield ("result", _state_to_result(final_state))
