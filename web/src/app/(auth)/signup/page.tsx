@@ -74,6 +74,29 @@ export default function SignupPage() {
   const [emailDupl, setEmailDupl] = useState<DuplStatus>("idle");
   const [nicknameDupl, setNicknameDupl] = useState<DuplStatus>("idle");
 
+  // 이메일 분리 입력 상태
+  const EMAIL_DOMAINS = [
+    { label: "선택해 주세요", value: "" },
+    { label: "gmail.com", value: "gmail.com" },
+    { label: "naver.com", value: "naver.com" },
+    { label: "kakao.com", value: "kakao.com" },
+    { label: "daum.net", value: "daum.net" },
+    { label: "hanmail.net", value: "hanmail.net" },
+    { label: "outlook.com", value: "outlook.com" },
+    { label: "직접 입력", value: "custom" },
+  ] as const;
+
+  const [emailLocal, setEmailLocal] = useState("");
+  const [emailDomain, setEmailDomain] = useState("");
+  const [isCustomDomain, setIsCustomDomain] = useState(false);
+
+  const syncEmail = (local: string, domain: string) => {
+    setValue("email", local && domain ? `${local}@${domain}` : "", {
+      shouldValidate: false,
+    });
+    setEmailDupl("idle");
+  };
+
   const onSubmit = async (data: SignupFormValues) => {
     try {
       await signup({
@@ -144,18 +167,61 @@ export default function SignupPage() {
           {/* 2단 그리드 (데스크탑) / 1단 (모바일) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4">
             {/* 이메일 */}
-            <div className="space-y-1.5">
-              <Input
-                label="이메일"
-                type="email"
-                placeholder="user@example.com"
-                autoComplete="email"
-                required
-                error={errors.email?.message}
-                {...register("email", {
-                  onChange: () => setEmailDupl("idle"),
-                })}
-              />
+            <div className="space-y-1.5 md:col-span-2">
+              <p className="text-sm font-medium text-text-primary">
+                이메일 <span className="text-status-danger" aria-hidden="true">*</span>
+              </p>
+              {/* 로컬파트 + @ + 도메인 선택/직접입력 */}
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  placeholder="example"
+                  value={emailLocal}
+                  onChange={(e) => {
+                    setEmailLocal(e.target.value);
+                    syncEmail(e.target.value, emailDomain);
+                  }}
+                  className="flex-1 h-12 px-3 rounded-[8px] border border-border text-sm focus:outline-none focus:border-brand-black bg-white"
+                />
+                <span className="text-text-secondary font-medium shrink-0">@</span>
+                {isCustomDomain ? (
+                  <input
+                    type="text"
+                    placeholder="직접 입력"
+                    value={emailDomain}
+                    onChange={(e) => {
+                      setEmailDomain(e.target.value);
+                      syncEmail(emailLocal, e.target.value);
+                    }}
+                    className="flex-1 h-12 px-3 rounded-[8px] border border-border text-sm focus:outline-none focus:border-brand-black bg-white"
+                  />
+                ) : (
+                  <select
+                    value={emailDomain}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "custom") {
+                        setIsCustomDomain(true);
+                        setEmailDomain("");
+                        syncEmail(emailLocal, "");
+                      } else {
+                        setEmailDomain(val);
+                        syncEmail(emailLocal, val);
+                      }
+                    }}
+                    className="flex-1 h-12 px-2 rounded-[8px] border border-border text-sm focus:outline-none focus:border-brand-black bg-white"
+                  >
+                    {EMAIL_DOMAINS.map((d) => (
+                      <option key={d.value} value={d.value}>{d.label}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              {/* react-hook-form 연동용 hidden input */}
+              <input type="hidden" {...register("email")} />
+              {errors.email && (
+                <p role="alert" className="text-xs text-status-danger">{errors.email.message}</p>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -175,16 +241,19 @@ export default function SignupPage() {
             </div>
 
             {/* 닉네임 */}
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 md:col-span-2">
               <Input
                 label="닉네임"
-                placeholder="healthy_jin"
+                placeholder="healthy_example"
                 required
                 error={errors.nickname?.message}
                 {...register("nickname", {
                   onChange: () => setNicknameDupl("idle"),
                 })}
               />
+              <p className="text-xs text-text-secondary">
+                영문·숫자·언더바(_)만 사용 가능, 공백 불가
+              </p>
               <Button
                 type="button"
                 variant="outline"
