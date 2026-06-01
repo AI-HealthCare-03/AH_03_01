@@ -116,7 +116,11 @@ class Inventory(models.Model):
     )
     user_id: int
     item: fields.ForeignKeyRelation["Item"] = fields.ForeignKeyField(
-        "models.Item", related_name="inventory_entries", on_delete=fields.CASCADE
+        # RESTRICT: 보유 중인 아이템은 삭제 불가(DB가 거부) → 구매 자산 보호.
+        # 아이템 은퇴는 삭제가 아니라 is_active=FALSE 로만 처리한다.
+        "models.Item",
+        related_name="inventory_entries",
+        on_delete=fields.RESTRICT,
     )
     item_id: int
     quantity = fields.IntField(default=1)

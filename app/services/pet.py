@@ -372,9 +372,15 @@ class InventoryService:
 
             if category_value == ItemCategory.BACKGROUND.value:
                 pet = await self.pet_service.get_or_404(user)
-                pet.equipped_background_id = item.id
+                # 토글: 이미 적용된 배경을 다시 사용하면 해제(기본 배경으로 복귀).
+                if pet.equipped_background_id == item.id:
+                    pet.equipped_background_id = None
+                    suffix = "배경을 해제했어요."
+                else:
+                    pet.equipped_background_id = item.id
+                    suffix = "배경을 적용했어요."
                 await pet.save(update_fields=["equipped_background_id"])
-                return self._equip_response(inv, item, pet, suffix="배경을 적용했어요.")
+                return self._equip_response(inv, item, pet, suffix=suffix)
 
             if category_value in {ItemCategory.FURNITURE.value, ItemCategory.DECORATION.value}:
                 pet = await self.pet_service.get_or_404(user)
