@@ -129,3 +129,9 @@ pets-*.png
 # 로컬 미디어 업로드 디렉터리 + verify 스크린샷
 .media/
 verify-*.png
+
+# ML 데이터셋 / 학습 산출물 (KNHANES 개인정보 포함 — 절대 커밋 금지)
+# preprocess.py 실행 결과물과 원시 데이터는 로컬 보관, 원격 push 금지
+ai_worker/ml/datasets/
+ai_worker/ml/models/
+ai_worker/ml/figures/
