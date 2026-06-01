@@ -24,6 +24,8 @@ export interface EquippedBackground {
   id: number;
   name: string;
   gradient?: string | null;
+  /** main | sunset | star | beach (이미지 배경 키) */
+  image?: string | null;
 }
 
 export interface EquippedItemMeta {
@@ -31,8 +33,12 @@ export interface EquippedItemMeta {
   name: string;
   emoji?: string | null;
   slot?: string | null;
-  /** head | paws | stage_top | stage_bottom */
+  /** head | paws | stage_top | stage_bottom | pet_skin | play */
   placement?: string | null;
+  /** 이미지 경로 (/pets/items/*.png) */
+  asset?: string | null;
+  /** ribbon | flower | ball | butterfly */
+  variant?: string | null;
 }
 
 export interface MyPet {
@@ -253,6 +259,8 @@ export interface InventoryItem {
   quantity: number;
   is_equipped: boolean;
   acquired_at: string;
+  /** 아이템 썸네일 이미지 경로 (/pets/items/*.png) */
+  asset?: string | null;
 }
 
 export interface InventoryListResponse { items: InventoryItem[]; }

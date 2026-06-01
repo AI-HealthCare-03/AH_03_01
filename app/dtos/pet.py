@@ -61,6 +61,7 @@ class EquippedBackgroundMeta(BaseModel):
     id: int
     name: str
     gradient: str | None = None
+    image: str | None = None  # main|sunset|star|beach (이미지 배경 키)
 
 
 class EquippedItemMeta(BaseModel):
@@ -69,6 +70,8 @@ class EquippedItemMeta(BaseModel):
     emoji: str | None = None
     slot: str | None = None
     placement: str | None = None  # head|paws|stage_top|stage_bottom
+    asset: str | None = None  # 이미지 경로 (/pets/items/*.png)
+    variant: str | None = None  # ribbon|flower|ball|butterfly
 
 
 class PetDetailResponse(PetResponse):
@@ -150,6 +153,7 @@ class InventoryItemResponse(BaseSerializerModel):
     quantity: int
     is_equipped: bool
     acquired_at: datetime
+    asset: str | None = None  # 아이템 썸네일 이미지 경로
 
 
 class InventoryListResponse(BaseModel):
