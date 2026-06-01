@@ -30,6 +30,7 @@ class RAGSource:
     url: str | None = None
     document_id: int | None = None
     snippet: str | None = None
+    source: str | None = None  # 문서 코드 (예: "KSH2022") — 프론트 문서명 라벨링용
 
     def to_dict(self) -> dict[str, Any]:
         # url 은 항상 None 인 죽은 필드 — 응답·DB 직렬화에서 제거.
@@ -38,6 +39,7 @@ class RAGSource:
             "title": self.title,
             "document_id": self.document_id,
             "snippet": self.snippet,
+            "source": self.source,
         }
 
 
@@ -83,6 +85,7 @@ def _to_source(c: Any) -> RAGSource:
         url=None,
         document_id=getattr(c, "document_id", None),
         snippet=snippet,
+        source=getattr(c, "source", None),
     )
 
 

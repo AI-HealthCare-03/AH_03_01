@@ -30,6 +30,7 @@ class ChatSourceItem(BaseModel):
     url: str | None = None
     document_id: int | None = None
     snippet: str | None = None
+    source: str | None = None  # 문서 코드 (예: "KSH2022") — 프론트 문서명 라벨링용
 
 
 class ChatMessageResponse(BaseModel):
