@@ -13,29 +13,30 @@ RAGAS 평가 파이프라인
     schema: [{ category, question, ground_truth, prediction_result }, ...]
 """
 
-import os
 import json
+import os
 from pathlib import Path
+
+from crag_pipeline import CRAGState, build_crag_graph
 from datasets import Dataset
+from langchain_core.messages import HumanMessage
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from ragas import evaluate
+from ragas.embeddings import LangchainEmbeddingsWrapper
+from ragas.llms import LangchainLLMWrapper
 from ragas.metrics import (
-    faithfulness,
     answer_relevancy,
     context_precision,
     context_recall,
+    faithfulness,
 )
-from ragas.llms import LangchainLLMWrapper
-from ragas.embeddings import LangchainEmbeddingsWrapper
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_core.messages import HumanMessage
-
-from crag_pipeline import build_crag_graph, CRAGState
 
 # ─────────────────────────────────────────────
 # 경로 설정
 # ─────────────────────────────────────────────
-BASE              = Path(__file__).parent
+BASE = Path(__file__).parent
 EVAL_DATASET_PATH = BASE / "eval_dataset.json"
+
 
 # ─────────────────────────────────────────────
 # 데이터셋 로드 (eval_dataset.json)
@@ -48,7 +49,9 @@ def load_eval_dataset(path: Path) -> list[dict]:
     print(f"  데이터셋 로드 완료: {len(data)}개 ({path.name})")
     return data
 
+
 EVAL_DATASET = load_eval_dataset(EVAL_DATASET_PATH)
+
 
 # ─────────────────────────────────────────────
 # 환경변수 로드
@@ -62,6 +65,7 @@ def load_env(base: Path):
                 key, _, val = line.partition("=")
                 os.environ.setdefault(key.strip(), val.strip())
 
+
 load_env(BASE)
 
 
@@ -71,9 +75,9 @@ load_env(BASE)
 def collect_answers(eval_dataset: list[dict]) -> dict:
     crag = build_crag_graph()
 
-    questions     = []
-    answers       = []
-    contexts      = []
+    questions = []
+    answers = []
+    contexts = []
     ground_truths = []
 
     print("=" * 60)
@@ -81,34 +85,34 @@ def collect_answers(eval_dataset: list[dict]) -> dict:
     print("=" * 60)
 
     for i, item in enumerate(eval_dataset):
-        question     = item["question"]
+        question = item["question"]
         ground_truth = item["ground_truth"]
-        prediction   = item.get("prediction_result")
+        prediction = item.get("prediction_result")
 
-        print(f"\n  [{i+1}/{len(eval_dataset)}] {question}")
+        print(f"\n  [{i + 1}/{len(eval_dataset)}] {question}")
 
         initial_state: CRAGState = {
-            "question":             question,
-            "original_question":    question,
-            "prediction_result":    prediction,
-            "retrieved_context":    [],
-            "web_results":          [],
+            "question": question,
+            "original_question": question,
+            "prediction_result": prediction,
+            "retrieved_context": [],
+            "web_results": [],
             "final_recommendation": "",
-            "eval_verdict":         "",
-            "eval_feedback":        "",
-            "retry_count":          0,
-            "rewrite_count":        0,
+            "eval_verdict": "",
+            "eval_feedback": "",
+            "retry_count": 0,
+            "rewrite_count": 0,
         }
 
         try:
-            result    = crag.invoke(initial_state)
-            answer    = result.get("final_recommendation", "")
-            ctx_docs  = result.get("retrieved_context", [])
+            result = crag.invoke(initial_state)
+            answer = result.get("final_recommendation", "")
+            ctx_docs = result.get("retrieved_context", [])
             ctx_texts = [doc["content"] for doc in ctx_docs]
             ctx_texts += result.get("web_results", [])  # 웹 검색 결과도 포함
         except Exception as e:
             print(f"    ❌ 오류: {e}")
-            answer    = ""
+            answer = ""
             ctx_texts = []
 
         questions.append(question)
@@ -119,9 +123,9 @@ def collect_answers(eval_dataset: list[dict]) -> dict:
         print(f"    ✅ 완료 (컨텍스트 {len(ctx_texts)}개)")
 
     return {
-        "question":     questions,
-        "answer":       answers,
-        "contexts":     contexts,
+        "question": questions,
+        "answer": answers,
+        "contexts": contexts,
         "ground_truth": ground_truths,
     }
 
@@ -147,6 +151,7 @@ KO_AR_PROMPT = """다음 답변이 질문에 얼마나 관련 있고 충분한�
 
 숫자만 출력하세요 (예: 0.85)"""
 
+
 def compute_korean_answer_relevancy(
     questions: list[str],
     answers: list[str],
@@ -154,14 +159,12 @@ def compute_korean_answer_relevancy(
 ) -> list[float]:
     """한국어 전용 Answer Relevancy 계산 (RAGAS 대체)"""
     scores = []
-    for q, a in zip(questions, answers):
+    for q, a in zip(questions, answers, strict=False):
         if not a.strip():
             scores.append(0.0)
             continue
         try:
-            response = llm.invoke([
-                HumanMessage(content=KO_AR_PROMPT.format(question=q, answer=a[:600]))
-            ])
+            response = llm.invoke([HumanMessage(content=KO_AR_PROMPT.format(question=q, answer=a[:600]))])
             score = float(response.content.strip())
             scores.append(min(max(score, 0.0), 1.0))
         except Exception:
@@ -174,16 +177,15 @@ def compute_korean_answer_relevancy(
 # ─────────────────────────────────────────────
 def run_ragas_evaluation(data: dict) -> tuple[dict, list[float]]:
     import asyncio
+
     import numpy as np
 
     print("\n" + "=" * 60)
     print("  RAGAS 평가 실행 중...")
     print("=" * 60)
 
-    ragas_llm        = LangchainLLMWrapper(ChatOpenAI(model="gpt-4o-mini", temperature=0))
-    ragas_embeddings = LangchainEmbeddingsWrapper(
-        OpenAIEmbeddings(model="text-embedding-3-small")
-    )
+    ragas_llm = LangchainLLMWrapper(ChatOpenAI(model="gpt-4o-mini", temperature=0))
+    ragas_embeddings = LangchainEmbeddingsWrapper(OpenAIEmbeddings(model="text-embedding-3-small"))
     ko_ar_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
     dataset = Dataset.from_dict(data)
@@ -195,7 +197,7 @@ def run_ragas_evaluation(data: dict) -> tuple[dict, list[float]]:
         dataset=dataset,
         metrics=[
             faithfulness,
-            answer_relevancy,   # 참고용 (한국어 한계)
+            answer_relevancy,  # 참고용 (한국어 한계)
             context_precision,
             context_recall,
         ],
@@ -205,9 +207,7 @@ def run_ragas_evaluation(data: dict) -> tuple[dict, list[float]]:
 
     # 커스텀 한국어 AR 점수 계산
     print("\n  한국어 Answer Relevancy 계산 중...")
-    ko_ar_scores = compute_korean_answer_relevancy(
-        data["question"], data["answer"], ko_ar_llm
-    )
+    ko_ar_scores = compute_korean_answer_relevancy(data["question"], data["answer"], ko_ar_llm)
     print(f"  KO Answer Relevancy: {float(np.mean(ko_ar_scores)):.4f}")
 
     return ragas_result, ko_ar_scores
@@ -230,14 +230,14 @@ def print_results(ragas_result, ko_ar_scores: list[float]):
             return 0.0
 
     scores = {
-        "Faithfulness":         safe_float(ragas_result["faithfulness"]),
-        "Context Precision":    safe_float(ragas_result["context_precision"]),
-        "Context Recall":       safe_float(ragas_result["context_recall"]),
+        "Faithfulness": safe_float(ragas_result["faithfulness"]),
+        "Context Precision": safe_float(ragas_result["context_precision"]),
+        "Context Recall": safe_float(ragas_result["context_recall"]),
         "Answer Relevancy(EN)": safe_float(ragas_result["answer_relevancy"]),
-        "KO Answer Relevancy":  float(np.mean(ko_ar_scores)),
+        "KO Answer Relevancy": float(np.mean(ko_ar_scores)),
     }
 
-    TARGET = 0.85
+    target = 0.85
     for metric, score in scores.items():
         if metric == "Answer Relevancy(EN)":
             note = " ⚠ (한국어 역질문 한계, 참고용)"
@@ -245,17 +245,17 @@ def print_results(ragas_result, ko_ar_scores: list[float]):
             note = " ✨ (한국어 전용 직접 평가)"
         else:
             note = ""
-        status = "✅" if score >= TARGET else "⚠️ "
-        bar    = "█" * int(score * 20) + "░" * (20 - int(score * 20))
+        status = "✅" if score >= target else "⚠️ "
+        bar = "█" * int(score * 20) + "░" * (20 - int(score * 20))
         print(f"  {status} {metric:25s} {bar} {score:.4f}{note}")
 
     print()
     faith_score = scores["Faithfulness"]
-    print(f"  목표: Faithfulness ≥ {TARGET}")
-    if faith_score >= TARGET:
+    print(f"  목표: Faithfulness ≥ {target}")
+    if faith_score >= target:
         print(f"  ✅ Faithfulness 목표 달성! ({faith_score:.4f})")
     else:
-        gap = TARGET - faith_score
+        gap = target - faith_score
         print(f"  ⚠️  Faithfulness 목표 미달 ({faith_score:.4f}, {gap:.4f} 부족)")
     print("=" * 60)
 
@@ -264,7 +264,7 @@ def print_results(ragas_result, ko_ar_scores: list[float]):
         "summary": {k: float(v) for k, v in scores.items()},
         "ko_ar_per_question": [
             {"question": item["question"], "ko_ar_score": s}
-            for item, s in zip(EVAL_DATASET, ko_ar_scores)
+            for item, s in zip(EVAL_DATASET, ko_ar_scores, strict=False)
         ],
     }
     with open(output_path, "w", encoding="utf-8") as f:
@@ -276,6 +276,6 @@ def print_results(ragas_result, ko_ar_scores: list[float]):
 # 실행
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
-    data          = collect_answers(EVAL_DATASET)
+    data = collect_answers(EVAL_DATASET)
     result, ko_ar = run_ragas_evaluation(data)
     print_results(result, ko_ar)

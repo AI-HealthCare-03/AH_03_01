@@ -91,6 +91,10 @@ SEC_HEADER = re.compile(
 #  최소 변경 원칙상 OTHER + metadata + source 로 우회.)
 SERVICE_GUIDE_SOURCES = {"GUIDE", "CHALLENGE_CATALOG"}
 
+# M-6 sanity 허용 figure 접두사 — 각 진료지침이 본문에 다른 자료의 figure 를 인용하는
+# 경우가 있어 source_id prefix 외에 추가 허용 (silent 매치 경고 false positive 방지).
+_KNOWN_FIGURE_PREFIXES = ("DYS_FIG_", "HTN_FIG_", "DM_FIG_", "CHALL_SEC_", "CHALL_FIG_")
+
 
 # ─────────────────────────────────────────────
 # 청킹 헬퍼
@@ -147,7 +151,7 @@ def build_embedding_text(block: str) -> str:
     return "\n\n".join(p for p in parts if p)
 
 
-def parse_file(filepath: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def parse_file(filepath: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:  # noqa: C901 — 평면 파싱 분기
     """파일 1개를 파싱해 (file_meta, chunks) 를 돌려준다."""
     if not filepath.exists():
         print(f"  ⚠️  파일 없음, 건너뜀: {filepath}")
@@ -157,6 +161,17 @@ def parse_file(filepath: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     file_meta = dict(post.metadata)
     body = post.content
     matches = list(SEC_HEADER.finditer(body))
+
+    # M-6 sanity: section_id 가 frontmatter.source_id 의 prefix(예: "KSOLA2022")로 시작하거나
+    # 의료 도메인의 알려진 figure 접두사 인지 sample 검증. 정규식 확장으로 의도 외 패턴이
+    # 매치되면 즉시 경고 (silent 매치 방지).
+    # 알려진 figure 접두사: 각 진료지침이 본문에 다른 자료의 figure 를 인용하는 경우가 있음.
+    source_id_str = str(file_meta.get("source_id") or "")
+    if source_id_str and matches:
+        sample_ids = [m.group(1) for m in matches[:5]]
+        for sid in sample_ids:
+            if not (sid.startswith(source_id_str) or sid.startswith(_KNOWN_FIGURE_PREFIXES)):
+                print(f"  ⚠️  [{filepath.name}] 의심 section_id 매치: {sid} (source_id={source_id_str})")
 
     chunks: list[dict[str, Any]] = []
     skipped = 0

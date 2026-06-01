@@ -2,25 +2,26 @@
 RAG 파싱 & 청킹 파이프라인
 """
 
-import re
 import json
-import frontmatter
-from pathlib import Path
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+import re
 from collections import Counter
+from pathlib import Path
+
+import frontmatter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # ─────────────────────────────────────────────
-# 경로 설정 
+# 경로 설정
 # ─────────────────────────────────────────────
-BASE        = Path(__file__).parent
-DATA_DIR    = BASE / "data"
-OUTPUT_DIR  = BASE / "output"
+BASE = Path(__file__).parent
+DATA_DIR = BASE / "data"
+OUTPUT_DIR = BASE / "output"
 OUTPUT_PATH = OUTPUT_DIR / "chunks.json"
 
 OUTPUT_DIR.mkdir(exist_ok=True)  # output 폴더 없으면 자동 생성
 
 # ─────────────────────────────────────────────
-# 대상 파일 목록 
+# 대상 파일 목록
 # ─────────────────────────────────────────────
 FILES = [
     DATA_DIR / "KDA2025_section_documentation_요약.md",
@@ -32,9 +33,9 @@ FILES = [
 # ─────────────────────────────────────────────
 # 청킹 설정
 # ─────────────────────────────────────────────
-CHUNK_SIZE    = 500   # 글자 수 기준 (한국어 1글자 ≈ 1.5~2토큰)
-CHUNK_OVERLAP = 100   # 겹침 글자 수
-MIN_CHUNK_LEN = 10    # 이 미만은 빈 청크로 간주하여 제거
+CHUNK_SIZE = 500  # 글자 수 기준 (한국어 1글자 ≈ 1.5~2토큰)
+CHUNK_OVERLAP = 100  # 겹침 글자 수
+MIN_CHUNK_LEN = 10  # 이 미만은 빈 청크로 간주하여 제거
 
 splitter = RecursiveCharacterTextSplitter(
     chunk_size=CHUNK_SIZE,
@@ -49,6 +50,7 @@ SEC_HEADER = re.compile(
     r"^## ([A-Z][A-Z0-9_]+(?:_SEC_\d+|_FIG_\d+|FIG_\d+)) — (.+)$",
     re.MULTILINE,
 )
+
 
 def parse_section_metadata(meta_block: str) -> dict:
     """### Section Metadata 블록의 bullet 리스트를 dict로 변환"""
@@ -76,11 +78,8 @@ def split_content(text: str, metadata: dict) -> list[dict]:
     if len(text) <= CHUNK_SIZE:
         return [{**metadata, "chunk_index": 0, "chunk_total": 1, "content": text}]
     pieces = splitter.split_text(text)
-    total  = len(pieces)
-    return [
-        {**metadata, "chunk_index": i, "chunk_total": total, "content": piece}
-        for i, piece in enumerate(pieces)
-    ]
+    total = len(pieces)
+    return [{**metadata, "chunk_index": i, "chunk_total": total, "content": piece} for i, piece in enumerate(pieces)]
 
 
 # ─────────────────────────────────────────────
@@ -92,25 +91,23 @@ def parse_sec_file(filepath: Path) -> list[dict]:
         print(f"  ⚠️  파일 없음, 건너뜀: {filepath}")
         return []
 
-    post      = frontmatter.load(filepath)
+    post = frontmatter.load(filepath)
     file_meta = dict(post.metadata)
-    body      = post.content
-    matches   = list(SEC_HEADER.finditer(body))
-    chunks    = []
+    body = post.content
+    matches = list(SEC_HEADER.finditer(body))
+    chunks = []
 
     for idx, match in enumerate(matches):
-        section_id    = match.group(1)
+        section_id = match.group(1)
         section_title = match.group(2).strip()
 
         start = match.end()
-        end   = matches[idx + 1].start() if idx + 1 < len(matches) else len(body)
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(body)
         block = body[start:end]
 
         # 섹션 메타데이터
-        sec_meta   = {}
-        meta_match = re.search(
-            r"### Section Metadata\s*\n(.*?)(?=### |\Z)", block, re.DOTALL
-        )
+        sec_meta = {}
+        meta_match = re.search(r"### Section Metadata\s*\n(.*?)(?=### |\Z)", block, re.DOTALL)
         if meta_match:
             sec_meta = parse_section_metadata(meta_match.group(1))
 
@@ -123,26 +120,20 @@ def parse_sec_file(filepath: Path) -> list[dict]:
         # 임베딩 텍스트: Content + RAG요약 + 키워드
         content_parts = []
 
-        content_match = re.search(
-            r"### Content\s*\n(.*?)(?=### |\Z)", block, re.DOTALL
-        )
+        content_match = re.search(r"### Content\s*\n(.*?)(?=### |\Z)", block, re.DOTALL)
         if content_match:
             content_parts.append(content_match.group(1).strip())
 
-        rag_match = re.search(
-            r"#{3,5}.*?RAG 검색용 요약.*?\n(.*?)(?=#{3,5}|\Z)", block, re.DOTALL
-        )
+        rag_match = re.search(r"#{3,5}.*?RAG 검색용 요약.*?\n(.*?)(?=#{3,5}|\Z)", block, re.DOTALL)
         if rag_match:
             content_parts.append("[RAG요약] " + rag_match.group(1).strip())
 
-        kw_match = re.search(
-            r"#{3,5}.*?검색 키워드.*?\n(.*?)(?=#{3,5}|\Z)", block, re.DOTALL
-        )
+        kw_match = re.search(r"#{3,5}.*?검색 키워드.*?\n(.*?)(?=#{3,5}|\Z)", block, re.DOTALL)
         if kw_match:
             keywords = [
-                l.strip().lstrip("- ").strip()
-                for l in kw_match.group(1).strip().splitlines()
-                if l.strip().startswith("-")
+                line.strip().lstrip("- ").strip()
+                for line in kw_match.group(1).strip().splitlines()
+                if line.strip().startswith("-")
             ]
             if keywords:
                 content_parts.append("[키워드] " + ", ".join(keywords))
@@ -150,12 +141,11 @@ def parse_sec_file(filepath: Path) -> list[dict]:
         full_text = "\n\n".join(filter(None, content_parts))
 
         base_meta = {
-            **{k: v for k, v in file_meta.items()
-               if k not in ("note", "section_count", "base_documentation")},
+            **{k: v for k, v in file_meta.items() if k not in ("note", "section_count", "base_documentation")},
             **sec_meta,
-            "section_id":    section_id,
+            "section_id": section_id,
             "section_title": section_title,
-            "file":          filepath.name,
+            "file": filepath.name,
         }
 
         chunks.extend(split_content(full_text, base_meta))
@@ -177,9 +167,9 @@ if __name__ == "__main__":
         all_chunks.extend(parse_sec_file(fpath))
 
     # 빈 청크 제거
-    before     = len(all_chunks)
+    before = len(all_chunks)
     all_chunks = [c for c in all_chunks if len(c["content"].strip()) >= MIN_CHUNK_LEN]
-    removed    = before - len(all_chunks)
+    removed = before - len(all_chunks)
 
     # 저장
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
@@ -195,7 +185,7 @@ if __name__ == "__main__":
 
     lengths = [len(c["content"]) for c in all_chunks]
     print()
-    print(f"  청크 길이 (글자): 최소 {min(lengths)} / 최대 {max(lengths)} / 평균 {sum(lengths)//len(lengths)}")
+    print(f"  청크 길이 (글자): 최소 {min(lengths)} / 최대 {max(lengths)} / 평균 {sum(lengths) // len(lengths)}")
     print()
     print(f"  저장 완료 → {OUTPUT_PATH}")
     print("=" * 55)

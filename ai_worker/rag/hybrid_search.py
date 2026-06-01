@@ -11,28 +11,27 @@ pip install rank_bm25 kiwipiepy chromadb openai
     Hybrid 검색: 두 결과를 RRF(Reciprocal Rank Fusion)로 병합
 """
 
-import os
 import json
-import math
+import os
 from pathlib import Path
 
 import chromadb
 from chromadb.config import Settings
+from kiwipiepy import Kiwi
 from openai import OpenAI
 from rank_bm25 import BM25Okapi
-from kiwipiepy import Kiwi
 
 # ─────────────────────────────────────────────
 # 경로 설정
 # ─────────────────────────────────────────────
-BASE        = Path(__file__).parent
-CHROMA_DIR  = BASE / "chroma_db"
+BASE = Path(__file__).parent
+CHROMA_DIR = BASE / "chroma_db"
 CHUNKS_PATH = BASE / "output" / "chunks.json"
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 COLLECTION_NAME = "chronic_disease_rag"
-TOP_K           = 5    # 최종 반환 청크 수
-RRF_K           = 60   # RRF 상수 (보통 60 고정)
+TOP_K = 5  # 최종 반환 청크 수
+RRF_K = 60  # RRF 상수 (보통 60 고정)
 
 # ─────────────────────────────────────────────
 # 테스트 쿼리
@@ -44,6 +43,7 @@ TEST_QUERIES = [
     "챌린지 인증 실패하면 어떻게 해?",
     "이상지질혈증 LDL 콜레스테롤 치료 목표",
 ]
+
 
 # ─────────────────────────────────────────────
 # 초기화
@@ -76,6 +76,7 @@ def init_clients():
 # 한국어 형태소 분석 (Kiwi)
 # ─────────────────────────────────────────────
 kiwi = Kiwi()
+
 
 def tokenize(text: str) -> list[str]:
     """한국어 텍스트를 형태소 단위로 분리"""
@@ -124,12 +125,15 @@ def dense_search(
         results["documents"][0],
         results["metadatas"][0],
         results["distances"][0],
+        strict=False,
     ):
-        output.append({
-            "content":  doc,
-            "metadata": meta,
-            "score":    1 - dist,  # 코사인 거리 → 유사도
-        })
+        output.append(
+            {
+                "content": doc,
+                "metadata": meta,
+                "score": 1 - dist,  # 코사인 거리 → 유사도
+            }
+        )
     return output
 
 
@@ -143,19 +147,21 @@ def sparse_search(
     top_k: int,
 ) -> list[dict]:
     query_tokens = tokenize(query)
-    scores       = bm25.get_scores(query_tokens)
+    scores = bm25.get_scores(query_tokens)
 
     # 상위 top_k 인덱스 추출
     top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
 
     output = []
     for idx in top_indices:
-        output.append({
-            "content":  chunks[idx]["content"],
-            "metadata": {k: v for k, v in chunks[idx].items() if k != "content"},
-            "score":    float(scores[idx]),
-            "index":    idx,
-        })
+        output.append(
+            {
+                "content": chunks[idx]["content"],
+                "metadata": {k: v for k, v in chunks[idx].items() if k != "content"},
+                "score": float(scores[idx]),
+                "index": idx,
+            }
+        )
     return output
 
 
@@ -163,7 +169,7 @@ def sparse_search(
 # RRF (Reciprocal Rank Fusion) 병합
 # ─────────────────────────────────────────────
 def rrf_merge(
-    dense_results:  list[dict],
+    dense_results: list[dict],
     sparse_results: list[dict],
     top_k: int,
     k: int = RRF_K,
@@ -178,13 +184,13 @@ def rrf_merge(
     # Dense 결과에 RRF 점수 부여
     for rank, item in enumerate(dense_results):
         key = item["content"][:100]  # 내용 앞 100자를 키로 사용
-        rrf_scores[key]  = rrf_scores.get(key, 0) + 1 / (k + rank + 1)
+        rrf_scores[key] = rrf_scores.get(key, 0) + 1 / (k + rank + 1)
         content_map[key] = item
 
     # Sparse 결과에 RRF 점수 부여
     for rank, item in enumerate(sparse_results):
         key = item["content"][:100]
-        rrf_scores[key]  = rrf_scores.get(key, 0) + 1 / (k + rank + 1)
+        rrf_scores[key] = rrf_scores.get(key, 0) + 1 / (k + rank + 1)
         if key not in content_map:
             content_map[key] = item
 
@@ -208,9 +214,9 @@ def print_results(query: str, results: list[dict], mode: str = "Hybrid"):
     print(f"{'=' * 60}")
 
     for i, item in enumerate(results):
-        meta      = item.get("metadata", {})
+        meta = item.get("metadata", {})
         rrf_score = item.get("rrf_score", item.get("score", 0))
-        print(f"\n  [{i+1}위] RRF점수: {rrf_score:.4f}")
+        print(f"\n  [{i + 1}위] RRF점수: {rrf_score:.4f}")
         print(f"  출처: {meta.get('source_id', '?')} | {meta.get('section_title', '?')}")
         print(f"  파일: {meta.get('file', '?')} | 페이지: {meta.get('source_pages', '?')}")
         print(f"  내용: {item['content'][:150]}{'...' if len(item['content']) > 150 else ''}")
@@ -241,7 +247,7 @@ if __name__ == "__main__":
 
     for query in TEST_QUERIES:
         # Dense 검색
-        dense_results  = dense_search(collection, openai_client, query, top_k=TOP_K * 2)
+        dense_results = dense_search(collection, openai_client, query, top_k=TOP_K * 2)
         # Sparse 검색
         sparse_results = sparse_search(bm25, chunks, query, top_k=TOP_K * 2)
         # Hybrid 병합

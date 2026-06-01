@@ -45,7 +45,11 @@ class ChatMessageResponse(BaseModel):
     disclaimer: str = "본 답변은 의학적 진단을 대체하지 않습니다."
     # ── 신규 필드 (ChatRAGGraph 결과 표현, API 계약 v1) ───────
     intent: str | None = None
+    # needs_health_data: 질문이 본인 데이터를 요구하는지 (classify 결과).
+    # has_health_data: 사용자가 DB 에 의미 있는 데이터를 갖고 있는지 (fetch 결과).
+    # 프론트 분기: needs_health_data=true && has_health_data=false 일 때만 CTA 표시.
     needs_health_data: bool = False
+    has_health_data: bool = False
     missing_fields: list[str] = []
     action_hint: str | None = None
     is_fallback: bool = False

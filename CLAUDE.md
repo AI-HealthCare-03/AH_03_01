@@ -52,15 +52,18 @@ uv run aerich upgrade
 - `models/` — Tortoise ORM models. **New model files must be appended to `TORTOISE_APP_MODELS` in `app/core/db/databases.py`** or they won't be registered or migrated.
 - `dtos/` — Pydantic request/response schemas.
 - `dependencies/` — FastAPI `Depends` providers (e.g. `security.py` for auth).
+- `graphs/` — LangGraph state graphs. `chat_rag_graph.ChatRAGGraph` (1단계, `POST /chat/messages?mode=rag`) and `risk_recommendation_graph.RiskRecommendationGraph` (2단계, `POST /api/v1/risk-recommendations`). 의료 가드(`R1~R5` 룰 + LLM 6기준) 는 `graphs/_shared/medical_evaluator.py` 가 양 그래프 공용. 2단계의 `ml_inference` 노드는 P1 단계에서 `RiskPredictor` 룰 stub 동기 호출 + `ml_inference_requests` row 기록만 — 미래 ML 학습 완료 시 `ai_worker/risk_inference/worker.py` 활성화로 비동기 전환 (현재 미가동).
 - `core/` — cross-cutting: `config.py` (pydantic-settings, reads `.env`), `db/`, `jwt/` (custom token backend wrapping PyJWT, see `core/jwt/backends.py` + `tokens.py`), `utils/`, `validators/`.
 
 **Config**: `app/core/config.py` exposes settings as module-level attributes via a `Config()` instance — import as `from app.core import config; config.DB_HOST`. Same pattern in `ai_worker/core/config.py`.
 
-**Migrations**: aerich config lives in `pyproject.toml`; migration files in `app/core/db/migrations/models/`. The `db/migrations/*` path is ALL-ignored by ruff (`per-file-ignores`).
+**Migrations**: aerich config lives in `pyproject.toml`; migration files live in `migrations/models/` (저장소 루트 기준). pyproject 의 `per-file-ignores` 는 현재 `db/migrations/*` 로 적혀 있어 실제 경로 `migrations/models/*` 가 자동 ALL-ignore 되지 않는다 — 마이그레이션 파일 추가 시 ruff lint/format 을 직접 통과시키거나 패턴을 함께 정정해야 한다. aerich CLI 가 16번 이전 old-format 호환성 이슈로 실패할 경우 SQL 만 추출해 `docker exec postgres psql -U ozcoding -d ai_health` 로 수동 적용 + `INSERT INTO aerich (version, app, content) ...` 로 기록한다.
 
 **Tests**: `app/tests/conftest.py` uses Tortoise's test initializer against a `test` database on the same MySQL instance — it patches `getDBConfig`. `asyncio_mode = "auto"`, session-scoped event loop. Test files mirror the API tree: `app/tests/auth_apis/`, `app/tests/user_apis/`.
 
 **Lint/format**: ruff with line-length 120, target `py312`; selects E/W/F/I/C90/B/UP/N. `UP046` and `E501` are globally ignored. `__init__.py` ignores `F401` (re-exports allowed).
+
+**ai_worker 워커들**: `ai_worker/main.py` 가 챌린지 인증 워커 (SigLIP2 zero-shot, 가동중) 를 BRPOP 폴링한다. `ai_worker/risk_inference/worker.py` 는 위험도 예측 워커 골격이며 동일 BRPOP + DB job 테이블(`ml_inference_requests`) 패턴 — **현재 미가동**. 위험도 예측 ML 학습 완료 시 (1) `ai_worker/main.py` 의 `asyncio.gather` 에 본 워커 추가, (2) `RiskRecommendationGraph.ml_inference` 노드 dispatch 를 Redis 큐 push 로 교체하면 비동기 전환 완료 — 인터페이스·테이블·DTO 그대로 유지.
 
 ## Conventions observed
 

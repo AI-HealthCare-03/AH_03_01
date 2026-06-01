@@ -25,12 +25,10 @@ import logging
 import os
 import sys
 import time
+from pathlib import Path
 from uuid import UUID
 
 from tortoise import Tortoise
-
-from app.core.db.databases import TORTOISE_ORM
-from app.graphs.chat_rag_graph import run_chat_rag
 
 # 노드별 timing 로그(app.graphs.chat_rag_graph 의 _timed_node) 가 stdout 에 보이도록 설정.
 logging.basicConfig(
@@ -41,6 +39,47 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("openai").setLevel(logging.WARNING)
 logging.getLogger("tortoise").setLevel(logging.WARNING)
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _bootstrap_env_from_dotenv() -> None:
+    """envs/.local.env (또는 .env 심볼릭) 의 환경변수를 os.environ 에 inject.
+
+    pydantic-settings(app.core.config.Config) 는 app 설정만 자동 로드하므로,
+    검증 도구 ENV 키(CHAT_REPL_USER_*) 도 동일 파일에서 읽기 위해 부트스트랩.
+    이미 셸에 있는 값은 덮어쓰지 않는다.
+    """
+    candidates = [
+        PROJECT_ROOT / ".env",  # 루트 symlink (envs/.local.env 가리킴)
+        PROJECT_ROOT / "envs" / ".local.env",
+    ]
+    for env_path in candidates:
+        if not env_path.exists():
+            continue
+        try:
+            for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = val
+            return  # 첫 번째 발견된 파일만 사용
+        except OSError:
+            continue
+
+
+# os.environ.get() 으로 ENV 를 읽기 전에 부트스트랩. import 순서 중요 — 아래
+# app.core.db.databases / chat_rag_graph 의 config 임포트는 영향 받지 않으나,
+# 본 도구 자체의 CHAT_REPL_USER_* 조회는 이 호출에 의존.
+_bootstrap_env_from_dotenv()
+
+from app.core.db.databases import TORTOISE_ORM  # noqa: E402 — _bootstrap_env 이후
+from app.graphs.chat_rag_graph import run_chat_rag  # noqa: E402
 
 
 def _load_user(env_key: str, label: str) -> tuple[str, UUID] | None:
