@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useInventory } from "@/hooks/queries/useInventory";
 import { useUseInventoryItem } from "@/hooks/queries/useUseInventoryItem";
+import { useMyPet } from "@/hooks/queries/useMyPet";
 import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
-import type { InventoryItem, ItemCategory } from "@/types/api";
+import type { InventoryItem, ItemCategory, MyPet } from "@/types/api";
 
 /* =========================================
    가방(인벤토리) 페이지
@@ -34,7 +35,17 @@ function groupItems(items: InventoryItem[]): Record<GroupKey, InventoryItem[]> {
   return result;
 }
 
-function InventoryRow({ item }: { item: InventoryItem }) {
+/* 펫의 현재 장착 정보와 대조해 이 인벤토리 아이템이 장착 중인지 판별.
+   배경/가구/꾸미기만 장착 개념이 있고, 소비재(사료·물·약 등)는 항상 false. */
+function isItemEquipped(item: InventoryItem, pet?: MyPet | null): boolean {
+  if (!pet) return false;
+  if (item.category === "BACKGROUND") return pet.equipped_background?.id === item.item_id;
+  if (item.category === "FURNITURE") return !!pet.equipped_furniture?.some((f) => f.id === item.item_id);
+  if (item.category === "DECORATION") return !!pet.equipped_decoration?.some((d) => d.id === item.item_id);
+  return false;
+}
+
+function InventoryRow({ item, equipped }: { item: InventoryItem; equipped: boolean }) {
   const { mutate, isPending } = useUseInventoryItem();
   const { showToast } = useToast();
   const isEmpty = item.quantity === 0;
@@ -69,9 +80,14 @@ function InventoryRow({ item }: { item: InventoryItem }) {
         type="button"
         onClick={handleUse}
         disabled={isEmpty || isPending}
-        className="px-3 py-1.5 bg-brand text-brand-black text-xs font-semibold rounded-[10px] disabled:opacity-40 hover:opacity-90 active:scale-95 transition-all"
+        className={[
+          "px-3 py-1.5 text-xs font-semibold rounded-[10px] disabled:opacity-40 active:scale-95 transition-all",
+          equipped
+            ? "bg-surface text-text-secondary border border-border hover:bg-border"
+            : "bg-brand text-brand-black hover:opacity-90",
+        ].join(" ")}
       >
-        {isPending ? "사용 중…" : "사용"}
+        {isPending ? "처리 중…" : equipped ? "해제하기" : "사용"}
       </button>
     </div>
   );
@@ -83,6 +99,7 @@ function SkeletonRow() {
 
 export default function InventoryPage() {
   const { data, isLoading, isError } = useInventory();
+  const { data: pet } = useMyPet();
   const allItems = data?.items ?? [];
   const grouped = groupItems(allItems);
   const isEmpty = !isLoading && !isError && allItems.length === 0;
@@ -143,7 +160,7 @@ export default function InventoryPage() {
                 </h2>
                 <div className="space-y-2">
                   {items.map((item) => (
-                    <InventoryRow key={item.id} item={item} />
+                    <InventoryRow key={item.id} item={item} equipped={isItemEquipped(item, pet)} />
                   ))}
                 </div>
               </section>
