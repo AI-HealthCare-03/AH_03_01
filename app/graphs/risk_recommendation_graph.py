@@ -34,6 +34,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import json
 import logging
@@ -77,6 +78,11 @@ from app.services.ml.risk_predictor import (
     PredictionOutput,
     RiskPredictor,
 )
+
+# Redis 큐 dispatch 설정
+_ML_INFERENCE_QUEUE = "queue:ml-inference"
+_ML_POLL_INTERVAL = 0.5   # 폴링 간격 (초)
+_ML_POLL_TIMEOUT  = 30.0  # 최대 대기 시간 (초) — 초과 시 룰 폴백
 
 _logger = logging.getLogger(__name__)
 
@@ -352,9 +358,14 @@ def _build_prediction_input(disease_type: DiseaseType, snapshot: dict[str, Any])
 async def ml_inference(state: RiskState) -> dict[str, Any]:
     """3개 질환 (당뇨/고혈압/심혈관) 위험도 산출.
 
-    각 질환마다 ml_inference_requests row 1개 생성 + RiskPredictor 동기 호출 +
-    결과 row 채움. P1 패턴 — 미래 ML 학습 완료 시 dispatch 부분만 Redis 큐로 교체.
+    Redis 큐(queue:ml-inference) 에 job 을 push 하고,
+    ml_inference_requests 테이블을 폴링해 결과를 수집한다.
+    _ML_POLL_TIMEOUT 초 안에 완료되지 않으면 룰 기반 폴백으로 자동 전환.
     """
+    import redis.asyncio as aioredis
+
+    from app.core import config as _config
+
     user_id = state.get("user_id")
     thread_id = state.get("thread_id")
     snapshot = state.get("feature_snapshot") or {}
@@ -362,42 +373,106 @@ async def ml_inference(state: RiskState) -> dict[str, Any]:
     request_ids: list[int] = []
     predictions: list[dict[str, Any]] = []
 
-    for dt in (DiseaseType.DIABETES, DiseaseType.HYPERTENSION, DiseaseType.CARDIOVASCULAR):
-        t_start = time.perf_counter()
-        payload = _build_prediction_input(dt, snapshot)
-        request = await MLInferenceRequest.create(
-            user_id=user_id,
-            thread_id=thread_id,
-            kind=MLInferenceKind.RISK_PREDICTION,
-            status=MLInferenceStatus.RUNNING,
-            input_features=payload.snapshot(),
-            model_version="risk-predictor-stub-v0",
-            started_at=datetime.now(tz=UTC),
-        )
-        try:
-            output: PredictionOutput = await _predictor.predict(payload)
-            duration_ms = int((time.perf_counter() - t_start) * 1000)
-            result_dict = {
-                "disease_type": output.disease_type.value,
-                "risk_score": float(output.risk_score),
-                "risk_level": output.risk_level.value,
-                "contributing_factors": [f.to_dict() for f in output.contributing_factors],
-                "model_version": output.model_version,
-            }
-            request.status = MLInferenceStatus.SUCCESS
-            request.prediction_result = result_dict
-            request.duration_ms = duration_ms
-            request.completed_at = datetime.now(tz=UTC)
-            await request.save()
+    redis_client = aioredis.Redis(
+        host=_config.REDIS_HOST, port=_config.REDIS_PORT, db=_config.REDIS_DB
+    )
+
+    try:
+        # ── Step 1: 3개 질환 row 생성 + 큐 push ──────────────────────────────
+        for dt in (DiseaseType.DIABETES, DiseaseType.HYPERTENSION, DiseaseType.CARDIOVASCULAR):
+            payload = _build_prediction_input(dt, snapshot)
+            snap = payload.snapshot()
+            snap["disease_type"] = dt.value  # worker 복원용
+
+            request = await MLInferenceRequest.create(
+                user_id=user_id,
+                thread_id=thread_id,
+                kind=MLInferenceKind.RISK_PREDICTION,
+                status=MLInferenceStatus.PENDING,
+                input_features=snap,
+                model_version="shap-lgbm-v1",
+            )
             request_ids.append(request.id)
-            predictions.append(result_dict)
-        except Exception as e:  # noqa: BLE001
-            _logger.warning("ml_inference (%s) 실패: %s", dt.value, _safe_err_repr(e))
-            request.status = MLInferenceStatus.FAILED
-            request.error_message = _safe_err_repr(e)
-            request.completed_at = datetime.now(tz=UTC)
-            await request.save()
-            # 부분 실패 — 해당 질환만 skip, 다른 질환 계속
+
+            message = json.dumps({
+                "request_id": request.id,
+                "user_id":    str(user_id),
+                "thread_id":  thread_id,
+                "kind":       "RISK_PREDICTION",
+                "input_features": snap,
+            })
+            await redis_client.lpush(_ML_INFERENCE_QUEUE, message)
+            _logger.info("ml_inference queued: request_id=%d disease=%s", request.id, dt.value)
+
+        # ── Step 2: 폴링으로 결과 수집 ────────────────────────────────────────
+        deadline = time.perf_counter() + _ML_POLL_TIMEOUT
+        pending = set(request_ids)
+
+        while pending and time.perf_counter() < deadline:
+            await asyncio.sleep(_ML_POLL_INTERVAL)
+            for req_id in list(pending):
+                row = await MLInferenceRequest.filter(id=req_id).first()
+                if row is None:
+                    pending.discard(req_id)
+                    continue
+                if row.status == MLInferenceStatus.SUCCESS:
+                    if row.prediction_result:
+                        predictions.append(row.prediction_result)
+                    pending.discard(req_id)
+                elif row.status == MLInferenceStatus.FAILED:
+                    _logger.warning("ml_inference row failed: request_id=%d", req_id)
+                    pending.discard(req_id)
+
+        # ── Step 3: 타임아웃 시 룰 폴백 ──────────────────────────────────────
+        if pending:
+            _logger.warning(
+                "ml_inference timeout (%.1fs) — %d 건 폴백 처리",
+                _ML_POLL_TIMEOUT, len(pending),
+            )
+            for req_id in pending:
+                row = await MLInferenceRequest.filter(id=req_id).first()
+                if row is None:
+                    continue
+                snap = row.input_features or {}
+                try:
+                    dt_str = snap.get("disease_type", "DIABETES")
+                    dt = DiseaseType(dt_str)
+                except ValueError:
+                    dt = DiseaseType.DIABETES
+                payload = _build_prediction_input(dt, snap)
+                output: PredictionOutput = await _predictor.predict(payload)
+                result_dict = {
+                    "disease_type": output.disease_type.value,
+                    "risk_score": float(output.risk_score),
+                    "risk_level": output.risk_level.value,
+                    "contributing_factors": [f.to_dict() for f in output.contributing_factors],
+                    "model_version": output.model_version,
+                }
+                row.status = MLInferenceStatus.SUCCESS
+                row.prediction_result = result_dict
+                row.completed_at = datetime.now(tz=UTC)
+                await row.save()
+                predictions.append(result_dict)
+
+    except Exception as e:  # noqa: BLE001
+        _logger.error("ml_inference 전체 실패, 룰 폴백: %s", _safe_err_repr(e))
+        # Redis 연결 실패 등 예외 시 룰 기반으로 전체 대체
+        predictions = []
+        for dt in (DiseaseType.DIABETES, DiseaseType.HYPERTENSION, DiseaseType.CARDIOVASCULAR):
+            payload = _build_prediction_input(dt, snapshot)
+            try:
+                output = await _predictor.predict(payload)
+                predictions.append({
+                    "disease_type": output.disease_type.value,
+                    "risk_score": float(output.risk_score),
+                    "risk_level": output.risk_level.value,
+                    "contributing_factors": [f.to_dict() for f in output.contributing_factors],
+                    "model_version": output.model_version,
+                })
+            except Exception:  # noqa: BLE001
+                pass
+    finally:
+        await redis_client.aclose()
 
     return {"ml_request_ids": request_ids, "predictions": predictions}
 

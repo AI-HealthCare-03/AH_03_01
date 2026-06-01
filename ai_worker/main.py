@@ -248,9 +248,14 @@ async def _main_loop() -> None:
 
 
 async def _entry() -> None:
+    from ai_worker.risk_inference.worker import main as risk_inference_main
+
     _install_signal_handlers()
     async with _tortoise_session():
-        await _main_loop()
+        await asyncio.gather(
+            _main_loop(),
+            risk_inference_main(),
+        )
 
 
 if __name__ == "__main__":

@@ -42,6 +42,7 @@ import signal
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 from tortoise import Tortoise
@@ -58,6 +59,13 @@ from app.services.ml.risk_predictor import (
     PredictionOutput,
     RuleBasedRiskCalculator,
 )
+from ai_worker.ml.predictor import MLRiskPredictor
+
+_ml_predictor = MLRiskPredictor(
+    model_dir=Path(__file__).parent.parent / "ml" / "models",
+    fallback_on_error=True,
+)
+_ml_predictor.load()
 
 logger = logging.getLogger("ai_worker.risk_inference")
 
@@ -129,12 +137,8 @@ def _payload_from_input(disease_type: DiseaseType, snap: dict[str, Any]) -> Pred
 
 
 async def _run_inference(payload: PredictionInput) -> PredictionOutput:
-    """실제 ML 추론 — 현재는 룰 폴백.
-
-    학습 완료 후 본 함수를 ML 모델 서비스 호출로 교체.
-    실패/타임아웃 시 룰 폴백으로 자동 복귀하는 패턴 권장.
-    """
-    return RuleBasedRiskCalculator().calculate(payload)
+    """ML 모델 추론. 모델 오류 시 룰 기반으로 자동 폴백."""
+    return _ml_predictor.predict(payload)
 
 
 async def _process_message(message: dict[str, Any]) -> None:
