@@ -183,6 +183,7 @@ async def list_inventory(
                 quantity=inv.quantity,
                 is_equipped=inv.is_equipped,
                 acquired_at=inv.acquired_at,
+                asset=(inv.item.item_metadata or {}).get("asset"),
             )
             for inv in items
         ]

@@ -12,17 +12,19 @@ import type { InventoryItem, ItemCategory } from "@/types/api";
    - 전체 조회 후 카테고리별 클라이언트 그룹화
    ========================================= */
 
-type GroupKey = "약/물" | "사료/간식" | "비료/영양제" | "꾸미기" | "티켓";
+type GroupKey = "약/물" | "사료/간식" | "비료/영양제" | "배경" | "가구/소품" | "꾸미기" | "티켓";
 
 const GROUP_CATEGORIES: Record<GroupKey, ItemCategory[]> = {
   "약/물": ["MEDICINE", "WATER"],
   "사료/간식": ["FOOD_ANIMAL", "FOOD_ANIMAL_PREMIUM", "SNACK_ANIMAL"],
   "비료/영양제": ["FERTILIZER_PLANT", "FERTILIZER_PLANT_PREMIUM", "SUPPLEMENT_PLANT"],
-  꾸미기: ["BACKGROUND", "FURNITURE", "DECORATION", "PET"],
+  배경: ["BACKGROUND"],
+  "가구/소품": ["FURNITURE"],
+  꾸미기: ["DECORATION", "PET"],
   티켓: ["TICKET"],
 };
 
-const GROUP_KEYS: GroupKey[] = ["약/물", "사료/간식", "비료/영양제", "꾸미기", "티켓"];
+const GROUP_KEYS: GroupKey[] = ["약/물", "사료/간식", "비료/영양제", "배경", "가구/소품", "꾸미기", "티켓"];
 
 function groupItems(items: InventoryItem[]): Record<GroupKey, InventoryItem[]> {
   const result = {} as Record<GroupKey, InventoryItem[]>;
@@ -51,11 +53,17 @@ function InventoryRow({ item }: { item: InventoryItem }) {
         isEmpty ? "opacity-50 bg-surface" : "bg-white",
       ].join(" ")}
     >
-      <div>
-        <p className={["text-sm font-semibold", isEmpty ? "text-text-tertiary" : "text-text-primary"].join(" ")}>
-          {item.name}
-        </p>
-        <p className="text-xs text-text-tertiary">수량 {item.quantity}개</p>
+      <div className="flex items-center gap-3 min-w-0">
+        {item.asset && (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img src={item.asset} alt="" className="w-10 h-10 object-contain shrink-0" draggable={false} />
+        )}
+        <div className="min-w-0">
+          <p className={["text-sm font-semibold", isEmpty ? "text-text-tertiary" : "text-text-primary"].join(" ")}>
+            {item.name}
+          </p>
+          <p className="text-xs text-text-tertiary">수량 {item.quantity}개</p>
+        </div>
       </div>
       <button
         type="button"

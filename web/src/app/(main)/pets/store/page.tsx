@@ -49,11 +49,18 @@ function StoreItemCard({ item }: { item: StoreItem }) {
 
   const speciesLabel =
     item.species_lock ? SPECIES_LABEL[item.species_lock] : "모두";
+  const asset = typeof item.item_metadata?.asset === "string" ? item.item_metadata.asset : null;
 
   return (
     <div className="bg-white border border-border rounded-[16px] p-4 flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-black text-text-primary leading-tight">{item.name}</p>
+        <div className="flex items-center gap-2 min-w-0">
+          {asset && (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img src={asset} alt="" className="w-9 h-9 object-contain shrink-0" draggable={false} />
+          )}
+          <p className="text-sm font-black text-text-primary leading-tight">{item.name}</p>
+        </div>
         <span className="shrink-0 text-[11px] bg-surface text-text-tertiary rounded-full px-2 py-0.5">
           {speciesLabel}
         </span>
