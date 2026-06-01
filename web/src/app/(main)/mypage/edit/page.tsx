@@ -24,7 +24,7 @@ import { formatPhoneNumber } from "@/lib/validators";
 const MAX_AVATAR_SIZE = 500 * 1024; /* 500KB */
 const ALLOWED_AVATAR_MIME = ["image/png", "image/jpeg"];
 
-type DuplStatus = "idle" | "checking" | "available" | "taken";
+type DuplStatus = "idle" | "checking" | "available" | "taken" | "mine";
 
 export default function MyPageEditPage() {
   const router = useRouter();
@@ -86,7 +86,7 @@ export default function MyPageEditPage() {
     /* 현재 닉네임과 동일하면 별도 확인 불필요 */
     if (trimmed === (me?.nickname ?? "")) {
       showToast("현재 사용 중인 닉네임이에요", "info");
-      setNicknameDupl("available");
+      setNicknameDupl("mine");
       return;
     }
     setNicknameDupl("checking");
@@ -233,6 +233,9 @@ export default function MyPageEditPage() {
           </div>
           {nicknameDupl === "available" && (
             <p className="text-xs text-status-success">✓ 사용 가능한 닉네임이에요</p>
+          )}
+          {nicknameDupl === "mine" && (
+            <p className="text-xs text-status-info">현재 사용 중인 닉네임이에요</p>
           )}
           {nicknameDupl === "taken" && (
             <p className="text-xs text-status-danger">이미 사용 중인 닉네임입니다</p>
