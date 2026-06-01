@@ -6,21 +6,25 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
-import { useMe } from "@/hooks/queries/useMe";
-import { ME_QUERY_KEY } from "@/hooks/queries/useMe";
+import { useMe, ME_QUERY_KEY } from "@/hooks/queries/useMe";
 import { updateMe } from "@/lib/api/user";
 import type { UpdateMeRequest } from "@/lib/api/user";
 import { uploadFile } from "@/lib/api/files";
 import { resolveMediaUrl } from "@/lib/api/media";
 import { extractErrorMessage } from "@/lib/api/client";
+import { checkNicknameAvailable } from "@/lib/api/auth";
+import { formatPhoneNumber } from "@/lib/validators";
 
 /* =========================================
    마이페이지 - 프로필 편집
-   수정 가능: 닉네임 / 휴대폰 / 프로필 사진
+   수정 가능: 닉네임(중복확인) / 휴대폰 / 프로필 사진
+   비밀번호 변경: /mypage/password 페이지로 이동
    ========================================= */
 
 const MAX_AVATAR_SIZE = 500 * 1024; /* 500KB */
 const ALLOWED_AVATAR_MIME = ["image/png", "image/jpeg"];
+
+type DuplStatus = "idle" | "checking" | "available" | "taken";
 
 export default function MyPageEditPage() {
   const router = useRouter();
@@ -33,6 +37,7 @@ export default function MyPageEditPage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarFileId, setAvatarFileId] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [nicknameDupl, setNicknameDupl] = useState<DuplStatus>("idle");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   /* 초기값 세팅 */
@@ -45,6 +50,7 @@ export default function MyPageEditPage() {
     }
   }, [me]);
 
+  /* 아바타 업로드 */
   const handleAvatarSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -70,6 +76,33 @@ export default function MyPageEditPage() {
     }
   };
 
+  /* 닉네임 중복 확인 */
+  const handleNicknameDuplCheck = async () => {
+    const trimmed = nickname.trim();
+    if (!trimmed) {
+      showToast("닉네임을 먼저 입력해 주세요", "info");
+      return;
+    }
+    /* 현재 닉네임과 동일하면 별도 확인 불필요 */
+    if (trimmed === (me?.nickname ?? "")) {
+      showToast("현재 사용 중인 닉네임이에요", "info");
+      setNicknameDupl("available");
+      return;
+    }
+    setNicknameDupl("checking");
+    try {
+      const res = await checkNicknameAvailable(trimmed);
+      setNicknameDupl(res.available ? "available" : "taken");
+      showToast(
+        res.available ? "사용 가능한 닉네임이에요" : "이미 사용 중인 닉네임입니다",
+        res.available ? "success" : "error",
+      );
+    } catch (err) {
+      setNicknameDupl("idle");
+      showToast(extractErrorMessage(err), "error");
+    }
+  };
+
   const updateMutation = useMutation({
     mutationFn: (body: UpdateMeRequest) => updateMe(body),
     onSuccess: () => {
@@ -85,9 +118,19 @@ export default function MyPageEditPage() {
   const handleSave = () => {
     if (!me) return;
     const body: UpdateMeRequest = {};
-    if (nickname.trim() && nickname.trim() !== (me.nickname ?? "")) body.nickname = nickname.trim();
+    const trimmedNickname = nickname.trim();
+
+    /* 닉네임이 변경된 경우 중복 확인 필수 */
+    if (trimmedNickname && trimmedNickname !== (me.nickname ?? "")) {
+      if (nicknameDupl !== "available") {
+        showToast("닉네임 중복 확인이 필요해요", "error");
+        return;
+      }
+      body.nickname = trimmedNickname;
+    }
     if (phone.trim() && phone.trim() !== me.phone_number) body.phone_number = phone.trim();
     if (avatarFileId && avatarFileId !== me.avatar_file_id) body.avatar_file_id = avatarFileId;
+
     if (Object.keys(body).length === 0) {
       showToast("변경된 내용이 없어요", "info");
       return;
@@ -157,42 +200,80 @@ export default function MyPageEditPage() {
 
       {/* 폼 */}
       <div className="space-y-4">
-        <div>
+        {/* 닉네임 + 중복 확인 */}
+        <div className="space-y-1.5">
           <label
             htmlFor="nickname"
-            className="text-xs font-semibold text-text-secondary mb-1 block"
+            className="text-xs font-semibold text-text-secondary block"
           >
             닉네임 <span className="text-text-tertiary font-normal">(2~10자)</span>
           </label>
-          <input
-            id="nickname"
-            type="text"
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            maxLength={10}
-            minLength={2}
-            className="w-full px-3 py-2.5 rounded-[10px] border border-border focus:border-brand-black focus:outline-none text-sm"
-          />
+          <div className="flex gap-2">
+            <input
+              id="nickname"
+              type="text"
+              value={nickname}
+              onChange={(e) => {
+                setNickname(e.target.value);
+                setNicknameDupl("idle"); /* 값 바뀌면 확인 초기화 */
+              }}
+              maxLength={10}
+              className="flex-1 px-3 py-2.5 rounded-[10px] border border-border focus:border-brand-black focus:outline-none text-sm"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              loading={nicknameDupl === "checking"}
+              onClick={handleNicknameDuplCheck}
+              className="shrink-0"
+            >
+              중복 확인
+            </Button>
+          </div>
+          {nicknameDupl === "available" && (
+            <p className="text-xs text-status-success">✓ 사용 가능한 닉네임이에요</p>
+          )}
+          {nicknameDupl === "taken" && (
+            <p className="text-xs text-status-danger">이미 사용 중인 닉네임입니다</p>
+          )}
         </div>
+
+        {/* 휴대폰 번호 */}
         <div>
           <label
             htmlFor="phone"
             className="text-xs font-semibold text-text-secondary mb-1 block"
           >
-            휴대폰
+            휴대폰 번호
           </label>
           <input
             id="phone"
             type="tel"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
             placeholder="010-1234-5678"
             className="w-full px-3 py-2.5 rounded-[10px] border border-border focus:border-brand-black focus:outline-none text-sm"
           />
         </div>
       </div>
 
-      {/* 안내 */}
+      {/* 비밀번호 변경 */}
+      <div className="flex items-center justify-between px-4 py-3 border border-border rounded-[12px]">
+        <div>
+          <p className="text-sm font-semibold text-text-primary">비밀번호</p>
+          <p className="text-xs text-text-tertiary mt-0.5">
+            보안을 위해 주기적으로 변경해 주세요
+          </p>
+        </div>
+        <Link href="/mypage/password">
+          <Button variant="outline" size="sm">
+            변경하기
+          </Button>
+        </Link>
+      </div>
+
+      {/* 수정 불가 안내 */}
       <div className="bg-status-info-bg rounded-[12px] px-4 py-3">
         <p className="text-xs text-status-info leading-relaxed">
           이름·이메일·성별·생년월일은 변경할 수 없어요. 변경이 필요하면
