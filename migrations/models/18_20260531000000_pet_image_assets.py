@@ -7,9 +7,11 @@ async def upgrade(db: BaseDBAsyncClient) -> str:
     """펫 키우기 이미지 에셋 전환 (배경/가구/꾸미기/소비재 썸네일).
 
     - BACKGROUND: gradient → 이미지 키(main/sunset/star) 전환 + '바다'(beach) 추가
-    - FURNITURE : emoji 3종 제거 → 이미지 소품 재시드(방석/인형/조명/화분/소파/그루터기/밥·물그릇)
-    - DECORATION: emoji 3종 제거 → 리본/꽃(pet_skin 교체), 장난감 공(play), 나비(stage_top)
+    - FURNITURE : 구 emoji 시드는 비활성화(is_active=FALSE) → 이미지 소품 재시드(방석/인형/조명/화분/소파/그루터기/밥·물그릇)
+    - DECORATION: 구 emoji 시드는 비활성화 → 리본/꽃(pet_skin 교체), 장난감 공(play), 나비(stage_top)
                   리본/꽃/공은 species_block=["PLANT"] 로 식물 잠금
+    - 파괴적 DELETE 미사용: Inventory.item FK 가 CASCADE 라 DELETE 시 유저 구매 인벤토리가 삭제되므로,
+      은퇴 아이템은 항상 is_active=FALSE 로만 숨긴다.
     - 소비재    : 기존 사료/간식/비료/영양제/물/티켓 metadata 에 asset 썸네일 추가
     - MEDICINE  : '회복약' 신규 추가(상점 약 탭 비어 있던 항목 보강)
     """
@@ -22,7 +24,9 @@ async def upgrade(db: BaseDBAsyncClient) -> str:
         SELECT 'BACKGROUND', '바다', '시원한 바닷가 무대', 150, '{"image":"beach"}'::jsonb, TRUE, NULL, NOW(), NOW()
         WHERE NOT EXISTS (SELECT 1 FROM "items" WHERE category='BACKGROUND' AND name='바다');
 
-        DELETE FROM "items" WHERE category IN ('FURNITURE','DECORATION');
+        -- 구(舊) 가구/꾸미기 시드는 DELETE 하지 않고 비활성화만 한다.
+        -- (FK on_delete=CASCADE 라 DELETE 시 보유 인벤토리가 함께 삭제됨 → 구매 자산 손실 방지)
+        UPDATE "items" SET is_active=FALSE WHERE category IN ('FURNITURE','DECORATION');
         INSERT INTO "items" (category, name, description, price, item_metadata, is_active, species_lock, created_at, updated_at) VALUES
           ('FURNITURE','폭신한 방석','잠자기 좋은 방석',50,'{"asset":"/pets/items/cushion_1.png","placement":"stage_bottom"}'::jsonb,TRUE,NULL,NOW(),NOW()),
           ('FURNITURE','동그란 방석','아늑한 동그란 방석',50,'{"asset":"/pets/items/cushion_2.png","placement":"stage_bottom"}'::jsonb,TRUE,NULL,NOW(),NOW()),
@@ -72,16 +76,10 @@ async def upgrade(db: BaseDBAsyncClient) -> str:
 
 async def downgrade(db: BaseDBAsyncClient) -> str:
     return """
-        DELETE FROM "items" WHERE category IN ('FURNITURE','DECORATION');
-        INSERT INTO "items" (category, name, description, price, item_metadata, is_active, species_lock, created_at, updated_at) VALUES
-          ('FURNITURE', '주황 공', '가지고 노는 공', 30, '{"emoji":"🟠","slot":"left"}'::jsonb, TRUE, NULL, NOW(), NOW()),
-          ('FURNITURE', '폭신한 방석', '잠자기 좋은 방석', 50, '{"emoji":"🛏️","slot":"right"}'::jsonb, TRUE, NULL, NOW(), NOW()),
-          ('FURNITURE', '나무 그루터기', '앉아 쉬는 그루터기', 60, '{"emoji":"🪵","slot":"right"}'::jsonb, TRUE, NULL, NOW(), NOW()),
-          ('DECORATION', '꽃 한 송이', '봄 분위기 꽃 장식', 20, '{"emoji":"🌸"}'::jsonb, TRUE, NULL, NOW(), NOW()),
-          ('DECORATION', '리본 장식', '귀여운 핑크 리본', 30, '{"emoji":"🎀"}'::jsonb, TRUE, NULL, NOW(), NOW()),
-          ('DECORATION', '나비', '날아드는 나비', 25, '{"emoji":"🦋"}'::jsonb, TRUE, NULL, NOW(), NOW());
-
-        DELETE FROM "items" WHERE category='BACKGROUND' AND name='바다';
+        -- 비파괴 롤백: 행을 삭제하지 않고 신규(asset) 비활성화 / 구(emoji) 재활성화 (보유 인벤토리 보존).
+        UPDATE "items" SET is_active=FALSE WHERE category IN ('FURNITURE','DECORATION') AND item_metadata ? 'asset';
+        UPDATE "items" SET is_active=TRUE  WHERE category IN ('FURNITURE','DECORATION') AND item_metadata ? 'emoji';
+        UPDATE "items" SET is_active=FALSE WHERE category='BACKGROUND' AND name='바다';
         UPDATE "items" SET item_metadata = item_metadata - 'asset' WHERE category='MEDICINE';
 
         UPDATE "items" SET item_metadata = '{"gradient":"linear-gradient(to bottom, #FFF6D6 0%, #FFE9A8 60%, #C8E6A0 60%, #A6D88B 100%)"}'::jsonb, is_active=TRUE WHERE category='BACKGROUND' AND name='맑은 하늘';
