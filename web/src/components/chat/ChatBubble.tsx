@@ -34,6 +34,28 @@ export default function ChatBubble({ message }: ChatBubbleProps) {
     );
   }
 
+  /* 스트리밍 중: content 가 아직 없으면 단계 라벨 + 점 애니메이션 */
+  if (message.isStreaming && !message.content) {
+    return (
+      <div className="flex justify-start" aria-live="polite" aria-label={message.stageLabel ?? "답변 준비 중"}>
+        <div className="max-w-[85%] bg-white border border-border rounded-[16px] rounded-tl-[4px] px-4 py-3 flex items-center gap-2">
+          <div className="flex items-center gap-1" aria-hidden="true">
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className="w-1.5 h-1.5 bg-text-tertiary rounded-full animate-bounce"
+                style={{ animationDelay: `${i * 0.15}s` }}
+              />
+            ))}
+          </div>
+          <span className="text-xs text-text-tertiary">
+            {message.stageLabel ?? "답변을 준비하고 있어요..."}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   /* BOT 버블 */
   const showCta =
     message.needsHealthData === true && message.hasHealthData === false;
@@ -56,6 +78,12 @@ export default function ChatBubble({ message }: ChatBubbleProps) {
         {/* 본문 */}
         <p className="text-sm leading-relaxed text-text-primary whitespace-pre-wrap">
           {message.content}
+          {message.isStreaming && (
+            <span
+              className="inline-block w-[2px] h-[1em] bg-text-tertiary ml-0.5 align-middle animate-pulse"
+              aria-hidden="true"
+            />
+          )}
         </p>
 
         {/* 출처 (상위 3개 문서명) */}

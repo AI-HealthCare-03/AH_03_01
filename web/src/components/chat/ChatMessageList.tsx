@@ -55,7 +55,8 @@ export default function ChatMessageList({
           {messages.map((msg) => (
             <ChatBubble key={msg.id} message={msg} />
           ))}
-          {isLoading && <TypingIndicator />}
+          {/* 스트리밍 placeholder 가 없는 경우에만 TypingIndicator 표시 (FAQ 모드 폴백) */}
+          {isLoading && !messages.some((m) => m.isStreaming) && <TypingIndicator />}
         </>
       )}
       <div ref={bottomRef} />
