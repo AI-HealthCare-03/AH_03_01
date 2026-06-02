@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useMe } from "@/hooks/queries/useMe";
 import { useMyPet } from "@/hooks/queries/useMyPet";
 import { usePointBalance } from "@/hooks/queries/usePointBalance";
@@ -9,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchHealthProfileDetail } from "@/lib/api/health";
 import { resolveMediaUrl } from "@/lib/api/media";
 import { useAuth } from "@/hooks/useAuth";
+import MedicationManager, { MEDICATION_STORAGE_KEY, type Medication } from "@/components/health/MedicationManager";
 
 /* =========================================
    마이페이지
@@ -55,6 +57,16 @@ export default function MyPage() {
     staleTime: 60_000,
   });
   const { logout } = useAuth();
+
+  // 복약 관리 localStorage에서 복용중인 약 이름 목록 읽기
+  const [medNames, setMedNames] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(MEDICATION_STORAGE_KEY);
+      const list: Medication[] = raw ? JSON.parse(raw) : [];
+      setMedNames(list.filter((m) => m.active).map((m) => m.name));
+    } catch { /* 무시 */ }
+  }, []);
 
   const birth = me?.birthday ?? me?.birth_date;
   const age = calcAge(birth);
@@ -197,9 +209,7 @@ export default function MyPage() {
           </dd>
           <dt className="text-text-tertiary">복용중인 약</dt>
           <dd className="text-text-primary text-right">
-            {(profile?.medications ?? []).length > 0
-              ? (profile?.medications ?? []).join(", ")
-              : "없음"}
+            {medNames.length > 0 ? medNames.join(", ") : "없음"}
           </dd>
           <dt className="text-text-tertiary">가족력</dt>
           <dd className="text-text-primary text-right">
@@ -218,6 +228,9 @@ export default function MyPage() {
           </dd>
         </dl>
       </section>
+
+      {/* 복약 관리 */}
+      <MedicationManager />
 
       {/* 도메인 링크 */}
       <section className="bg-white border border-border rounded-[16px] overflow-hidden">
