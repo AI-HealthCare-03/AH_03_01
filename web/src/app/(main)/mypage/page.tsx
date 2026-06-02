@@ -237,6 +237,7 @@ export default function MyPage() {
         {[
           { href: "/mypage/edit", label: "프로필 편집", icon: "✏️" },
           { href: "/mypage/password", label: "비밀번호 변경", icon: "🔒" },
+          { href: "/mypage/notification-settings", label: "알림 설정", icon: "🔔" },
           { href: "/mypage/invitations", label: "받은 초대", icon: "📨" },
           { href: "/mypage/points", label: "포인트 내역", icon: "💰" },
           { href: "/attendance", label: "출석 체크", icon: "📅" },
