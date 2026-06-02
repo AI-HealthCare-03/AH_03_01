@@ -2,6 +2,11 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
+# 0. LightGBM 의존성 (libgomp — OpenMP 런타임)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # 1. uv 설치 (공식 이미지에서 복사해오는 가장 깔끔한 방법)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
