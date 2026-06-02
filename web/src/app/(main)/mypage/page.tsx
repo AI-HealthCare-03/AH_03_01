@@ -195,6 +195,12 @@ export default function MyPage() {
               return diseases.length > 0 ? diseases.join(", ") : "없음";
             })()}
           </dd>
+          <dt className="text-text-tertiary">복용중인 약</dt>
+          <dd className="text-text-primary text-right">
+            {(profile?.medications ?? []).length > 0
+              ? (profile?.medications ?? []).join(", ")
+              : "없음"}
+          </dd>
           <dt className="text-text-tertiary">가족력</dt>
           <dd className="text-text-primary text-right">
             {[

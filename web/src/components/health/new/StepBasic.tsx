@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -25,6 +26,7 @@ const schema = z.object({
   family_history_hypertension: z.boolean(),
   chronic_diseases: z.array(z.string()),
   pregnancy_status: z.enum(["NONE", "PREGNANT", "POSTPARTUM"]),
+  medications: z.array(z.string()),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -174,6 +176,75 @@ function BooleanField({
   );
 }
 
+/* ── 복용중인 약 태그 입력 ─────────── */
+
+function MedicationsField({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const [input, setInput] = React.useState("");
+
+  const add = () => {
+    const newItems = input
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0 && !value.includes(s));
+    if (newItems.length === 0) return;
+    onChange([...value, ...newItems]);
+    setInput("");
+  };
+
+  const remove = (med: string) => {
+    onChange(value.filter((m) => m !== med));
+  };
+
+  return (
+    <div>
+      <p className="text-sm font-medium text-text-primary mb-2">복용중인 약</p>
+      <div className="flex gap-2 mb-2">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); add(); } }}
+          placeholder="약 이름 입력 후 추가"
+          className="flex-1 h-11 px-4 border border-border rounded-[10px] text-sm text-text-primary bg-white focus:outline-none focus:border-brand-black"
+        />
+        <button
+          type="button"
+          onClick={add}
+          className="px-4 h-11 text-sm font-semibold bg-brand-black text-white rounded-[10px] shrink-0"
+        >
+          추가
+        </button>
+      </div>
+      {value.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {value.map((med) => (
+            <span
+              key={med}
+              className="flex items-center gap-1 px-3 py-1 text-sm bg-surface border border-border rounded-full"
+            >
+              {med}
+              <button
+                type="button"
+                onClick={() => remove(med)}
+                className="ml-1 text-text-tertiary hover:text-status-error"
+                aria-label={`${med} 삭제`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── 만성질환 멀티선택 ─────────────── */
 
 function ChronicDiseaseField({
@@ -246,6 +317,7 @@ export default function StepBasic({ defaultValues, onSubmit, isLoading }: StepBa
       family_history_hypertension: defaultValues?.family_history_hypertension ?? false,
       chronic_diseases: defaultValues?.chronic_diseases ?? ["NONE"],
       pregnancy_status: defaultValues?.pregnancy_status ?? "NONE",
+      medications: defaultValues?.medications ?? [],
     },
   });
 
@@ -373,6 +445,14 @@ export default function StepBasic({ defaultValues, onSubmit, isLoading }: StepBa
               value={field.value as PregnancyStatus}
               onChange={field.onChange}
             />
+          )}
+        />
+
+        <Controller
+          name="medications"
+          control={control}
+          render={({ field }) => (
+            <MedicationsField value={field.value} onChange={field.onChange} />
           )}
         />
       </div>
