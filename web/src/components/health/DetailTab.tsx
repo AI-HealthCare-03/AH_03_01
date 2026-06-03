@@ -159,6 +159,9 @@ export default function DetailTab() {
   const hasDmFamily = p?.has_diabetes_family_history as boolean | undefined;
   const hasHtnFamily = p?.has_hypertension_family_history as boolean | undefined;
   const pregnancyHistory = p?.pregnancy_history as string | undefined;
+  const medications = p?.medications as string[] | undefined;
+  const medicationLabel =
+    medications && medications.length > 0 ? medications.join(", ") : null;
 
   /* 빈 상태 */
   const isEmpty = !profile;
@@ -257,6 +260,7 @@ export default function DetailTab() {
                 }
               />
               <DetailRow label="만성질환" value={chronicLabel} />
+              <DetailRow label="복용중인 약" value={medicationLabel} />
             </div>
           </div>
         )}

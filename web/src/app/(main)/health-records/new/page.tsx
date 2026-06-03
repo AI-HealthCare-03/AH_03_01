@@ -77,6 +77,7 @@ export default function HealthRecordsNewPage() {
       has_hypertension_family_history: !!data.family_history_hypertension,
       is_chronic_patient: diseases.length > 0,
       diseases,
+
       pregnancy_history: PREGNANCY_MAP[data.pregnancy_status] ?? "NOT_APPLICABLE",
     };
 

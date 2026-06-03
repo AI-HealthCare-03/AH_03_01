@@ -226,6 +226,7 @@ export interface WizardFormStep1 {
   family_history_hypertension: boolean;
   chronic_diseases: ChronicDisease[];
   pregnancy_status: PregnancyStatus;
+  medications: string[];
 }
 
 export interface WizardFormStep2 {
