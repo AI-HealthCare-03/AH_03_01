@@ -344,11 +344,22 @@ true 면 retrieve 가 의료 진료지침과 함께 CHALLENGE_CATALOG 도 함께
 - 일반 의학 정보 질문 ("DASH 식단이란?", "당뇨병 진단 기준은?", "고혈압 약 부작용은?")
 - 일반 권고 질문 ("고혈압 환자는 어떤 운동?") — 본인이 명시되지 않음
 - 인사/잡담 ("안녕", "고마워")
+- **질문 본문에 수치가 직접 포함된 경우** — 시스템이 해석 가능한 수치이므로 false:
+  예: "LDL 95, TG 650이면 어떻게 해석하나요?" → false
+  예: "공복혈당 185 mg/dL인데 당뇨인가요?" → false
+  예: "HbA1c 7.1%, 혈압 130/85이면?" → false
+  단, "내 LDL이 95인데" 처럼 1인칭 + DB 조회 의도가 명확하면 true 유지.
 
 같은 주제도 1인칭이 붙으면 true 로 전환:
 - "고혈압 식단" → false / "내 고혈압 식단" → true
 - "당뇨 위험" → false / "내가 당뇨 위험군인지" → true
 - "건강 상태 평가법" → false / "나 어때" → **true** (본인 평가 요청)
+
+단, 다음은 질환명이 포함돼도 **false** (일반 정보 질문):
+- "당뇨가 있는데 OO 해도 되나요?" → false (안전 여부·가능 여부 일반 질문)
+- "고혈압인데 OO 먹어도 되나요?" → false (일반 식이 정보)
+- "당뇨 환자인데 OO 운동은?" → false (일반 운동 정보)
+- 본인 수치/상태 평가가 아니라 "OO 질환 환자에게 일반적으로 가능한지" 묻는 경우
 
 == missing_fields ==
 needs_health_data=true 일 때 필요한 데이터 필드명을 한국어 키워드 또는 표준 영문 키 중 알아보기 쉬운 쪽으로:
@@ -626,6 +637,49 @@ def _intent_to_source_type(intent: IntentLiteral) -> SourceType:
     return "all"
 
 
+# ── Query Decomposition: 약물+식품 조합 질문 분해 ──────────────────────────
+# "OO약 복용 중인데 OO 먹어도 되나요?" 패턴 감지
+_DRUG_FOOD_PATTERN = re.compile(
+    r"(복용|투약|먹고\s*있|사용\s*중|처방).{0,20}(먹어도|섭취|마셔도|먹을\s*수|괜찮|안전)",
+    re.DOTALL,
+)
+
+_DECOMPOSE_PROMPT = """다음 질문을 RAG 검색에 최적화된 2개의 독립적인 검색 쿼리로 분해하세요.
+JSON 배열로만 응답하세요. 다른 텍스트 절대 포함 금지.
+
+질문: {question}
+
+규칙:
+- 쿼리 1: 약물/치료 관련 핵심 검색어 (약물 카테고리, 주의사항, 혈당/혈압 영향)
+- 쿼리 2: 식이/영양 관련 핵심 검색어 (식품 성분, 질환별 식이 권고)
+- 각 쿼리는 20자 이내 핵심 키워드로
+
+예시 입력: "인슐린 복용 중 바나나 먹어도 되나요?"
+예시 출력: ["인슐린 혈당 식이 주의사항", "당뇨 과일 혈당 식이요법"]
+
+예시 입력: "암로디핀 복용 중 자몽 먹어도 되나요?"
+예시 출력: ["칼슘통로차단제 식이 주의사항", "고혈압 과일 식이 권고"]"""
+
+
+async def _decompose_query(question: str) -> list[str]:
+    """약물+식품 질문을 2개 검색 쿼리로 분해. 실패 시 원본 질문 단일 리스트 반환."""
+    try:
+        response = await _get_client().chat.completions.create(
+            model=config.OPENAI_CHAT_MODEL,
+            messages=[{"role": "user", "content": _DECOMPOSE_PROMPT.format(question=question)}],
+            temperature=0,
+            max_tokens=100,
+        )
+        text = response.choices[0].message.content.strip()
+        queries = json.loads(text)
+        if isinstance(queries, list) and len(queries) >= 2:
+            _logger.info("query decomposition 성공: %s → %s", question[:30], queries)
+            return queries[:2]
+    except Exception as e:  # noqa: BLE001
+        _logger.warning("query decomposition 실패, 원본 쿼리 사용: %s", _safe_err_repr(e))
+    return [question]
+
+
 async def retrieve_node(state: ChatState) -> dict[str, Any]:
     intent: IntentLiteral = state.get("intent", "general")  # type: ignore[assignment]
     source_type = _intent_to_source_type(intent)
@@ -643,18 +697,39 @@ async def retrieve_node(state: ChatState) -> dict[str, Any]:
     # medical 영역은 4측면(목표·생활요법·약물·추적) 동시 커버를 위해 broader top_k.
     top_k = RETRIEVE_TOP_K_MEDICAL if intent == "medical_inquiry" else RETRIEVE_TOP_K
 
+    # ── Query Decomposition: 약물+식품 조합 질문 감지 시 쿼리 분해 후 병합 ──
+    is_drug_food = bool(_DRUG_FOOD_PATTERN.search(state["original_question"]))
+
     try:
-        result = await retrieve(
-            query=query,
-            top_k=top_k,
-            source_type=source_type,
-            disease=diseases if diseases else None,
-        )
+        if is_drug_food:
+            sub_queries = await _decompose_query(state["original_question"])
+            all_chunks: list[Any] = []
+            seen_ids: set[str] = set()
+            for sub_query in sub_queries:
+                result = await retrieve(
+                    query=sub_query,
+                    top_k=top_k // 2,  # 각 쿼리당 절반씩 → 합산 시 top_k 수준
+                    source_type=source_type,
+                    disease=diseases if diseases else None,
+                )
+                for chunk in result.chunks:
+                    chunk_id = getattr(chunk, "section_id", str(chunk))
+                    if chunk_id not in seen_ids:
+                        seen_ids.add(chunk_id)
+                        all_chunks.append(chunk)
+            return {"retrieved_docs": all_chunks, "retrieval_query": query}
+        else:
+            result = await retrieve(
+                query=query,
+                top_k=top_k,
+                source_type=source_type,
+                disease=diseases if diseases else None,
+            )
+            return {"retrieved_docs": result.chunks, "retrieval_query": query}
+
     except Exception as e:  # noqa: BLE001
         _logger.warning("retrieve 실패, 빈 결과로 진행: %s", _safe_err_repr(e))
         return {"retrieved_docs": [], "retrieval_query": query, "error": _safe_err_repr(e)}
-
-    return {"retrieved_docs": result.chunks, "retrieval_query": query}
 
 
 # ─────────────────────────────────────────────
