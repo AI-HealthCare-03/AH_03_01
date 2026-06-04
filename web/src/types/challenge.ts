@@ -64,9 +64,9 @@ export interface Challenge {
   goal_config?: ChallengeGoalConfig | null;
   /* 클라이언트 계산 필드 (API에 없을 수 있음) */
   participant_count?: number;
-  my_progress?: number;      /* 내 달성일 수 */
-  total_days?: number;       /* 전체 기간 일 수 */
-  missed_count?: number;     /* 누락 횟수 */
+  my_progress?: number; /* 내 달성일 수 */
+  total_days?: number; /* 전체 기간 일 수 */
+  missed_count?: number; /* 누락 횟수 */
 }
 
 /* 챌린지 목록 응답 */
@@ -184,10 +184,16 @@ export interface ChallengeSummaryItem {
   challenge_id: number;
   title: string;
   category: ChallengeCategory;
+  scope?: ChallengeScope;
   total_days: number;
   completed_days: number;
   success_rate: number;
   earned_points: number;
+  /* 정렬·목표·남은 기간 표시용 (백엔드 응답에 포함될 경우 활용) */
+  start_date?: string; /* "YYYY-MM-DD" */
+  end_date?: string; /* "YYYY-MM-DD" */
+  goal_type?: GoalType;
+  goal_value?: number;
 }
 
 export interface ChallengeSummaryResponse {
@@ -216,13 +222,18 @@ export interface ChallengeGoalConfig {
   group_target_members?: number;
   /* 수면 */
   sleep_mode?: "BED_TIME" | "SLEEP_DURATION" | "WAKE_TIME";
-  sleep_time_range?: string;       /* "22-23" 형식 */
+  sleep_time_range?: string; /* "22-23" 형식 */
   sleep_duration_hours?: number;
-  wake_time?: string;              /* "07:00" 형식 */
+  wake_time?: string; /* "07:00" 형식 */
   /* 식단 */
   diet_mode?: "AVOID" | "INCLUDE";
   diet_targets?: string[];
-  diet_type?: "MEDITERRANEAN" | "LOW_CARB" | "LOW_FAT" | "LOW_SODIUM" | "LOW_SUGAR";
+  diet_type?:
+    | "MEDITERRANEAN"
+    | "LOW_CARB"
+    | "LOW_FAT"
+    | "LOW_SODIUM"
+    | "LOW_SUGAR";
   /* 체중 */
   weight_loss_mode?: "MAINTAIN" | "USER_INPUT" | "PERCENT_5";
   weight_loss_kg?: number;
@@ -240,7 +251,9 @@ export interface WizardFormState {
   category: ChallengeCategory | null;
   sub_category: ExerciseSubType | null;
   /* Step3 내 세부 모드 분기 */
-  step3Mode: string | null; /* "DAILY" | "WEEKLY_COUNT" | BED_TIME | AVOID | DIABETIC_FOOT | WALKING ... */
+  step3Mode:
+    | string
+    | null; /* "DAILY" | "WEEKLY_COUNT" | BED_TIME | AVOID | DIABETIC_FOOT | WALKING ... */
   goal_type: GoalType;
   goal_value: number;
   duration_days: 7 | 14 | 30 | 90 | 180; /* WEIGHT_MANAGEMENT 는 90/180 까지 */

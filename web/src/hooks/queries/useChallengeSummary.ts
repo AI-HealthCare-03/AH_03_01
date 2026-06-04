@@ -7,5 +7,8 @@ export function useChallengeSummary(period: "weekly" | "monthly") {
   return useQuery({
     queryKey: [CHALLENGE_SUMMARY_KEY, period],
     queryFn: () => fetchChallengeSummary(period),
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 }
