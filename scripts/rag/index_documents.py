@@ -50,23 +50,14 @@ from app.models.rag import DocumentType, RAGDocument
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DOCS_DIR = PROJECT_ROOT / "RAG" / "final docs"
 
-FILES: list[Path] = [
-    DOCS_DIR / "KDA2025_section_documentation_요약.md",
-    DOCS_DIR / "KSH2022_section_documentation_요약.md",
-    # 이상지질혈증: 기존 DYS_GUIDELINE(figure 7개) 을 흡수·확장한 KSOLA2022(섹션 + 동일 figure)
-    # 로 일원화. DB 의 기존 DYS_GUIDELINE 행은 인덱싱 전에 별도 삭제 필요.
-    DOCS_DIR / "KSOLA2022_section_documentation_요약.md",
-    DOCS_DIR / "서비스_이용_가이드_20260522.md",
-    # 챌린지 카탈로그 — service 카테고리(GUIDE 와 함께)로 적재되어 질환 횡단으로 검색됨.
-    DOCS_DIR / "CHALLENGE_CATALOG_documentation.md",
-]
+FILES: list[Path] = sorted(DOCS_DIR.glob("*.md"))
 
 # ─────────────────────────────────────────────
 # 청킹 / 임베딩 설정 (팀원 프로토타입과 동일 파라미터)
 # ─────────────────────────────────────────────
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 100
-MIN_CHUNK_LEN = 10
+CHUNK_SIZE = 1200
+CHUNK_OVERLAP = 200
+MIN_CHUNK_LEN = 100
 
 EMBEDDING_BATCH = 50
 EMBEDDING_RETRY = 3
