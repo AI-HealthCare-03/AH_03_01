@@ -34,7 +34,7 @@ export default function WizardShell({
   const progressPct = ((currentStep - 1) / (totalSteps - 1)) * 100;
 
   return (
-    <div className="min-h-screen bg-[#f8f8f8]">
+    <div className="min-h-screen bg-[#f8f8f8]" id="challenge-wizard-layout">
       {/* 모바일 상단 진행바 */}
       <div className="md:hidden bg-white border-b border-border px-5 pt-4 pb-3">
         <div className="flex items-center justify-between mb-2">
