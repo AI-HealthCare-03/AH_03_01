@@ -39,6 +39,8 @@ function loadMedications(): Medication[] {
 function saveMedications(list: Medication[]) {
   try {
     localStorage.setItem(MEDICATION_STORAGE_KEY, JSON.stringify(list));
+    // 복약 데이터 변경 → 스케줄러 재실행
+    window.dispatchEvent(new CustomEvent("notif-reschedule"));
   } catch { /* 무시 */ }
 }
 

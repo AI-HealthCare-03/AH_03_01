@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Activity, Trophy, MessageCircle, User, Sparkles } from "lucide-react";
 import ProfileDropdown from "@/components/layout/ProfileDropdown";
+import NotificationDropdown from "@/components/layout/NotificationDropdown";
 import { usePointBalance } from "@/hooks/queries/usePointBalance";
 
 /* =========================================
@@ -102,10 +103,11 @@ export default function GNB() {
 function HeaderRight() {
   const { data: balance } = usePointBalance(0);
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2">
       <span className="text-sm font-semibold text-text-primary">
         {(balance?.balance ?? 0).toLocaleString()} P
       </span>
+      <NotificationDropdown />
       <ProfileDropdown />
     </div>
   );
