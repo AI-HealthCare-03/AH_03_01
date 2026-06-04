@@ -131,3 +131,5 @@ pets-*.png
 .media/
 verify-*.png
 ai_worker/rag/output/
+ai_worker/rag/rag_eval_qa_dataset.jsonl
+ai_worker/rag/output/
