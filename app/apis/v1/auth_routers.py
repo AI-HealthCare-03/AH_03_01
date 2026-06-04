@@ -5,7 +5,14 @@ from fastapi.responses import JSONResponse as Response
 
 from app.core import config
 from app.core.config import Env
-from app.dtos.auth import LoginRequest, LoginResponse, SignUpRequest, TokenRefreshResponse
+from app.dtos.auth import (
+    FindIdRequest,
+    FindIdResponse,
+    LoginRequest,
+    LoginResponse,
+    SignUpRequest,
+    TokenRefreshResponse,
+)
 from app.repositories.user_repository import UserRepository
 from app.services.auth import AuthService
 from app.services.jwt import JwtService
@@ -38,6 +45,16 @@ async def check_nickname_available(
     """닉네임 사용 가능 여부 확인. (ERD: USER.nickname varchar(10) NN unique)"""
     exists = await UserRepository().exists_by_nickname(nickname)
     return Response(content={"nickname": nickname, "available": not exists}, status_code=status.HTTP_200_OK)
+
+
+@auth_router.post("/find-id", response_model=FindIdResponse, status_code=status.HTTP_200_OK)
+async def find_id(
+    request: FindIdRequest,
+    auth_service: Annotated[AuthService, Depends(AuthService)],
+) -> Response:
+    """이름 + 휴대폰 번호로 가입 이메일(마스킹) 조회. 미일치 시 404."""
+    result = await auth_service.find_id(request)
+    return Response(content=result.model_dump(mode="json"), status_code=status.HTTP_200_OK)
 
 
 @auth_router.post("/login", response_model=LoginResponse, status_code=status.HTTP_200_OK)

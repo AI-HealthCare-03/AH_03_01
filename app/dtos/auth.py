@@ -20,6 +20,16 @@ class SignUpRequest(BaseModel):
     phone_number: Annotated[str, AfterValidator(validate_phone_number)]
 
 
+class FindIdRequest(BaseModel):
+    name: Annotated[str, Field(max_length=20)]
+    phone_number: Annotated[str, AfterValidator(validate_phone_number)]
+
+
+class FindIdResponse(BaseModel):
+    masked_email: str
+    created_at: date
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: Annotated[str, Field(min_length=8)]
