@@ -37,7 +37,7 @@ envs/.local.env
 # Virtual Environment
 venv/
 .venv/
-.venv-ragas/
+
 
 # GitHub
 # .github/ 차단 제거 — CI 워크플로우는 트래킹 필요.
