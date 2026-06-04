@@ -24,3 +24,5 @@ tavily-python
 # RAGAS 평가
 ragas==0.2.6
 datasets
+
+tortoise-orm
