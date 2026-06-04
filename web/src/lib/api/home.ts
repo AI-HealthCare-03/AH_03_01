@@ -35,15 +35,28 @@ export async function fetchMyPet(): Promise<MyPet | null> {
   }
 }
 
-/** 진행 중 챌린지 목록 */
+/** 진행 중 챌린지 목록 (ACTIVE + RECRUITING 모두 포함) */
 export async function fetchMyActiveChallenges(
   size = 5
 ): Promise<ChallengeListResponse> {
-  const { data } = await apiClient.get<ChallengeListResponse>(
-    "/api/v1/challenges",
-    { params: { mine: true, status: "ACTIVE", size } }
-  );
-  return data;
+  const [activeRes, recruitingRes] = await Promise.all([
+    apiClient.get<ChallengeListResponse>("/api/v1/challenges", {
+      params: { mine: true, status: "ACTIVE", size },
+    }),
+    apiClient.get<ChallengeListResponse>("/api/v1/challenges", {
+      params: { mine: true, status: "RECRUITING", size },
+    }),
+  ]);
+  const items = [
+    ...activeRes.data.items,
+    ...recruitingRes.data.items,
+  ].slice(0, size);
+  return {
+    items,
+    total: activeRes.data.total + recruitingRes.data.total,
+    page: 1,
+    size,
+  };
 }
 
 /** 최신 예측 결과 목록 */
