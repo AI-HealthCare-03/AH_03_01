@@ -139,7 +139,7 @@ class ChallengeService:
         if challenge.creator_id == user.id:
             return challenge
         participation = await self.participant_repo.get_by_user(challenge_id, user.id)
-        if participation is None or participation.status != ParticipantStatus.APPROVED:
+        if participation is None or participation.status not in {ParticipantStatus.APPROVED, ParticipantStatus.PENDING}:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="접근 권한이 없습니다.")
         return challenge
 
