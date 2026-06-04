@@ -130,3 +130,4 @@ pets-*.png
 # 로컬 미디어 업로드 디렉터리 + verify 스크린샷
 .media/
 verify-*.png
+ai_worker/rag/output/
