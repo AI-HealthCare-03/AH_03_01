@@ -36,7 +36,7 @@ class EmailVerificationService:
 
         link = f"{config.FRONTEND_BASE_URL}/verify-email?token={token}"
         body = f"아래 링크를 클릭하면 이메일 본인 인증이 완료됩니다.\n\n{link}\n\n링크는 10분간 유효합니다."
-        await send_email(email, "[헬스케어] 이메일 본인 인증", body)
+        await send_email(email, "[케어로그] 이메일 본인 인증", body)
 
     async def verify(self, token: str) -> str:
         """토큰을 검증하고 해당 이메일을 인증 완료 처리한다. 토큰은 1회용."""
