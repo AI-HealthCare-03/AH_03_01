@@ -713,7 +713,7 @@ async def retrieve_node(state: ChatState) -> dict[str, Any]:
                     disease=diseases if diseases else None,
                 )
                 for chunk in result.chunks:
-                    chunk_id = getattr(chunk, "section_id", str(chunk))
+                    chunk_id = chunk.metadata.get("section_id") or str(chunk.document_id)
                     if chunk_id not in seen_ids:
                         seen_ids.add(chunk_id)
                         all_chunks.append(chunk)
@@ -853,7 +853,8 @@ async def generate_node(state: ChatState) -> dict[str, Any]:
         f"{health_block}"
         f"컨텍스트:\n{context}\n\n"
         f"위 정보(사용자 건강 정보가 있다면 그것 포함)를 사용해 한국어로 답변하세요. "
-        f"컨텍스트에 답이 없으면 솔직히 모른다고 말하고 의료 전문가와 상담을 권하세요."
+        f"컨텍스트에 관련 원칙이나 정보가 있으면 이를 바탕으로 유추해서 답변하세요. "
+        f"컨텍스트와 전혀 무관한 내용만 없으면 솔직히 모른다고 말하고 의료 전문가와 상담을 권하세요."
         f"{feedback_hint}"
     )
 
