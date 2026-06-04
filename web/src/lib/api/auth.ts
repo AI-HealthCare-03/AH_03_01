@@ -81,6 +81,26 @@ export async function findId(
 }
 
 /**
+ * 이메일 본인 인증 메일 발송
+ * POST /api/v1/auth/email/send-verification
+ */
+export async function sendEmailVerification(email: string): Promise<void> {
+  await apiClient.post("/api/v1/auth/email/send-verification", { email });
+}
+
+/**
+ * 이메일 인증 완료 여부 조회
+ * GET /api/v1/auth/email/verification-status?email=...
+ */
+export async function checkEmailVerified(email: string): Promise<boolean> {
+  const res = await apiClient.get<{ email: string; verified: boolean }>(
+    "/api/v1/auth/email/verification-status",
+    { params: { email } }
+  );
+  return res.data.verified;
+}
+
+/**
  * 비밀번호 재설정 메일 발송
  * TODO(backend): /api/v1/auth/reset-password 엔드포인트 추가 필요
  */
