@@ -348,7 +348,11 @@ true 면 retrieve 가 의료 진료지침과 함께 CHALLENGE_CATALOG 도 함께
   예: "LDL 95, TG 650이면 어떻게 해석하나요?" → false
   예: "공복혈당 185 mg/dL인데 당뇨인가요?" → false
   예: "HbA1c 7.1%, 혈압 130/85이면?" → false
+  예: "LDL 145, HDL 48, TG 380 mg/dL이면 어떻게 해석하나요?" → false
+  예: "혈압이 138/88 mmHg인데 어느 단계인가요?" → false
+  예: "HDL 35 mg/dL인데 위험한가요?" → false
   단, "내 LDL이 95인데" 처럼 1인칭 + DB 조회 의도가 명확하면 true 유지.
+  단, "나이가 있는 여성인데 LDL이 145인데" 처럼 3인칭 환자 설명 형태도 false.
 
 같은 주제도 1인칭이 붙으면 true 로 전환:
 - "고혈압 식단" → false / "내 고혈압 식단" → true
@@ -359,6 +363,8 @@ true 면 retrieve 가 의료 진료지침과 함께 CHALLENGE_CATALOG 도 함께
 - "당뇨가 있는데 OO 해도 되나요?" → false (안전 여부·가능 여부 일반 질문)
 - "고혈압인데 OO 먹어도 되나요?" → false (일반 식이 정보)
 - "당뇨 환자인데 OO 운동은?" → false (일반 운동 정보)
+- "당뇨 환자가 OO 먹어도 되나요?" → false (질환 환자 일반 식이 질문)
+- "고혈압 환자가 OO 해도 되나요?" → false (질환 환자 일반 생활 질문)
 - 본인 수치/상태 평가가 아니라 "OO 질환 환자에게 일반적으로 가능한지" 묻는 경우
 
 == missing_fields ==
@@ -639,8 +645,19 @@ def _intent_to_source_type(intent: IntentLiteral) -> SourceType:
 
 # ── Query Decomposition: 약물+식품 조합 질문 분해 ──────────────────────────
 # "OO약 복용 중인데 OO 먹어도 되나요?" 패턴 감지
+# 약물+식품 또는 질환+식품 조합 질문 패턴
 _DRUG_FOOD_PATTERN = re.compile(
-    r"(복용|투약|먹고\s*있|사용\s*중|처방).{0,20}(먹어도|섭취|마셔도|먹을\s*수|괜찮|안전)",
+    r"(복용|투약|먹고\s*있|사용\s*중|처방).{0,20}(먹어도|섭취|마셔도|먹을\s*수|괜찮|안전)"
+    r"|(당뇨|고혈압|이상지질혈증|당뇨병).{0,10}(환자|있는데|있는\s*사람).{0,20}(먹어도|섭취|마셔도|먹을\s*수|괜찮|안전)",
+    re.DOTALL,
+)
+
+# Multi-hop 복합 질문 패턴 — 두 가지 이상의 주제가 결합된 질문
+_MULTI_HOP_PATTERN = re.compile(
+    r"(노인|고령|70대|80대).{0,30}(당뇨|혈당|고혈압|혈압|콜레스테롤)"
+    r"|(당뇨|고혈압|이상지질혈증).{0,20}(합병증|신장|망막|신경|알부민뇨)"
+    r"|(SGLT|메트포르민|인슐린|스타틴).{0,30}(신장|간|심장|안전)"
+    r"|(혈압|혈당|콜레스테롤).{0,20}목표.{0,20}(약|치료|선택)",
     re.DOTALL,
 )
 
@@ -648,32 +665,45 @@ _DECOMPOSE_PROMPT = """다음 질문을 RAG 검색에 최적화된 2개의 독�
 JSON 배열로만 응답하세요. 다른 텍스트 절대 포함 금지.
 
 질문: {question}
+유형: {query_type}
 
-규칙:
-- 쿼리 1: 약물/치료 관련 핵심 검색어 (약물 카테고리, 주의사항, 혈당/혈압 영향)
-- 쿼리 2: 식이/영양 관련 핵심 검색어 (식품 성분, 질환별 식이 권고)
-- 각 쿼리는 20자 이내 핵심 키워드로
+규칙 (유형별):
+[drug_food] 약물+식품 또는 질환+식품 조합:
+- 쿼리 1: 약물 카테고리 주의사항 또는 질환 관리 원칙
+- 쿼리 2: 질환별 식이 권고 또는 영양소 관련 원칙
 
-예시 입력: "인슐린 복용 중 바나나 먹어도 되나요?"
-예시 출력: ["인슐린 혈당 식이 주의사항", "당뇨 과일 혈당 식이요법"]
+[multi_hop] 복합/심층 질문:
+- 쿼리 1: 첫 번째 핵심 주제 (질환·상황·대상)
+- 쿼리 2: 두 번째 핵심 주제 (치료·목표·합병증)
 
-예시 입력: "암로디핀 복용 중 자몽 먹어도 되나요?"
-예시 출력: ["칼슘통로차단제 식이 주의사항", "고혈압 과일 식이 권고"]"""
+각 쿼리는 20자 이내 핵심 키워드로.
+
+예시:
+"인슐린 복용 중 바나나 먹어도 되나요?" [drug_food]
+→ ["인슐린 혈당 식이 주의사항", "당뇨 과일 혈당 식이요법"]
+
+"노인 당뇨 환자 혈당 목표는 어떻게 다른가요?" [multi_hop]
+→ ["노인 당뇨 혈당조절 목표", "고령 당뇨 저혈당 위험"]
+
+"알부민뇨 발견 시 혈압 목표와 약제 선택" [multi_hop]
+→ ["당뇨 신장질환 혈압 목표", "만성콩팥병 항고혈압제 선택"]"""
 
 
-async def _decompose_query(question: str) -> list[str]:
-    """약물+식품 질문을 2개 검색 쿼리로 분해. 실패 시 원본 질문 단일 리스트 반환."""
+async def _decompose_query(question: str, query_type: str = "drug_food") -> list[str]:
+    """질문을 2개 검색 쿼리로 분해. 실패 시 원본 질문 단일 리스트 반환."""
     try:
         response = await _get_client().chat.completions.create(
             model=config.OPENAI_CHAT_MODEL,
-            messages=[{"role": "user", "content": _DECOMPOSE_PROMPT.format(question=question)}],
+            messages=[{"role": "user", "content": _DECOMPOSE_PROMPT.format(
+                question=question, query_type=query_type
+            )}],
             temperature=0,
             max_tokens=100,
         )
         text = response.choices[0].message.content.strip()
         queries = json.loads(text)
         if isinstance(queries, list) and len(queries) >= 2:
-            _logger.info("query decomposition 성공: %s → %s", question[:30], queries)
+            _logger.info("query decomposition[%s] 성공: %s → %s", query_type, question[:30], queries)
             return queries[:2]
     except Exception as e:  # noqa: BLE001
         _logger.warning("query decomposition 실패, 원본 쿼리 사용: %s", _safe_err_repr(e))
@@ -697,18 +727,21 @@ async def retrieve_node(state: ChatState) -> dict[str, Any]:
     # medical 영역은 4측면(목표·생활요법·약물·추적) 동시 커버를 위해 broader top_k.
     top_k = RETRIEVE_TOP_K_MEDICAL if intent == "medical_inquiry" else RETRIEVE_TOP_K
 
-    # ── Query Decomposition: 약물+식품 조합 질문 감지 시 쿼리 분해 후 병합 ──
-    is_drug_food = bool(_DRUG_FOOD_PATTERN.search(state["original_question"]))
+    # ── Query Decomposition: 약물+식품 / 복합 질문 감지 시 쿼리 분해 후 병합 ──
+    original = state["original_question"]
+    is_drug_food = bool(_DRUG_FOOD_PATTERN.search(original))
+    is_multi_hop = bool(_MULTI_HOP_PATTERN.search(original)) and not is_drug_food
 
     try:
-        if is_drug_food:
-            sub_queries = await _decompose_query(state["original_question"])
+        if is_drug_food or is_multi_hop:
+            query_type = "drug_food" if is_drug_food else "multi_hop"
+            sub_queries = await _decompose_query(original, query_type)
             all_chunks: list[Any] = []
             seen_ids: set[str] = set()
             for sub_query in sub_queries:
                 result = await retrieve(
                     query=sub_query,
-                    top_k=top_k // 2,  # 각 쿼리당 절반씩 → 합산 시 top_k 수준
+                    top_k=top_k // 2,
                     source_type=source_type,
                     disease=diseases if diseases else None,
                 )
@@ -853,8 +886,7 @@ async def generate_node(state: ChatState) -> dict[str, Any]:
         f"{health_block}"
         f"컨텍스트:\n{context}\n\n"
         f"위 정보(사용자 건강 정보가 있다면 그것 포함)를 사용해 한국어로 답변하세요. "
-        f"컨텍스트에 관련 원칙이나 정보가 있으면 이를 바탕으로 유추해서 답변하세요. "
-        f"컨텍스트와 전혀 무관한 내용만 없으면 솔직히 모른다고 말하고 의료 전문가와 상담을 권하세요."
+        f"컨텍스트에 답이 없으면 솔직히 모른다고 말하고 의료 전문가와 상담을 권하세요."
         f"{feedback_hint}"
     )
 
