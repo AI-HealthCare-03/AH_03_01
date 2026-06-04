@@ -66,13 +66,18 @@ export async function checkNicknameAvailable(
 
 /**
  * 아이디 찾기
- * TODO(backend): /api/v1/auth/find-id 엔드포인트 추가 필요
+ * POST /api/v1/auth/find-id
+ * 이메일은 서버에서 마스킹되어 반환됨 (j*****3@gmail.com)
  */
 export async function findId(
-  _name: string,
-  _phone_number: string
-): Promise<{ email: string; created_at: string }> {
-  throw new Error("TODO(backend): /api/v1/auth/find-id 엔드포인트 추가 필요");
+  name: string,
+  phone_number: string
+): Promise<{ maskedEmail: string; createdAt: string }> {
+  const res = await apiClient.post<{ masked_email: string; created_at: string }>(
+    "/api/v1/auth/find-id",
+    { name, phone_number }
+  );
+  return { maskedEmail: res.data.masked_email, createdAt: res.data.created_at };
 }
 
 /**

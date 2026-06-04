@@ -9,6 +9,7 @@ import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { forgotIdSchema, type ForgotIdFormValues, formatPhoneNumber } from "@/lib/validators";
+import { findId } from "@/lib/api/auth";
 import { ROUTES } from "@/constants";
 
 /* =========================================
@@ -35,27 +36,10 @@ export default function ForgotIdPage() {
     defaultValues: { name: "", phone_number: "" },
   });
 
-  /** 이메일 마스킹: j*********4@gmail.com */
-  function maskEmail(email: string): string {
-    const [local, domain] = email.split("@");
-    if (!local || !domain) return email;
-    if (local.length <= 2) return `${local[0]}*@${domain}`;
-    const masked =
-      local[0] + "*".repeat(local.length - 2) + local[local.length - 1];
-    return `${masked}@${domain}`;
-  }
-
-  const onSubmit = async () => {
+  const onSubmit = async (data: ForgotIdFormValues) => {
     try {
-      // TODO(backend): /api/v1/auth/find-id 엔드포인트 추가 필요
-      // const res = await findId(data.name, data.phone_number);
-
-      /* mock 응답 */
-      showToast("아이디 찾기는 백엔드 추가 예정입니다", "info");
-      setResult({
-        maskedEmail: maskEmail("jkh3043@gmail.com"),
-        createdAt: "2024-03-12",
-      });
+      const res = await findId(data.name, data.phone_number);
+      setResult({ maskedEmail: res.maskedEmail, createdAt: res.createdAt });
     } catch {
       showToast("일치하는 계정을 찾을 수 없습니다", "error");
     }

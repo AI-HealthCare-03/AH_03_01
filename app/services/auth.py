@@ -6,7 +6,7 @@ from tortoise.transactions import in_transaction
 from app.core.jwt.tokens import AccessToken, RefreshToken
 from app.core.utils.common import normalize_phone_number
 from app.core.utils.security import hash_password, verify_password
-from app.dtos.auth import LoginRequest, SignUpRequest
+from app.dtos.auth import FindIdRequest, FindIdResponse, LoginRequest, SignUpRequest
 from app.models.users import User
 from app.repositories.user_repository import UserRepository
 from app.services.jwt import JwtService
@@ -64,6 +64,28 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="비활성화된 계정입니다.")
 
         return user
+
+    async def find_id(self, data: FindIdRequest) -> FindIdResponse:
+        # 가입 시 노말라이즈된 형태로 저장되므로 동일하게 정규화 후 조회
+        normalized_phone_number = normalize_phone_number(data.phone_number)
+        user = await self.user_repo.get_user_by_name_and_phone(data.name, normalized_phone_number)
+
+        # 계정 열거(account enumeration) 방어: 미일치 시 동일한 404 응답
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="일치하는 계정을 찾을 수 없습니다.")
+
+        return FindIdResponse(masked_email=self._mask_email(user.email), created_at=user.created_at.date())
+
+    @staticmethod
+    def _mask_email(email: str) -> str:
+        """이메일 로컬파트를 처음/끝 1글자만 남기고 마스킹. 예: jkh3043@gmail.com -> j*****3@gmail.com"""
+        local, _, domain = email.partition("@")
+        if not domain:
+            return email
+        if len(local) <= 2:
+            return f"{local[0]}*@{domain}"
+        masked = local[0] + "*" * (len(local) - 2) + local[-1]
+        return f"{masked}@{domain}"
 
     async def login(self, user: User) -> dict[str, AccessToken | RefreshToken]:
         await self.user_repo.update_last_login(user.id)
