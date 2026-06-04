@@ -61,3 +61,15 @@ class Config(BaseSettings):
     # 그래프 노드가 fallback 으로 흡수하므로 SDK 재시도는 짧게(1).
     OPENAI_REQUEST_TIMEOUT: float = 20.0
     OPENAI_MAX_RETRIES: int = 1
+
+    # 이메일 발송 (SMTP) — 본인 인증 메일 등.
+    # SMTP_HOST/SMTP_USER 가 비어 있으면 실발송 대신 인증 링크를 콘솔(로그)에 출력한다.
+    # 포트 465=implicit TLS(권장, RFC 8314), 587=STARTTLS. send_email 이 포트로 자동 분기.
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 465
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_TIMEOUT: float = 10.0
+    # 인증 링크에 사용할 프론트엔드 베이스 URL (예: http://localhost:3000)
+    FRONTEND_BASE_URL: str = "http://localhost:3000"
