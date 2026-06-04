@@ -126,15 +126,15 @@ def build_embedding_text(block: str) -> str:
     """팀원과 동일하게 Content + RAG요약 + 키워드 를 합쳐 임베딩 입력 텍스트로 만든다."""
     parts: list[str] = []
 
-    content_match = re.search(r"### Content\s*\n(.*?)(?=### |\Z)", block, re.DOTALL)
+    content_match = re.search(r"### Content\s*\n(.*?)(?=^### |\Z)", block, re.DOTALL | re.MULTILINE)
     if content_match:
         parts.append(content_match.group(1).strip())
 
-    rag_match = re.search(r"#{3,5}.*?RAG 검색용 요약.*?\n(.*?)(?=#{3,5}|\Z)", block, re.DOTALL)
+    rag_match = re.search(r"^#{3,5}.*?RAG 검색용 요약.*?\n(.*?)(?=^#{3,5}|\Z)", block, re.DOTALL | re.MULTILINE)
     if rag_match:
         parts.append("[RAG요약] " + rag_match.group(1).strip())
 
-    kw_match = re.search(r"#{3,5}.*?검색 키워드.*?\n(.*?)(?=#{3,5}|\Z)", block, re.DOTALL)
+    kw_match = re.search(r"^#{3,5}.*?검색 키워드.*?\n(.*?)(?=^#{3,5}|\Z)", block, re.DOTALL | re.MULTILINE)
     if kw_match:
         keywords = [
             line.strip().lstrip("- ").strip()
