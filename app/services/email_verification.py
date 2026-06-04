@@ -55,3 +55,7 @@ class EmailVerificationService:
     async def is_verified(self, email: str) -> bool:
         """이메일이 인증 완료 상태인지 여부. (가입 게이트 / 완료 확인 버튼에서 사용)"""
         return bool(await _client().exists(_VERIFIED_KEY.format(email=email)))
+
+    async def consume(self, email: str) -> None:
+        """가입 완료 후 인증 완료 플래그를 제거한다. (1회용 — 재사용 방지)"""
+        await _client().delete(_VERIFIED_KEY.format(email=email))
