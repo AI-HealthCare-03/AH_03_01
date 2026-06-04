@@ -82,6 +82,255 @@ SEC_HEADER = re.compile(
 #  최소 변경 원칙상 OTHER + metadata + source 로 우회.)
 SERVICE_GUIDE_SOURCES = {"GUIDE", "CHALLENGE_CATALOG"}
 
+# scripts/rag/index_documents.py 에 추가할 TOPIC_MAPPING
+# topic 값: diagnosis / medication / lifestyle / complication / risk / monitoring / service
+
+TOPIC_MAPPING: dict[str, list[str]] = {
+
+    # ══════════════════════════════════════════════════════
+    # DM2025 — 2025 당뇨병 진료지침
+    # ══════════════════════════════════════════════════════
+    "DM2025_SEC_0003": ["diagnosis"],                          # Chapter 1. 당뇨병 분류 및 진단검사
+    "DM2025_SEC_0004": ["diagnosis"],                          # 1-1. 당뇨병 진단 및 분류
+    "DM2025_SEC_0005": ["diagnosis"],                          # 1-2. 당뇨병 선별검사
+    "DM2025_SEC_0006": ["diagnosis"],                          # 1-3. 임신당뇨병 선별과 진단
+    "DM2025_SEC_0007": ["lifestyle"],                          # Chapter 2. 2형당뇨병의 예방
+    "DM2025_SEC_0008": ["monitoring"],                         # Chapter 3. 혈당조절 목표 및 저혈당 평가
+    "DM2025_SEC_0009": ["monitoring"],                         # 3-1. 혈당조절 목표
+    "DM2025_SEC_0010": ["monitoring", "medication"],           # 3-2. 저혈당 평가
+    "DM2025_SEC_0011": ["monitoring"],                         # Chapter 4. 혈당조절의 모니터링
+    "DM2025_SEC_0012": ["monitoring"],                         # 4-1. 혈당조절의 모니터링 및 평가
+    "DM2025_SEC_0013": ["monitoring"],                         # 4-2. 연속혈당측정
+    "DM2025_SEC_0015": ["lifestyle"],                          # 5-1. 당뇨병 자기관리
+    "DM2025_SEC_0016": ["lifestyle", "medication"],            # 5-2. 저혈당관리
+    "DM2025_SEC_0017": ["lifestyle"],                          # 5-3. 의학영양요법
+    "DM2025_SEC_0018": ["lifestyle"],                          # 5-4. 운동요법
+    "DM2025_SEC_0019": ["medication"],                         # Chapter 6. 당뇨병 약물치료
+    "DM2025_SEC_0020": ["medication"],                         # 6-1. 1형당뇨병의 약물치료
+    "DM2025_SEC_0021": ["medication"],                         # 6-2. 2형당뇨병의 약물치료
+    "DM2025_SEC_0022": ["risk", "complication"],               # Chapter 7. 심혈관질환 위험관리
+    "DM2025_SEC_0023": ["medication", "complication"],         # 7-1. 고혈압관리
+    "DM2025_SEC_0024": ["medication", "complication"],         # 7-2. 지질관리
+    "DM2025_SEC_0025": ["medication", "complication"],         # 7-3. 항혈소판제 사용
+    "DM2025_SEC_0026": ["complication"],                       # Chapter 8. 당뇨병합병증관리
+    "DM2025_SEC_0027": ["complication"],                       # 8-1. 당뇨병신장질환
+    "DM2025_SEC_0028": ["complication"],                       # 8-2. 당뇨병신경병증 및 발관리
+    "DM2025_SEC_0029": ["complication"],                       # 8-3. 당뇨병망막병증
+    "DM2025_SEC_0030": ["complication", "medication"],         # 8-4. 당뇨병케토산증
+    "DM2025_SEC_0031": ["complication", "lifestyle"],          # Chapter 9. 동반 대사질환관리
+    "DM2025_SEC_0032": ["lifestyle", "complication"],          # 9-1. 비만 관리
+    "DM2025_SEC_0033": ["complication"],                       # 9-2. 대사이상지방간질환
+    "DM2025_SEC_0034": ["diagnosis", "medication"],            # Chapter 10. 소아청소년 당뇨병
+    "DM2025_SEC_0035": ["medication", "lifestyle"],            # Chapter 11. 노인 당뇨병관리
+    "DM2025_SEC_0036": ["medication"],                         # Chapter 12. 특수 상황
+    "DM2025_SEC_0037": ["medication", "monitoring"],           # 12-1. 입원 및 중증질환 혈당관리
+    "DM2025_SEC_0038": ["diagnosis", "medication"],            # 12-2. 당뇨병과 임신
+    "DM2025_SEC_0039": ["lifestyle"],                          # 12-3. 백신접종
+    "DM2025_FIG_001": ["diagnosis"],
+    "DM2025_FIG_002": ["diagnosis"],
+    "DM2025_FIG_003": ["diagnosis"],
+    "DM2025_FIG_004": ["lifestyle", "monitoring"],
+    "DM2025_FIG_006": ["medication"],
+    "DM2025_FIG_007": ["medication"],
+    "DM2025_FIG_008": ["medication"],
+    "DM2025_FIG_009": ["medication"],
+    "DM2025_FIG_010": ["medication", "complication"],
+    "DM2025_FIG_011": ["complication"],
+    "DM2025_FIG_012": ["complication"],
+    "DM2025_FIG_013": ["complication"],
+    "DM2025_FIG_014": ["complication"],
+    "DM2025_FIG_015": ["complication"],
+    "DM2025_FIG_016": ["complication", "medication"],
+
+    # ══════════════════════════════════════════════════════
+    # KSH2026 — 2026 고혈압 진료지침
+    # ══════════════════════════════════════════════════════
+    "KSH2026_SEC_0006": ["diagnosis"],                         # 1. 고혈압의 정의와 혈압의 분류
+    "KSH2026_SEC_0007": ["risk"],                              # 2. 고혈압의 중요성
+    "KSH2026_SEC_0008": ["risk"],                              # 3. 고혈압의 유병률
+    "KSH2026_SEC_0009": ["monitoring"],                        # 4. 고혈압의 관리 현황
+    "KSH2026_SEC_0010": ["lifestyle"],                         # 5. 소금 섭취와 고혈압
+    "KSH2026_SEC_0011": ["risk", "lifestyle"],                 # 6. 대사증후군, 비만과 고혈압
+    "KSH2026_SEC_0012": ["risk"],                              # 7. 심혈관질환 위험 점수
+    "KSH2026_SEC_0013": ["diagnosis", "monitoring"],           # 8. 고혈압의 진단과 혈압 측정
+    "KSH2026_SEC_0014": ["diagnosis"],                         # 8.1. 선별 검사와 진단
+    "KSH2026_SEC_0015": ["diagnosis"],                         # 8.1.1. 선별 검사
+    "KSH2026_SEC_0016": ["diagnosis"],                         # 8.1.2. 진단
+    "KSH2026_SEC_0017": ["monitoring"],                        # 8.2. 혈압 측정 기기
+    "KSH2026_SEC_0018": ["monitoring"],                        # 8.2.1. 혈압 측정 기기
+    "KSH2026_SEC_0019": ["monitoring"],                        # 8.2.1.1. 커프형 혈압계
+    "KSH2026_SEC_0020": ["monitoring"],                        # 8.2.1.2. 커프리스 혈압계
+    "KSH2026_SEC_0021": ["monitoring"],                        # 8.2.2. 혈압계 검증
+    "KSH2026_SEC_0022": ["monitoring"],                        # 8.3. 진료실혈압 측정
+    "KSH2026_SEC_0023": ["monitoring"],                        # 8.3.1. 표준 혈압 측정법
+    "KSH2026_SEC_0024": ["monitoring"],                        # 8.3.2. 특별 상황 혈압 측정
+    "KSH2026_SEC_0025": ["monitoring"],                        # 8.3.2.1. 심방세동 혈압 측정
+    "KSH2026_SEC_0026": ["monitoring", "diagnosis"],           # 8.3.2.2. 기립성 저혈압
+    "KSH2026_SEC_0027": ["monitoring"],                        # 8.3.2.3. 임산부 혈압 측정
+    "KSH2026_SEC_0028": ["monitoring"],                        # 8.3.3. 진료실자동혈압
+    "KSH2026_SEC_0029": ["monitoring"],                        # 8.4. 진료실 밖 혈압 측정
+    "KSH2026_SEC_0030": ["monitoring"],                        # 8.4.1. 활동혈압 측정
+    "KSH2026_SEC_0031": ["monitoring"],                        # 8.4.2. 가정혈압 측정
+    "KSH2026_SEC_0032": ["monitoring"],                        # 8.4.3. 활동/가정혈압 비교
+    "KSH2026_SEC_0033": ["monitoring"],                        # 8.4.4. Dipping 패턴
+    "KSH2026_SEC_0034": ["monitoring"],                        # 8.4.5. 혈압 변동성
+    "KSH2026_SEC_0035": ["monitoring"],                        # 8.5. 중심동맥압 측정
+    "KSH2026_SEC_0036": ["diagnosis", "monitoring"],           # 8.6. 고혈압 진단 기준
+    "KSH2026_SEC_0037": ["diagnosis"],                         # 9. 환자의 평가
+    "KSH2026_SEC_0038": ["diagnosis"],                         # 9.1. 증상 및 징후
+    "KSH2026_SEC_0039": ["diagnosis"],                         # 9.2. 병력
+    "KSH2026_SEC_0040": ["diagnosis"],                         # 9.3. 진찰
+    "KSH2026_SEC_0041": ["diagnosis", "monitoring"],           # 9.4. 검사
+    "KSH2026_SEC_0042": ["risk"],                              # 9.5. 심뇌혈관질환 위험인자
+    "KSH2026_SEC_0043": ["risk"],                              # 9.6. 위험도 분류
+    "KSH2026_SEC_0044": ["diagnosis"],                         # 9.7. 이차성 고혈압
+    "KSH2026_SEC_0045": ["diagnosis"],                         # 9.7.1. 일차성 알도스테론증
+    "KSH2026_SEC_0046": ["diagnosis"],                         # 9.7.2. 신동맥협착증
+    "KSH2026_SEC_0047": ["diagnosis"],                         # 9.7.3. 기타
+    "KSH2026_SEC_0048": ["medication"],                        # 10. 고혈압의 치료
+    "KSH2026_SEC_0049": ["medication"],                        # 10.1. 치료 계획
+    "KSH2026_SEC_0050": ["medication", "diagnosis"],           # 10.2. 치료 시작 혈압
+    "KSH2026_SEC_0051": ["medication"],                        # 10.2.1. 고혈압 전단계
+    "KSH2026_SEC_0052": ["medication"],                        # 10.2.2. 1기 고혈압
+    "KSH2026_SEC_0053": ["medication"],                        # 10.2.3. 2기 고혈압
+    "KSH2026_SEC_0054": ["medication"],                        # 10.2.4. 노인 고혈압
+    "KSH2026_SEC_0055": ["medication", "monitoring"],          # 10.3. 목표혈압
+    "KSH2026_SEC_0056": ["medication"],                        # 10.3.1. 노인 고혈압
+    "KSH2026_SEC_0057": ["medication", "complication"],        # 10.3.2. 당뇨병 동반 고혈압
+    "KSH2026_SEC_0058": ["medication", "complication"],        # 10.3.3. 뇌졸중 동반 고혈압
+    "KSH2026_SEC_0059": ["medication", "complication"],        # 10.3.4. 만성콩팥병 동반 고혈압
+    "KSH2026_SEC_0060": ["medication"],                        # 10.3.5. 치료 혈압 하한치
+    "KSH2026_SEC_0061": ["medication", "monitoring"],          # 10.3.6. 측정 방식별 목표혈압
+    "KSH2026_SEC_0062": ["lifestyle"],                         # 11. 비약물치료 및 생활요법
+    "KSH2026_SEC_0063": ["lifestyle"],                         # 11.1. 체중 조절
+    "KSH2026_SEC_0064": ["lifestyle"],                         # 11.2. 소금 섭취 제한
+    "KSH2026_SEC_0065": ["lifestyle"],                         # 11.3. 절주
+    "KSH2026_SEC_0066": ["lifestyle"],                         # 11.4. 운동
+    "KSH2026_SEC_0067": ["lifestyle"],                         # 11.5. 금연
+    "KSH2026_SEC_0068": ["lifestyle"],                         # 11.6. 건강한 식사요법
+    "KSH2026_SEC_0069": ["lifestyle"],                         # 11.7. 마음 요법
+    "KSH2026_SEC_0070": ["medication"],                        # 12. 약물 치료
+    "KSH2026_SEC_0071": ["medication"],                        # 12.1. 고혈압약 처방 원칙
+    "KSH2026_SEC_0072": ["medication"],                        # 12.1.1. 고혈압약 선택 원칙
+    "KSH2026_SEC_0073": ["medication"],                        # 12.1.2. 고혈압약 선택
+    "KSH2026_SEC_0074": ["medication"],                        # 12.2. 고혈압약 종류와 사용법
+    "KSH2026_SEC_0075": ["medication"],                        # 12.2.1. 이뇨제
+    "KSH2026_SEC_0076": ["medication"],                        # 12.2.2. 베타차단제
+    "KSH2026_SEC_0077": ["medication"],                        # 12.2.3. 칼슘통로차단제
+    "KSH2026_SEC_0078": ["medication"],                        # 12.2.4. 레닌-안지오텐신계 억제제
+    "KSH2026_SEC_0079": ["medication"],                        # 12.2.5. ARNi
+    "KSH2026_SEC_0080": ["medication"],                        # 12.2.6. 기타 약물
+    "KSH2026_SEC_0081": ["medication"],                        # 12.3. 병용요법
+    "KSH2026_SEC_0082": ["medication"],                        # 12.3.1. 단일제형복합요법
+    "KSH2026_SEC_0083": ["medication"],                        # 12.4. 난치성 고혈압
+    "KSH2026_SEC_0084": ["medication"],                        # 12.5. 콩팥교감신경차단술
+    "KSH2026_SEC_0085": ["medication"],                        # 12.6. 고혈압약 감량/중단
+    "KSH2026_SEC_0086": ["medication"],                        # 12.7. 기타 약물치료
+    "KSH2026_SEC_0087": ["medication"],                        # 12.7.1. 항혈소판 요법
+    "KSH2026_SEC_0088": ["medication"],                        # 12.7.2. 지질강하제
+    "KSH2026_SEC_0089": ["medication", "monitoring"],          # 12.7.3. 혈당 조절
+    "KSH2026_SEC_0090": ["monitoring"],                        # 12.8. 환자 모니터링
+    "KSH2026_SEC_0091": ["medication"],                        # 12.9. 치료 지속성
+    "KSH2026_SEC_0092": ["medication"],                        # 13. 상황별 고혈압 치료
+    "KSH2026_SEC_0093": ["diagnosis", "monitoring"],           # 13.1. 백의고혈압/가면고혈압
+    "KSH2026_SEC_0094": ["diagnosis"],                         # 13.1.1. 정의
+    "KSH2026_SEC_0095": ["diagnosis", "medication"],           # 13.1.2. 백의고혈압
+    "KSH2026_SEC_0096": ["diagnosis", "medication"],           # 13.1.3. 가면고혈압
+    "KSH2026_SEC_0097": ["monitoring", "medication"],          # 13.2. 야간고혈압/아침고혈압
+    "KSH2026_SEC_0098": ["risk", "medication"],                # 13.3. 대사증후군과 고혈압
+    "KSH2026_SEC_0099": ["lifestyle", "medication"],           # 13.4. 비만과 고혈압
+    "KSH2026_SEC_0100": ["medication", "complication"],        # 13.5. 당뇨병과 고혈압
+    "KSH2026_SEC_0101": ["medication"],                        # 13.6. 노인 고혈압
+    "KSH2026_SEC_0102": ["medication"],                        # 13.7. 젊은 연령 고혈압
+    "KSH2026_SEC_0103": ["medication", "complication"],        # 13.8. 심장질환과 고혈압
+    "KSH2026_SEC_0104": ["medication", "complication"],        # 13.8.1. 관상동맥질환
+    "KSH2026_SEC_0105": ["medication", "complication"],        # 13.8.2. 심부전
+    "KSH2026_SEC_0106": ["medication", "complication"],        # 13.8.3. 심방세동
+    "KSH2026_SEC_0107": ["medication", "complication"],        # 13.8.4. 판막질환
+    "KSH2026_SEC_0108": ["medication", "complication"],        # 13.8.4.1. 대동맥판 협착
+    "KSH2026_SEC_0109": ["medication", "complication"],        # 13.8.4.2. 대동맥판 역류
+    "KSH2026_SEC_0110": ["medication", "complication"],        # 13.8.4.3. 승모판 역류
+    "KSH2026_SEC_0111": ["complication"],                      # 13.9. 혈관질환과 고혈압
+    "KSH2026_SEC_0112": ["complication"],                      # 13.9.1. 경동맥 죽상동맥경화증
+    "KSH2026_SEC_0113": ["complication"],                      # 13.9.2. 동맥경화증
+    "KSH2026_SEC_0114": ["complication"],                      # 13.9.3. 말초혈관질환
+    "KSH2026_SEC_0115": ["complication"],                      # 13.9.4. 대동맥 질환
+    "KSH2026_SEC_0116": ["medication", "complication"],        # 13.10. 만성콩팥병과 고혈압
+    "KSH2026_SEC_0117": ["complication", "medication"],        # 13.11. 뇌혈관질환과 고혈압
+    "KSH2026_SEC_0118": ["medication", "complication"],        # 13.11.1. 급성기 허혈성 뇌졸중
+    "KSH2026_SEC_0119": ["medication", "complication"],        # 13.11.2. 급성기 뇌출혈
+    "KSH2026_SEC_0120": ["medication", "complication"],        # 13.11.3. 뇌졸중 이차 예방
+    "KSH2026_SEC_0121": ["medication"],                        # 13.12. 발기부전과 고혈압
+    "KSH2026_SEC_0122": ["medication", "diagnosis"],           # 13.13. 임신과 고혈압
+    "KSH2026_SEC_0123": ["medication"],                        # 13.14. 여성과 고혈압
+    "KSH2026_SEC_0124": ["complication", "medication"],        # 13.15. 수면무호흡증
+    "KSH2026_SEC_0125": ["complication"],                      # 13.16. 인지기능 장애
+    "KSH2026_SEC_0126": ["medication"],                        # 13.17. 고혈압성 응급
+    "KSH2026_SEC_0127": ["lifestyle"],                         # 14. 환자 중심 치료
+    "KSH2026_SEC_0128": ["lifestyle"],                         # 14.1. 환자 중심 진료
+    "KSH2026_SEC_0129": ["monitoring", "lifestyle"],           # 14.2. 자가 혈압 측정
+    "KSH2026_SEC_0130": ["medication", "lifestyle"],           # 14.3. 치료 지속성 향상
+    "KSH2026_SEC_0131": ["lifestyle"],                         # 14.4. 다학제 관리
+    "KSH2026_SEC_0132": ["lifestyle"],                         # 14.5. 환자 중심 관리 한계
+
+    # ══════════════════════════════════════════════════════
+    # KSOLA2022 — 이상지질혈증 진료지침
+    # ══════════════════════════════════════════════════════
+    "KSOLA2022_SEC_0002": ["risk"],                            # 제5판 변경 내용
+    "KSOLA2022_SEC_0020_A": ["risk"],                          # 심혈관질환 위험요인
+    "KSOLA2022_SEC_0020_C": ["risk"],                          # 심혈관질환 위험요인
+    "KSOLA2022_SEC_0021": ["risk"],                            # 표 1-1. 위험요인 기여위험도
+    "KSOLA2022_SEC_0022": ["risk"],                            # 표 1-2. 위험요인 비교위험도
+    "KSOLA2022_SEC_0040": ["diagnosis"],                       # 진단 방법 및 기준
+    "KSOLA2022_SEC_0051": ["risk"],                            # 표 2-3. 심혈관 위험인자
+    "KSOLA2022_SEC_0060_A": ["monitoring"],                    # 경과 모니터링
+    "KSOLA2022_SEC_0060_B": ["medication", "monitoring"],      # 스타틴 부작용 모니터링
+    "KSOLA2022_SEC_0070": ["lifestyle"],                       # 식사요법
+    "KSOLA2022_SEC_0071_A": ["lifestyle"],                     # 고콜레스테롤혈증 식사요법
+    "KSOLA2022_SEC_0071_B": ["lifestyle"],                     # 포화지방산
+    "KSOLA2022_SEC_0071_C": ["lifestyle"],                     # 탄수화물 및 식이섬유
+    "KSOLA2022_SEC_0071_D": ["lifestyle"],                     # 불포화지방산
+    "KSOLA2022_SEC_0071_E": ["lifestyle"],                     # 저HDL콜레스테롤혈증
+    "KSOLA2022_SEC_0071_F": ["lifestyle"],                     # 우리나라 식사패턴
+    "KSOLA2022_SEC_0073_A": ["lifestyle"],                     # 운동요법
+    "KSOLA2022_SEC_0073_B": ["lifestyle"],                     # 운동의 혈중지질 개선 효과
+    "KSOLA2022_SEC_0073_C": ["lifestyle", "medication"],       # 운동 고려사항
+    "KSOLA2022_SEC_0073_D": ["lifestyle"],                     # 운동 증가 조언
+    "KSOLA2022_SEC_0074": ["lifestyle"],                       # 운동 처방 요약
+    "KSOLA2022_SEC_0075_A": ["lifestyle"],                     # 금연
+    "KSOLA2022_SEC_0076": ["lifestyle"],                       # 절주
+    "KSOLA2022_SEC_0084_F": ["medication"],                    # 스타틴 부작용
+    "KSOLA2022_SEC_0105_A": ["complication", "medication"],    # 당뇨병과 이상지질혈증
+    "KSOLA2022_SEC_0105_B": ["medication"],                    # 이상지질혈증 치료목표
+    "KSOLA2022_SEC_0105_C": ["medication"],                    # 이상지질혈증 치료
+    "KSOLA2022_SEC_0105_D": ["medication"],                    # 스타틴+오메가3 병용치료
+    "KSOLA2022_SEC_0107_A": ["diagnosis", "lifestyle"],        # 소아청소년 이상지질혈증
+    "KSOLA2022_SEC_0107_B": ["diagnosis"],                     # 소아청소년 진단
+    "KSOLA2022_SEC_0107_C": ["medication", "lifestyle"],       # 소아청소년 치료
+    "KSOLA2022_SEC_0107_D": ["lifestyle"],                     # 소아청소년 생활습관 개선
+    "KSOLA2022_SEC_0108": ["diagnosis"],                       # 소아청소년 진단기준 표
+    "KSOLA2022_SEC_0109": ["diagnosis"],                       # 소아청소년 선별검사 표
+    "KSOLA2022_SEC_0110": ["risk"],                            # 소아청소년 위험인자 표
+    "KSOLA2022_SEC_0111": ["medication"],                      # 이상지질혈증 약물 표
+    "KSOLA2022_SEC_0117_A": ["diagnosis", "medication"],       # 임신 중 이상지질혈증
+    "KSOLA2022_SEC_0117_B": ["complication"],                  # 임신 중 고지혈증
+    "KSOLA2022_SEC_0117_C": ["complication"],                  # 거대아증
+    "DYS_FIG_001": ["diagnosis"],
+    "DYS_FIG_002": ["medication", "risk"],
+    "DYS_FIG_003": ["medication", "risk"],
+    "DYS_FIG_004": ["risk"],
+    "DYS_FIG_005": ["lifestyle"],
+    "DYS_FIG_005A": ["diagnosis", "medication"],
+    "DYS_FIG_005B": ["diagnosis", "medication"],
+    "DYS_FIG_007": ["diagnosis"],
+    "DYS_FIG_012": ["diagnosis"],
+}
+
+
+def _get_topics(section_id: str) -> list[str]:
+    """섹션 ID로 topic 목록 조회. 매핑 없으면 빈 리스트."""
+    return TOPIC_MAPPING.get(section_id, [])
+
 # M-6 sanity 허용 figure 접두사 — 각 진료지침이 본문에 다른 자료의 figure 를 인용하는
 # 경우가 있어 source_id prefix 외에 추가 허용 (silent 매치 경고 false positive 방지).
 _KNOWN_FIGURE_PREFIXES = ("DYS_FIG_", "HTN_FIG_", "DM_FIG_", "CHALL_SEC_", "CHALL_FIG_")
@@ -260,6 +509,7 @@ async def load_chunks_to_db(
     objects: list[RAGDocument] = []
     for chunk, vec in zip(chunks, embeddings, strict=True):
         sec_meta = chunk["sec_meta"]
+        topics = _get_topics(chunk["section_id"])
         metadata = {
             # 파일/문서 레벨
             "source_id": source_id,
@@ -278,6 +528,7 @@ async def load_chunks_to_db(
             "source_pages": sec_meta.get("source_pages"),
             "content_hash": sec_meta.get("content_hash"),
             "translation_status": sec_meta.get("translation_status"),
+            "topics": topics if topics else None,  # 빈 리스트는 None으로 
         }
         # None 값 제거 (검색 필터/디버깅 가독성)
         metadata = {k: v for k, v in metadata.items() if v is not None}
