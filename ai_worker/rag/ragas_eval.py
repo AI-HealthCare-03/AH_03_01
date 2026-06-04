@@ -46,7 +46,6 @@ from ragas.metrics import (
 BASE = Path(__file__).parent
 EVAL_DATASET_PATH = BASE / "rag_eval_qa_dataset.jsonl"
 EVAL_SAMPLE_SIZE = 20
-EVAL_RANDOM_SEED = 42
 
 
 # ─────────────────────────────────────────────
@@ -148,13 +147,22 @@ async def _collect_all(eval_dataset: list[dict]) -> dict:
     }
 
 
-def collect_answers(eval_dataset: list[dict]) -> dict:
+def collect_answers(eval_dataset: list[dict], seed: int | None = None) -> dict:
     import nest_asyncio
     import random
     nest_asyncio.apply()
-    random.seed(EVAL_RANDOM_SEED)
-    sampled = random.sample(eval_dataset, min(EVAL_SAMPLE_SIZE, len(eval_dataset)))
-    print(f"  샘플링: {len(eval_dataset)}개 중 {len(sampled)}개 랜덤 선택 (seed={EVAL_RANDOM_SEED})")
+
+    # RAGAS 평가용 필터링 — 서비스 범위 밖 질문 제외
+    filtered = [
+        item for item in eval_dataset
+        if item.get("category") not in ("out_of_scope",)
+        and item.get("eval_type") not in ("out_of_scope",)
+    ]
+
+    if seed is not None:
+        random.seed(seed)
+    sampled = random.sample(filtered, min(EVAL_SAMPLE_SIZE, len(filtered)))
+    print(f"  샘플링: {len(eval_dataset)}개 중 필터링 후 {len(filtered)}개 → {len(sampled)}개 선택 (seed={seed if seed else '랜덤'})")
     return asyncio.run(_collect_all(sampled))
 
 
@@ -303,6 +311,6 @@ def print_results(ragas_result, ko_ar_scores: list[float], data: dict):
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
     dataset = load_eval_dataset(EVAL_DATASET_PATH)
-    data = collect_answers(dataset)
+    data = collect_answers(dataset)        # 매번 랜덤
     result, ko_ar = run_ragas_evaluation(data)
     print_results(result, ko_ar, data)
