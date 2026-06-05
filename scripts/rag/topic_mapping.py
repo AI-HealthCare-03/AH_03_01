@@ -57,6 +57,10 @@ _DM2025: dict[str, list[str]] = {
     "DM2025_SEC_0037": ["medication", "monitoring"],           # 12-1. 입원 및 중증질환 혈당관리
     "DM2025_SEC_0038": ["diagnosis", "medication"],            # 12-2. 당뇨병과 임신
     "DM2025_SEC_0039": ["lifestyle"],                          # 12-3. 백신접종
+    # 누락 섹션 추가
+    "DM2025_SEC_0001": ["diagnosis"],                          # 발간사 — 당뇨병 전반 개요 포함
+    "DM2025_SEC_0002": ["diagnosis"],                          # 개정 요약 — 주요 변경사항 진단/치료 전반
+    "DM2025_SEC_0014": ["lifestyle", "monitoring"],            # Chapter 5. 당뇨병관리 — 챕터 총론
     # figures
     "DM2025_FIG_001": ["diagnosis"],
     "DM2025_FIG_002": ["diagnosis"],
@@ -73,6 +77,11 @@ _DM2025: dict[str, list[str]] = {
     "DM2025_FIG_014": ["complication"],
     "DM2025_FIG_015": ["complication"],
     "DM2025_FIG_016": ["complication", "medication"],
+    "DM2025_FIG_005": ["monitoring"],                          # AGP 보고서 예시
+    "DM2025_FIG_017": ["diagnosis", "complication"],           # 대사이상지방간질환 진단 알고리듬
+    "DM2025_FIG_018": ["monitoring", "medication"],            # 임상허약척도 — 노인 당뇨 관리
+    "DM2025_FIG_019": ["medication", "monitoring"],            # 임신 시 당뇨병관리 알고리즘
+    "DM2025_FIG_020": ["monitoring"],                          # 산후 추적관찰 및 치료
 }
 
 # ══════════════════════════════════════════════════════════════
@@ -206,6 +215,38 @@ _KSH2026: dict[str, list[str]] = {
     "KSH2026_SEC_0130": ["medication", "lifestyle"],           # 14.3. 치료 지속성 향상
     "KSH2026_SEC_0131": ["lifestyle"],                         # 14.4. 다학제 관리
     "KSH2026_SEC_0132": ["lifestyle"],                         # 14.5. 환자 중심 관리 한계
+    # 누락 figure 추가 — 임상 알고리듬/흐름도
+    "KSH2026_SEC_0001": ["diagnosis"],                         # 머리말 — 고혈압 진료지침 전반 개요
+    "KSH2026_SEC_0002": ["diagnosis"],                         # 인사말 — 진료지침 배경
+    "KSH2026_SEC_0003": ["diagnosis"],                         # 신구 대비표 — 개정 내용 전반
+    "KSH2026_SEC_0004": ["diagnosis"],                         # 권고문/표/그림 목록
+    "KSH2026_SEC_0005": ["diagnosis"],                         # 근거 수준 및 권고 등급 정의
+    "KSH2026_SEC_0133": ["medication"],                        # 약어 — 약물명 참조
+    "KSH2026_SEC_0134": ["diagnosis"],                         # 참고문헌
+    "KSH2026_SEC_0135": ["diagnosis"],                         # 부록
+    "KSH2026_SEC_0136": ["diagnosis"],                         # 진료지침 개발과정
+    "KSH2026_SEC_0137": ["diagnosis"],                         # 이해상충
+    "KSH2026_SEC_0138": ["diagnosis"],                         # 진료지침 연혁
+    "KSH2026_FIG_001": ["diagnosis"],                          # 주요 고혈압 진료지침 혈압 분류 비교
+    "KSH2026_FIG_002": ["risk"],                               # 수축기/이완기혈압과 심혈관질환 위험도
+    "KSH2026_FIG_003": ["risk"],                               # 젊은 성인 고혈압 표현형별 심혈관질환
+    "KSH2026_FIG_004": ["risk"],                               # 1998-2023 고혈압 유병률 변화
+    "KSH2026_FIG_005": ["risk"],                               # 성별/연령별 고혈압 유병률 변화
+    "KSH2026_FIG_006": ["risk"],                               # 성별/연령별 추정 유병자수 변화
+    "KSH2026_FIG_007": ["diagnosis"],                          # 고혈압 선별검사와 진단 흐름도
+    "KSH2026_FIG_008": ["monitoring"],                         # 커프형 혈압계 분류
+    "KSH2026_FIG_009": ["monitoring"],                         # 올바른 진료실혈압 측정법
+    "KSH2026_FIG_010": ["monitoring"],                         # 활동혈압 측정
+    "KSH2026_FIG_011": ["monitoring"],                         # 가정혈압 측정
+    "KSH2026_FIG_012": ["diagnosis"],                          # 일차성 알도스테론증 진단 알고리즘
+    "KSH2026_FIG_013": ["medication"],                         # 고혈압 치료계획 알고리즘
+    "KSH2026_FIG_014": ["medication", "monitoring"],           # 목표혈압 도달 임상 알고리즘
+    "KSH2026_FIG_015": ["lifestyle"],                          # 비약물치료 및 생활요법
+    "KSH2026_FIG_016": ["medication", "risk"],                 # 위험도별 단일/병용약 선택
+    "KSH2026_FIG_017": ["medication"],                         # 권장 병용요법
+    "KSH2026_FIG_018": ["medication", "diagnosis"],            # 난치성 고혈압 진단 및 치료 알고리즘
+    "KSH2026_FIG_019": ["diagnosis", "monitoring"],            # 진료실/외 혈압 이용 고혈압 분류
+    "KSH2026_FIG_020": ["medication", "complication"],         # 만성콩팥병 동반 고혈압 약물 조절
 }
 
 # ══════════════════════════════════════════════════════════════
