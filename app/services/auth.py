@@ -9,6 +9,7 @@ from app.core.utils.security import hash_password, verify_password
 from app.dtos.auth import FindIdRequest, FindIdResponse, LoginRequest, SignUpRequest
 from app.models.users import User
 from app.repositories.user_repository import UserRepository
+from app.services.email_verification import EmailVerificationService
 from app.services.jwt import JwtService
 
 
@@ -16,6 +17,7 @@ class AuthService:
     def __init__(self):
         self.user_repo = UserRepository()
         self.jwt_service = JwtService()
+        self.email_verification = EmailVerificationService()
 
     async def signup(self, data: SignUpRequest) -> User:
         # 이메일 중복 체크
@@ -23,6 +25,10 @@ class AuthService:
 
         # 닉네임 중복 체크
         await self.check_nickname_exists(data.nickname)
+
+        # 이메일 본인 인증 확인 (미인증 시 가입 차단)
+        if not await self.email_verification.is_verified(str(data.email)):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이메일 본인 인증이 필요합니다.")
 
         # 입력받은 휴대폰 번호를 노말라이즈
         normalized_phone_number = normalize_phone_number(data.phone_number)
@@ -42,7 +48,9 @@ class AuthService:
                 birthday=data.birth_date,
             )
 
-            return user
+        # 가입 성공 후 인증 완료 플래그 소비 (재사용 방지)
+        await self.email_verification.consume(str(data.email))
+        return user
 
     async def authenticate(self, data: LoginRequest) -> User:
         # 이메일로 사용자 조회
