@@ -165,6 +165,19 @@ _HOSPITAL_KEYWORD_PATTERN = re.compile(
     r"어느\s*(병원|과|진료과)|병원\s*(가야|추천|선택)|진료\s*(과|받을|예약)|처방\s*(받을|전)",
 )
 
+# N3 가드: 쿼리 내 인라인 수치 감지 → needs_health_data 강제 False.
+# LLM이 수치가 포함된 쿼리를 "본인 DB 데이터 필요"로 오분류하면
+# fetch_health_data → has_health_data=False → final_missing_info 로 빠지는 문제 차단.
+# 패턴: 의료 수치 단위 또는 위험도 점수 형태 (소수점 포함)
+# 예: "공복혈당 145", "HbA1c 7.8%", "위험도 0.12", "혈압 142/91", "LDL 95 mg/dL"
+_INLINE_NUMERIC_PATTERN = re.compile(
+    r"\d+\.?\d*\s*%"                        # 퍼센트 수치 (HbA1c 7.8%, 위험도 12%)
+    r"|\d+\.?\d*\s*(mg/dL|mmHg|kg|cm|kcal)" # 단위 포함 수치
+    r"|위험도\s*\d+\.?\d*"                  # 위험도 점수 (0.12, 0.35 등)
+    r"|혈압\s*\d+/\d+"                      # 혈압 수치 (130/85)
+    r"|(공복혈당|혈당|LDL|HDL|중성지방|HbA1c|당화혈색소|콜레스테롤)\s*\d+", # 검사 항목 + 수치
+)
+
 
 def _looks_like_personal_status_question(text: str) -> bool:
     """LLM 분류 보강 — 명백한 본인 상태 평가 요청 여부 (휴리스틱)."""
@@ -371,6 +384,8 @@ true 면 retrieve 가 의료 진료지침과 함께 CHALLENGE_CATALOG 도 함께
   예: "LDL 145, HDL 48, TG 380 mg/dL이면 어떻게 해석하나요?" → false
   예: "혈압이 138/88 mmHg인데 어느 단계인가요?" → false
   예: "HDL 35 mg/dL인데 위험한가요?" → false
+  예: "당뇨 위험도 0.12, 공복혈당 145, HbA1c 7.8%인데 식단 어떻게 해야 하나요?" → false
+  예: "위험도 점수 0.35, 혈압 142/91이면 어떤 관리가 필요한가요?" → false
   단, "내 LDL이 95인데" 처럼 1인칭 + DB 조회 의도가 명확하면 true 유지.
   단, "나이가 있는 여성인데 LDL이 145인데" 처럼 3인칭 환자 설명 형태도 false.
 
@@ -509,6 +524,18 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:
     ):
         _logger.info("classify_intent N2 guard hit — 약품/병원 질문 강제 medical_inquiry")
         intent = "medical_inquiry"
+
+    # N3 가드: 쿼리 내 인라인 수치 감지 → needs_health_data 강제 False.
+    # "당뇨 위험도 0.12, 공복혈당 145, HbA1c 7.8%" 처럼 사용자가 수치를 직접 쿼리에
+    # 포함한 경우, LLM 이 needs_health_data=True 로 오분류해
+    # fetch_health_data → has_health_data=False → final_missing_info 로 빠지는 문제 차단.
+    # 인라인 수치가 있으면 쿼리 자체가 컨텍스트이므로 DB 조회 불필요.
+    # 단, 1인칭 본인 상태 질문("나 어때?")은 N1 가드가 먼저 처리하므로 여기선 건드리지 않음.
+    if needs and not _looks_like_personal_status_question(state["original_question"]):
+        if _INLINE_NUMERIC_PATTERN.search(state["original_question"]):
+            _logger.info("classify_intent N3 guard hit — 인라인 수치 감지, needs_health_data 강제 False")
+            needs = False
+            missing = []
 
     return {
         "intent": intent,
