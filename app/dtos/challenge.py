@@ -198,6 +198,8 @@ class VerificationCreateRequest(BaseModel):
     answers: dict[str, Any] | None = None
     photo_file_id: int | None = None
     shield_inventory_id: int | None = None
+    caption: Annotated[str | None, Field(None, max_length=500)] = None
+    duration_seconds: int | None = None
 
     @model_validator(mode="after")
     def _validate(self) -> "VerificationCreateRequest":
@@ -224,6 +226,8 @@ class VerificationResponse(BaseSerializerModel):
     checked: bool | None
     photo_file_id: int | None
     status: VerificationStatus
+    caption: str | None
+    verified_duration_seconds: int | None
     rejection_reason: str | None
     like_count: int
     comment_count: int
@@ -236,6 +240,28 @@ class VerificationListResponse(BaseModel):
     total_elements: int
     total_pages: int
     items: list[VerificationResponse]
+
+
+class VerificationFeedItem(BaseModel):
+    id: int
+    user_id: UUID
+    user_nickname: str | None
+    method: VerificationMethod
+    verified_date: date
+    caption: str | None
+    photo_file_id: int | None
+    like_count: int
+    comment_count: int
+    my_like: bool
+    created_at: datetime
+
+
+class VerificationFeedResponse(BaseModel):
+    page: int
+    size: int
+    total_elements: int
+    total_pages: int
+    items: list[VerificationFeedItem]
 
 
 # ---------------------------------------------------------------------------

@@ -265,6 +265,8 @@ class ChallengeVerification(models.Model):
     photo_file_id = fields.BigIntField(null=True)
     shield_inventory_id = fields.BigIntField(null=True)
     status = fields.CharEnumField(enum_type=VerificationStatus, default=VerificationStatus.PENDING)
+    caption = fields.TextField(null=True)
+    verified_duration_seconds = fields.IntField(null=True)
     rejection_reason = fields.TextField(null=True)
     like_count = fields.IntField(default=0)
     comment_count = fields.IntField(default=0)

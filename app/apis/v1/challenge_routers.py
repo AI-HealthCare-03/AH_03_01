@@ -29,6 +29,8 @@ from app.dtos.challenge import (
     ReactionResponse,
     ReactionUpdateRequest,
     VerificationCreateRequest,
+    VerificationFeedItem,
+    VerificationFeedResponse,
     VerificationListResponse,
     VerificationResponse,
     VerificationUpdateRequest,
@@ -180,6 +182,28 @@ async def get_challenge(
         if invite_code:
             payload["invite_code"] = invite_code
     return Response(payload, status_code=status.HTTP_200_OK)
+
+
+@challenges_router.get(
+    "/{challenge_id}/feed",
+    status_code=status.HTTP_200_OK,
+)
+async def get_challenge_feed(
+    challenge_id: int,
+    user: Annotated[User, Depends(get_request_user)],
+    service: Annotated[VerificationService, Depends(VerificationService)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> Response:
+    items, total = await service.get_feed(user, challenge_id, page, size)
+    payload = VerificationFeedResponse(
+        page=page,
+        size=size,
+        total_elements=total,
+        total_pages=total_pages(total, size),
+        items=[VerificationFeedItem(**item) for item in items],
+    )
+    return Response(payload.model_dump(mode="json"), status_code=status.HTTP_200_OK)
 
 
 @challenges_router.patch("/{challenge_id}", response_model=ChallengeResponse, status_code=status.HTTP_200_OK)

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import date, datetime
 from typing import Any
 
@@ -263,6 +265,17 @@ class ChallengeVerificationRepository:
         await verification.save(update_fields=["like_count", "comment_count"])
         return verification
 
+    async def list_feed(
+        self,
+        challenge_id: int,
+        page: int = 1,
+        size: int = 20,
+    ) -> tuple[list[ChallengeVerification], int]:
+        qs = self._model.filter(challenge_id=challenge_id, is_deleted=False)
+        total = await qs.count()
+        items = await qs.prefetch_related("user").order_by("-created_at").offset((page - 1) * size).limit(size)
+        return list(items), total
+
     async def aggregate_summary(
         self,
         user_id: int,
@@ -353,6 +366,17 @@ class ChallengeReactionRepository:
                 is_deleted=False,
             ).order_by("created_at")
         )
+
+    async def get_liked_verification_ids(self, user_id: int, verification_ids: list[int]) -> set[int]:
+        if not verification_ids:
+            return set()
+        liked = await self._model.filter(
+            user_id=user_id,
+            verification_id__in=verification_ids,
+            type=ReactionType.LIKE,
+            is_deleted=False,
+        ).values_list("verification_id", flat=True)
+        return set(liked)
 
     async def update_content(self, reaction: ChallengeReaction, content: str) -> ChallengeReaction:
         reaction.content = content
