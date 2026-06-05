@@ -89,6 +89,18 @@ export async function sendEmailVerification(email: string): Promise<void> {
 }
 
 /**
+ * 이메일 인증 토큰 검증 (메일 링크의 /verify-email 페이지에서 호출)
+ * POST /api/v1/auth/email/verify
+ */
+export async function verifyEmailToken(token: string): Promise<string> {
+  const res = await apiClient.post<{ email: string; verified: boolean }>(
+    "/api/v1/auth/email/verify",
+    { token }
+  );
+  return res.data.email;
+}
+
+/**
  * 이메일 인증 완료 여부 조회
  * GET /api/v1/auth/email/verification-status?email=...
  */
