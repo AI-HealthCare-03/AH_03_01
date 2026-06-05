@@ -37,7 +37,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f8f8]">
+    <div className="min-h-screen bg-[#f8f8f8] transition-colors duration-200" id="main-layout">
       <GNB />
       {/* 모바일: 하단 탭바 높이만큼 패딩 */}
       <main className="md:pt-0 pb-16 md:pb-0">{children}</main>
