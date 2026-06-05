@@ -45,15 +45,14 @@ function VerifyEmailContent() {
 
         {status === "success" && (
           <>
-            <p className="text-lg font-semibold text-text-primary mb-2">✓ 이메일 인증 완료</p>
-            <p className="text-sm text-text-secondary mb-8">
-              가입 화면으로 돌아가 &quot;인증 완료 확인&quot; 버튼을 눌러 가입을 이어가세요.
+            <p className="text-lg font-semibold text-text-primary mb-2">
+              ✓ 이메일 인증이 완료되었어요!
             </p>
-            <Link href={ROUTES.SIGNUP}>
-              <Button variant="primary" size="lg" fullWidth>
-                가입 계속하기
-              </Button>
-            </Link>
+            <p className="text-sm text-text-secondary">
+              작성하던 가입 페이지로 돌아가 &quot;인증 완료 확인&quot; 버튼을 눌러
+              가입을 계속 진행해 주세요.
+            </p>
+            <p className="mt-3 text-xs text-text-tertiary">이 창은 닫으셔도 됩니다.</p>
           </>
         )}
 
