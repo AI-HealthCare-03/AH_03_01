@@ -33,15 +33,6 @@ export default function VerifyPage({ params }: VerifyPageProps) {
   const { data: verificationsData } = useVerifications(challengeId, { mine: true });
   const verifyMutation = useCreateVerification();
 
-  /* 오늘 이미 인증했는지 확인 (APPROVED or PENDING) */
-  const todayStr = (() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  })();
-  const alreadyVerifiedToday = verificationsData?.items.some(
-    (v) => v.verified_date === todayStr && (v.status === "APPROVED" || v.status === "PENDING")
-  ) ?? false;
-
   const [rewardOpen, setRewardOpen] = useState(false);
 
   /* 오늘 날짜 (YYYY-MM-DD, 로컬 기준) */

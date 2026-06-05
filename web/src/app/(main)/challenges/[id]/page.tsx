@@ -45,7 +45,8 @@ function ChallengeDetailContent({
   const qc = useQueryClient();
 
   const { data: challenge, isLoading, error } = useChallenge(challengeId);
-  const { data: verificationsData } = useVerifications(challengeId);
+  /* mine: true — 내 인증만 조회. 다른 멤버의 인증이 섞이면 verifiedDates/pendingDates 오탐 발생 */
+  const { data: verificationsData } = useVerifications(challengeId, { mine: true });
 
   const [shieldOpen, setShieldOpen] = useState(false);
   const shieldMutation = useCreateVerification();
