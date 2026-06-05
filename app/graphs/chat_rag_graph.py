@@ -153,6 +153,18 @@ _PERSONAL_STATUS_NOUN_PATTERN = re.compile(
 # 단독 1인칭 의문문 — "나는?", "저는?", "내가?" (2글자 이상 1인칭만, M-2: "나?"/"저?" 1글자는 제외).
 _PERSONAL_BARE_PATTERN = re.compile(r"^(나는|저는|내가|제가)\s*\?\s*$")
 
+# N2 가드: 약품명·의약품 보관/용법 / 병원·진료 안내 → 무조건 medical_inquiry 강제.
+# LLM이 diseases=[] 를 근거로 service_guide 로 오분류하는 케이스를 차단.
+_DRUG_KEYWORD_PATTERN = re.compile(
+    r"인슐린|스타틴|와파린|메트포르민|티카그렐러|아스피린|"
+    r"혈압약|당뇨약|고지혈증약|이뇨제|베타차단제|"
+    r"보관\s*(방법|온도|기간|법)|용법|용량|복용\s*(방법|법)|처방전",
+    re.IGNORECASE,
+)
+_HOSPITAL_KEYWORD_PATTERN = re.compile(
+    r"어느\s*(병원|과|진료과)|병원\s*(가야|추천|선택)|진료\s*(과|받을|예약)|처방\s*(받을|전)",
+)
+
 
 def _looks_like_personal_status_question(text: str) -> bool:
     """LLM 분류 보강 — 명백한 본인 상태 평가 요청 여부 (휴리스틱)."""
@@ -329,6 +341,14 @@ true 면 retrieve 가 의료 진료지침과 함께 CHALLENGE_CATALOG 도 함께
 - "당뇨병 환자의 이상지질혈증 관리" → ["diabetes", "dyslipidemia"] (multi-disease 라우팅)
 - "운동 권고" → [] (질환 비특화)
 - "챌린지 인증 방법" → [] (서비스 질문)
+- "인슐린 펜 보관 방법" → ["diabetes"] (의약품 보관·관리는 medical_inquiry)
+- "고혈압인데 어떤 병원 가야 하나요" → ["hypertension"] (진료 안내도 medical_inquiry)
+
+== intent 혼동 방지 ==
+다음은 반드시 medical_inquiry (service_guide 아님):
+- 약품명·의약품이 포함된 보관/용법/복용 질문: "인슐린", "스타틴", "와파린", "메트포르민" 등
+- 병원·진료·처방 안내 질문: "어느 병원", "진료과", "처방"
+- 증상·진단·합병증 질문 (service_guide 로 분류 절대 금지)
 
 == needs_health_data ==
 다음 조건 중 하나라도 해당하면 **true** (보수적으로 풀게 분류 — 본인 상태 의심되면 true):
@@ -479,6 +499,16 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:
         intent = "medical_inquiry"
         if not missing:
             missing = ["profile"]
+
+    # N2 가드: 약품명/보관/용법/병원 키워드 → 무조건 medical_inquiry 강제.
+    # LLM 이 diseases=[] 를 근거로 service_guide 로 오분류하는 케이스 사후 교정.
+    # (예: "인슐린 펜 보관 방법", "고혈압인데 어느 병원 가야 하나요")
+    if intent != "medical_inquiry" and (
+        _DRUG_KEYWORD_PATTERN.search(state["original_question"])
+        or _HOSPITAL_KEYWORD_PATTERN.search(state["original_question"])
+    ):
+        _logger.info("classify_intent N2 guard hit — 약품/병원 질문 강제 medical_inquiry")
+        intent = "medical_inquiry"
 
     return {
         "intent": intent,
