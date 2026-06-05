@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm, Controller } from "react-hook-form";
@@ -81,6 +81,36 @@ export default function SignupPage() {
     useState<"idle" | "sending" | "sent" | "verified">("idle");
   const [verifyChecking, setVerifyChecking] = useState(false);
 
+  // 인증 유효시간 카운트다운. 토큰(sent) 10분 / 인증완료(verified) 15분 — 백엔드 TTL 과 일치.
+  const TOKEN_TTL_SEC = 10 * 60;
+  const VERIFIED_TTL_SEC = 15 * 60;
+  const [verifyDeadline, setVerifyDeadline] = useState<number | null>(null); // epoch ms
+  const [remainingSec, setRemainingSec] = useState(0);
+
+  useEffect(() => {
+    if (verifyDeadline === null) {
+      setRemainingSec(0);
+      return;
+    }
+    const tick = () => {
+      const rem = Math.max(0, Math.round((verifyDeadline - Date.now()) / 1000));
+      setRemainingSec(rem);
+      if (rem <= 0) {
+        // 토큰/인증 유효시간 만료 → 처음부터 다시 인증 (본인 인증 버튼 재활성화)
+        setEmailVerify("idle");
+        setVerifyDeadline(null);
+        showToast("인증 유효 시간이 만료되었어요. 다시 인증해 주세요.", "info");
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verifyDeadline]);
+
+  const formatRemaining = (s: number) =>
+    `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
   // 이메일 분리 입력 상태
   const EMAIL_DOMAINS = [
     { label: "선택해 주세요", value: "" },
@@ -103,6 +133,7 @@ export default function SignupPage() {
     });
     setEmailDupl("idle");
     setEmailVerify("idle"); // 이메일이 바뀌면 인증 상태 초기화
+    setVerifyDeadline(null);
   };
 
   const handleSendVerification = async () => {
@@ -115,6 +146,7 @@ export default function SignupPage() {
     try {
       await sendEmailVerification(email);
       setEmailVerify("sent");
+      setVerifyDeadline(Date.now() + TOKEN_TTL_SEC * 1000);
       showToast("인증 메일을 보냈어요. 메일함에서 링크를 확인해 주세요.", "success");
     } catch (err) {
       setEmailVerify("idle");
@@ -129,6 +161,7 @@ export default function SignupPage() {
       const verified = await checkEmailVerified(email);
       if (verified) {
         setEmailVerify("verified");
+        setVerifyDeadline(Date.now() + VERIFIED_TTL_SEC * 1000);
         showToast("이메일 인증이 완료되었어요", "success");
       } else {
         showToast("아직 인증이 완료되지 않았어요. 메일의 링크를 클릭해 주세요.", "info");
@@ -284,7 +317,14 @@ export default function SignupPage() {
 
               {/* 이메일 본인 인증 */}
               {emailVerify === "verified" ? (
-                <p className="text-xs text-status-success">✓ 이메일 인증 완료</p>
+                <>
+                  <p className="text-xs text-status-success">✓ 이메일 인증 완료</p>
+                  {remainingSec > 0 && (
+                    <p className="text-xs text-text-secondary">
+                      가입 유효 시간 {formatRemaining(remainingSec)} — 시간 내 가입을 완료해 주세요
+                    </p>
+                  )}
+                </>
               ) : (
                 <>
                   <Button
@@ -301,6 +341,14 @@ export default function SignupPage() {
                     <>
                       <p className="text-xs text-text-secondary">
                         메일함의 링크를 클릭한 뒤 아래 버튼을 눌러 주세요
+                        {remainingSec > 0 && (
+                          <>
+                            {" "}
+                            <span className="text-status-danger">
+                              (유효 시간 {formatRemaining(remainingSec)})
+                            </span>
+                          </>
+                        )}
                       </p>
                       <Button
                         type="button"
