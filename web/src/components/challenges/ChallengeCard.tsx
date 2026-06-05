@@ -31,11 +31,16 @@ export default function ChallengeCard({
   const isCrisis = (challenge.missed_count ?? 0) >= 1;
   const dday = dDayLabel(challenge.end_date);
 
+  // 그룹 ACTIVE → 인증하기 / 그룹 RECRUITING → 소통하기 / 개인 → 오늘 인증하기
   const ctaLabel =
-    challenge.scope === "GROUP" ? "소통하기" : "오늘 인증하기";
+    challenge.scope === "GROUP"
+      ? challenge.status === "ACTIVE" ? "오늘 인증하기" : "소통하기"
+      : "오늘 인증하기";
   const ctaHref =
     challenge.scope === "GROUP"
-      ? `/challenges/${challenge.id}?tab=chat`
+      ? challenge.status === "ACTIVE"
+        ? `/challenges/${challenge.id}/verify`
+        : `/challenges/${challenge.id}?tab=chat`
       : `/challenges/${challenge.id}/verify`;
 
   return (
