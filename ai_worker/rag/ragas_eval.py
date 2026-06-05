@@ -10,14 +10,23 @@ RAGAS 평가 파이프라인
 
 데이터셋:
     eval_dataset.json 에서 관리 — 질문 추가/수정은 해당 파일만 편집하세요.
-    schema: [{ category, question, ground_truth, prediction_result }, ...]
+    schema: [{ category, question, ground_truth }, ...]
+
+변경 이력:
+    - crag_pipeline(CRAG) → ChatRAGGraph(chat_rag_graph) 기반으로 전환
+    - run_chat_rag() 비동기 API 사용, ChatRAGResult에서 sources 추출
+    - asyncio.run() 으로 비동기 답변 수집 실행
 """
 
+import asyncio
 import json
 import os
 from pathlib import Path
 
-from crag_pipeline import CRAGState, build_crag_graph
+# nest_asyncio를 가장 먼저 패치 — ragas 내부 event loop 충돌 방지
+import nest_asyncio
+nest_asyncio.apply()
+
 from datasets import Dataset
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
@@ -35,7 +44,8 @@ from ragas.metrics import (
 # 경로 설정
 # ─────────────────────────────────────────────
 BASE = Path(__file__).parent
-EVAL_DATASET_PATH = BASE / "eval_dataset.json"
+EVAL_DATASET_PATH = BASE / "rag_eval_qa_dataset.jsonl"
+EVAL_SAMPLE_SIZE = 20
 
 
 # ─────────────────────────────────────────────
@@ -45,12 +55,9 @@ def load_eval_dataset(path: Path) -> list[dict]:
     if not path.exists():
         raise FileNotFoundError(f"평가 데이터셋 파일을 찾을 수 없습니다: {path}")
     with open(path, encoding="utf-8") as f:
-        data = json.load(f)
+        data = [json.loads(line) for line in f if line.strip()]
     print(f"  데이터셋 로드 완료: {len(data)}개 ({path.name})")
     return data
-
-
-EVAL_DATASET = load_eval_dataset(EVAL_DATASET_PATH)
 
 
 # ─────────────────────────────────────────────
@@ -70,57 +77,67 @@ load_env(BASE)
 
 
 # ─────────────────────────────────────────────
-# CRAG 파이프라인으로 답변 및 컨텍스트 수집
+# ChatRAGGraph 로 답변 및 컨텍스트 수집
 # ─────────────────────────────────────────────
-def collect_answers(eval_dataset: list[dict]) -> dict:
-    crag = build_crag_graph()
+async def _collect_single(
+    graph,
+    question: str,
+    idx: int,
+    total: int,
+) -> tuple[str, list[str]]:
+    """단일 질문에 대해 ChatRAGGraph를 실행하고 (answer, ctx_texts) 반환."""
+    from app.graphs.chat_rag_graph import run_chat_rag
 
-    questions = []
-    answers = []
-    contexts = []
-    ground_truths = []
+    print(f"\n  [{idx}/{total}] {question}")
+    try:
+        result = await run_chat_rag(
+            question=question,
+            user_id=None,           # 평가용 — 건강 데이터 없이 일반 RAG 경로
+            thread_id=f"ragas-eval-{idx}",
+        )
+        answer = result.answer or ""
+        # RetrievedChunk 리스트 → 텍스트 리스트
+        ctx_texts: list[str] = [
+    chunk.chunk_text for chunk in (result.sources or []) if chunk.chunk_text
+]
+    except Exception as e:
+        print(f"    ❌ 오류: {e}")
+        answer = ""
+        ctx_texts = []
+
+    print(f"    ✅ 완료 (컨텍스트 {len(ctx_texts)}개)")
+    return answer, ctx_texts
+
+
+async def _collect_all(eval_dataset: list[dict]) -> dict:
+    from tortoise import Tortoise
+    from app.core.db.databases import TORTOISE_ORM
+    from app.graphs.chat_rag_graph import ChatRAGGraph  # noqa: F401
+
+    # Tortoise ORM 초기화를 가장 먼저
+    await Tortoise.init(config=TORTOISE_ORM)
+
+    questions: list[str] = []
+    answers: list[str] = []
+    contexts: list[list[str]] = []
+    ground_truths: list[str] = []
+    total = len(eval_dataset)
 
     print("=" * 60)
-    print(f"  RAGAS 평가용 답변 수집 중... (총 {len(eval_dataset)}개)")
+    print(f"  RAGAS 평가용 답변 수집 중... (총 {total}개)")
     print("=" * 60)
 
-    for i, item in enumerate(eval_dataset):
-        question = item["question"]
-        ground_truth = item["ground_truth"]
-        prediction = item.get("prediction_result")
-
-        print(f"\n  [{i + 1}/{len(eval_dataset)}] {question}")
-
-        initial_state: CRAGState = {
-            "question": question,
-            "original_question": question,
-            "prediction_result": prediction,
-            "retrieved_context": [],
-            "web_results": [],
-            "final_recommendation": "",
-            "eval_verdict": "",
-            "eval_feedback": "",
-            "retry_count": 0,
-            "rewrite_count": 0,
-        }
-
-        try:
-            result = crag.invoke(initial_state)
-            answer = result.get("final_recommendation", "")
-            ctx_docs = result.get("retrieved_context", [])
-            ctx_texts = [doc["content"] for doc in ctx_docs]
-            ctx_texts += result.get("web_results", [])  # 웹 검색 결과도 포함
-        except Exception as e:
-            print(f"    ❌ 오류: {e}")
-            answer = ""
-            ctx_texts = []
-
-        questions.append(question)
-        answers.append(answer)
-        contexts.append(ctx_texts)
-        ground_truths.append(ground_truth)
-
-        print(f"    ✅ 완료 (컨텍스트 {len(ctx_texts)}개)")
+    try:
+        for i, item in enumerate(eval_dataset, start=1):
+            question = item["question"]
+            ground_truth = item.get("ground_truth") or item.get("answer", "")
+            answer, ctx_texts = await _collect_single(None, question, i, total)
+            questions.append(question)
+            answers.append(answer)
+            contexts.append(ctx_texts)
+            ground_truths.append(ground_truth)
+    finally:
+        await Tortoise.close_connections()
 
     return {
         "question": questions,
@@ -128,6 +145,25 @@ def collect_answers(eval_dataset: list[dict]) -> dict:
         "contexts": contexts,
         "ground_truth": ground_truths,
     }
+
+
+def collect_answers(eval_dataset: list[dict], seed: int | None = None) -> dict:
+    import nest_asyncio
+    import random
+    nest_asyncio.apply()
+
+    # RAGAS 평가용 필터링 — 서비스 범위 밖 질문 제외
+    filtered = [
+        item for item in eval_dataset
+        if item.get("category") not in ("out_of_scope",)
+        and item.get("eval_type") not in ("out_of_scope",)
+    ]
+
+    if seed is not None:
+        random.seed(seed)
+    sampled = random.sample(filtered, min(EVAL_SAMPLE_SIZE, len(filtered)))
+    print(f"  샘플링: {len(eval_dataset)}개 중 필터링 후 {len(filtered)}개 → {len(sampled)}개 선택 (seed={seed if seed else '랜덤'})")
+    return asyncio.run(_collect_all(sampled))
 
 
 # ─────────────────────────────────────────────
@@ -157,7 +193,7 @@ def compute_korean_answer_relevancy(
     answers: list[str],
     llm: ChatOpenAI,
 ) -> list[float]:
-    """한국어 전용 Answer Relevancy 계산 (RAGAS 대체)"""
+    """한국어 전용 Answer Relevancy 계산 (RAGAS 대체)."""
     scores = []
     for q, a in zip(questions, answers, strict=False):
         if not a.strip():
@@ -176,8 +212,6 @@ def compute_korean_answer_relevancy(
 # RAGAS 평가 실행
 # ─────────────────────────────────────────────
 def run_ragas_evaluation(data: dict) -> tuple[dict, list[float]]:
-    import asyncio
-
     import numpy as np
 
     print("\n" + "=" * 60)
@@ -190,9 +224,7 @@ def run_ragas_evaluation(data: dict) -> tuple[dict, list[float]]:
 
     dataset = Dataset.from_dict(data)
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
+    # RAGAS 자체가 내부에서 asyncio loop 를 관리하므로 별도 loop 생성 불필요.
     ragas_result = evaluate(
         dataset=dataset,
         metrics=[
@@ -216,7 +248,7 @@ def run_ragas_evaluation(data: dict) -> tuple[dict, list[float]]:
 # ─────────────────────────────────────────────
 # 결과 출력
 # ─────────────────────────────────────────────
-def print_results(ragas_result, ko_ar_scores: list[float]):
+def print_results(ragas_result, ko_ar_scores: list[float], data: dict):
     import numpy as np
 
     print("\n" + "=" * 60)
@@ -246,7 +278,8 @@ def print_results(ragas_result, ko_ar_scores: list[float]):
         else:
             note = ""
         status = "✅" if score >= target else "⚠️ "
-        bar = "█" * int(score * 20) + "░" * (20 - int(score * 20))
+        score_for_bar = 0.0 if (score != score) else score  # NaN 체크
+        bar = "█" * int(score_for_bar * 20) + "░" * (20 - int(score_for_bar * 20))
         print(f"  {status} {metric:25s} {bar} {score:.4f}{note}")
 
     print()
@@ -260,11 +293,12 @@ def print_results(ragas_result, ko_ar_scores: list[float]):
     print("=" * 60)
 
     output_path = BASE / "output" / "ragas_result.json"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     output_data = {
         "summary": {k: float(v) for k, v in scores.items()},
         "ko_ar_per_question": [
-            {"question": item["question"], "ko_ar_score": s}
-            for item, s in zip(EVAL_DATASET, ko_ar_scores, strict=False)
+            {"question": q, "ko_ar_score": s}
+            for q, s in zip(data["question"], ko_ar_scores, strict=False)
         ],
     }
     with open(output_path, "w", encoding="utf-8") as f:
@@ -276,6 +310,7 @@ def print_results(ragas_result, ko_ar_scores: list[float]):
 # 실행
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
-    data = collect_answers(EVAL_DATASET)
+    dataset = load_eval_dataset(EVAL_DATASET_PATH)
+    data = collect_answers(dataset)        # 매번 랜덤
     result, ko_ar = run_ragas_evaluation(data)
-    print_results(result, ko_ar)
+    print_results(result, ko_ar, data)

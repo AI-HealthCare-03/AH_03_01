@@ -9,6 +9,7 @@ prediction model/
 test_imgs/
 ai_worker/rag/chroma_db/
 ai_worker/rag/output/chunks.json
+ai_worker/rag/output/ragas_result.json
 scripts/rag/output/
 
 # DB dumps (PHI 포함 가능 — 절대 커밋 금지, Drive 공유만)
@@ -37,6 +38,7 @@ envs/.local.env
 # Virtual Environment
 venv/
 .venv/
+
 
 # GitHub
 # .github/ 차단 제거 — CI 워크플로우는 트래킹 필요.
@@ -129,3 +131,6 @@ pets-*.png
 # 로컬 미디어 업로드 디렉터리 + verify 스크린샷
 .media/
 verify-*.png
+ai_worker/rag/output/
+ai_worker/rag/rag_eval_qa_dataset.jsonl
+ai_worker/rag/output/
