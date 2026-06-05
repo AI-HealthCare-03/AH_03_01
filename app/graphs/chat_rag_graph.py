@@ -215,6 +215,7 @@ class ChatState(TypedDict, total=False):
     # diseases — multi-disease 라우팅 지원. 1개면 단일 질환, 2개면 OR 매치.
     # 예: "당뇨병 환자의 이상지질혈증" → ["diabetes", "dyslipidemia"]
     diseases: list[DiseaseLiteral]
+    topics: list[str]    # classify_intent 가 추출한 topic 목록 (retrieve 필터용)
     needs_health_data: bool
     needs_challenge_catalog: bool  # 챌린지 카탈로그를 함께 검색 (medical+service 혼합)
     missing_fields: list[str]
@@ -326,6 +327,7 @@ _CLASSIFY_PROMPT = """당신은 만성질환(고혈압·당뇨·이상지질혈�
 {{
   "intent": "medical_inquiry" | "service_guide" | "general",
   "diseases": ["diabetes" | "hypertension" | "dyslipidemia"],
+  "topics": ["diagnosis" | "medication" | "lifestyle" | "complication" | "risk" | "monitoring" | "service" | "challenge"],
   "needs_health_data": true | false,
   "needs_challenge_catalog": true | false,
   "missing_fields": [],
@@ -337,6 +339,26 @@ _CLASSIFY_PROMPT = """당신은 만성질환(고혈압·당뇨·이상지질혈�
 - "service_guide": 앱 사용법·챌린지·포인트·인증·로그인 등 기능 안내 질문
 - "general": 위 둘에 명확히 안 맞거나 인사·잡담
 - 둘 다 관련된 혼합형(예: "내 상태에 맞는 식단·챌린지")은 medical_inquiry 우선.
+
+== topics (list) ==
+질문이 해당하는 의료 주제 카테고리. intent=medical_inquiry 일 때 retrieve 필터로 사용.
+- "diagnosis"   : 진단 기준·선별검사·분류·수치 해석
+- "medication"  : 약물치료·처방·부작용·약물 상호작용·보관·용법·용량
+- "lifestyle"   : 식사·운동·금연·절주·체중관리·자기관리
+- "complication": 합병증·동반질환·장기 손상
+- "risk"        : 위험도 평가·위험인자·심혈관 위험
+- "monitoring"  : 혈압/혈당 측정·추적관리·목표 수치·모니터링
+- "service"     : 서비스 이용안내·기능설명 (intent=service_guide 일 때)
+- "challenge"   : 챌린지 참여·인증·추천 (needs_challenge_catalog=true 일 때)
+예시:
+- "당뇨 식단 어떻게 해야 해?" → ["lifestyle", "medication"]
+- "스타틴 자몽이랑 먹어도 돼?" → ["medication"]
+- "인슐린 펜 보관 방법" → ["medication"]
+- "당뇨 합병증 예방" → ["complication", "lifestyle"]
+- "혈압 목표 수치" → ["monitoring", "diagnosis"]
+- "챌린지 추천해줘" → ["challenge", "service"]
+- "비밀번호 변경" → ["service"]
+intent=general 이면 [].
 
 == needs_challenge_catalog ==
 질문이 **챌린지/운동 프로그램/생활습관 챌린지 추천**을 요구하는지.
@@ -499,6 +521,13 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:
         raw_diseases = [raw_diseases]
     diseases = [str(d) for d in raw_diseases if d in ("diabetes", "hypertension", "dyslipidemia")][:3]
 
+    # topics 파싱 — 허용 값만 필터링
+    _VALID_TOPICS = {"diagnosis", "medication", "lifestyle", "complication", "risk", "monitoring", "service", "challenge"}
+    raw_topics = data.get("topics") or []
+    if not isinstance(raw_topics, list):
+        raw_topics = []
+    topics = [str(t) for t in raw_topics if t in _VALID_TOPICS]
+
     needs = bool(data.get("needs_health_data", False))
     needs_challenge = bool(data.get("needs_challenge_catalog", False))
     missing = data.get("missing_fields") or []
@@ -540,6 +569,7 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:
     return {
         "intent": intent,
         "diseases": diseases,
+        "topics": topics,
         "needs_health_data": needs,
         "needs_challenge_catalog": needs_challenge,
         "missing_fields": missing if needs else [],
