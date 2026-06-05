@@ -50,15 +50,44 @@ from app.models.rag import DocumentType, RAGDocument
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DOCS_DIR = PROJECT_ROOT / "RAG" / "final docs"
 
+def _find_file(name_nfc: str) -> Path:
+    """NFC/NFD 인코딩 차이를 무시하고 DOCS_DIR 에서 파일을 찾는다."""
+    import unicodedata
+    nfc = unicodedata.normalize("NFC", name_nfc)
+    for f in DOCS_DIR.iterdir():
+        if unicodedata.normalize("NFC", f.name) == nfc:
+            return f
+    return DOCS_DIR / name_nfc  # 없으면 원래 경로 반환 (오류 메시지용)
+
+
+def _find_latest_by_prefix(prefix: str) -> Path:
+    """prefix 로 시작하는 .md 파일 중 파일명 기준 가장 최신(사전순 마지막)을 반환한다.
+    예) '서비스_이용_가이드_' → '서비스_이용_가이드_20261001.md' 자동 선택.
+    파일이 없으면 오류 메시지용 더미 경로를 반환한다.
+    """
+    import unicodedata
+    nfc_prefix = unicodedata.normalize("NFC", prefix)
+    candidates = [
+        f for f in DOCS_DIR.iterdir()
+        if f.suffix == ".md"
+        and unicodedata.normalize("NFC", f.name).startswith(nfc_prefix)
+    ]
+    if not candidates:
+        return DOCS_DIR / f"{prefix}*.md"  # 없으면 더미 경로 (오류 메시지용)
+    return max(candidates, key=lambda f: unicodedata.normalize("NFC", f.name))
+
+
 FILES: list[Path] = [
-    DOCS_DIR / "KDA2025_section_documentation_요약.md",
-    DOCS_DIR / "KSH2022_section_documentation_요약.md",
+    _find_file("KDA2025_section_documentation_요약.md"),
+    _find_file("KSH2022_section_documentation_요약.md"),
     # 이상지질혈증: 기존 DYS_GUIDELINE(figure 7개) 을 흡수·확장한 KSOLA2022(섹션 + 동일 figure)
     # 로 일원화. DB 의 기존 DYS_GUIDELINE 행은 인덱싱 전에 별도 삭제 필요.
-    DOCS_DIR / "KSOLA2022_section_documentation_요약.md",
-    DOCS_DIR / "서비스_이용_가이드_20260522.md",
+    _find_file("KSOLA2022_section_documentation_요약.md"),
+    # 서비스 이용가이드: 날짜가 포함된 파일명으로 업데이트될 수 있어 prefix 로 자동 탐색.
+    # RAG/final docs/ 에 새 버전 파일을 넣으면 코드 수정 없이 자동으로 최신본이 선택된다.
+    _find_latest_by_prefix("서비스_이용_가이드_"),
     # 챌린지 카탈로그 — service 카테고리(GUIDE 와 함께)로 적재되어 질환 횡단으로 검색됨.
-    DOCS_DIR / "CHALLENGE_CATALOG_documentation.md",
+    _find_file("CHALLENGE_CATALOG_documentation.md"),
 ]
 
 # ─────────────────────────────────────────────

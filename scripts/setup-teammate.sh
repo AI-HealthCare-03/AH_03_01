@@ -151,7 +151,7 @@ ok "컨테이너 deps 동기화"
 
 # ─── 6. RAG 인덱싱 ────────────────────────────────────
 step "6. RAG 인덱싱 (이미 적재된 source 는 자동 skip)"
-uv run python -m scripts.rag.index_documents
+PYTHONUTF8=1 uv run python -m scripts.rag.index_documents
 ok "인덱싱 완료"
 warn "컨테이너의 BM25 인덱스는 부팅 시점 메모리에 적재되므로 재시작 필요:"
 docker restart fastapi >/dev/null
