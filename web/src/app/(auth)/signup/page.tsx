@@ -21,6 +21,8 @@ import {
 import {
   checkEmailAvailable,
   checkNicknameAvailable,
+  sendEmailVerification,
+  checkEmailVerified,
   signup,
 } from "@/lib/api/auth";
 import { extractErrorMessage } from "@/lib/api/client";
@@ -74,6 +76,11 @@ export default function SignupPage() {
   const [emailDupl, setEmailDupl] = useState<DuplStatus>("idle");
   const [nicknameDupl, setNicknameDupl] = useState<DuplStatus>("idle");
 
+  // 이메일 본인 인증 상태: idle → sending(메일 발송중) → sent(발송됨) → verified(인증완료)
+  const [emailVerify, setEmailVerify] =
+    useState<"idle" | "sending" | "sent" | "verified">("idle");
+  const [verifyChecking, setVerifyChecking] = useState(false);
+
   // 이메일 분리 입력 상태
   const EMAIL_DOMAINS = [
     { label: "선택해 주세요", value: "" },
@@ -95,6 +102,42 @@ export default function SignupPage() {
       shouldValidate: false,
     });
     setEmailDupl("idle");
+    setEmailVerify("idle"); // 이메일이 바뀌면 인증 상태 초기화
+  };
+
+  const handleSendVerification = async () => {
+    const email = getValues("email");
+    if (!email) {
+      showToast("이메일을 먼저 입력해 주세요", "info");
+      return;
+    }
+    setEmailVerify("sending");
+    try {
+      await sendEmailVerification(email);
+      setEmailVerify("sent");
+      showToast("인증 메일을 보냈어요. 메일함에서 링크를 확인해 주세요.", "success");
+    } catch (err) {
+      setEmailVerify("idle");
+      showToast(extractErrorMessage(err), "error");
+    }
+  };
+
+  const handleCheckVerified = async () => {
+    const email = getValues("email");
+    setVerifyChecking(true);
+    try {
+      const verified = await checkEmailVerified(email);
+      if (verified) {
+        setEmailVerify("verified");
+        showToast("이메일 인증이 완료되었어요", "success");
+      } else {
+        showToast("아직 인증이 완료되지 않았어요. 메일의 링크를 클릭해 주세요.", "info");
+      }
+    } catch (err) {
+      showToast(extractErrorMessage(err), "error");
+    } finally {
+      setVerifyChecking(false);
+    }
   };
 
   const onSubmit = async (data: SignupFormValues) => {
@@ -237,6 +280,41 @@ export default function SignupPage() {
               )}
               {emailDupl === "taken" && (
                 <p className="text-xs text-status-danger">이미 사용 중인 이메일입니다</p>
+              )}
+
+              {/* 이메일 본인 인증 */}
+              {emailVerify === "verified" ? (
+                <p className="text-xs text-status-success">✓ 이메일 인증 완료</p>
+              ) : (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSendVerification}
+                    loading={emailVerify === "sending"}
+                    className="w-full"
+                  >
+                    {emailVerify === "sent" ? "인증 메일 다시 보내기" : "본인 인증"}
+                  </Button>
+                  {emailVerify === "sent" && (
+                    <>
+                      <p className="text-xs text-text-secondary">
+                        메일함의 링크를 클릭한 뒤 아래 버튼을 눌러 주세요
+                      </p>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        onClick={handleCheckVerified}
+                        loading={verifyChecking}
+                        className="w-full"
+                      >
+                        인증 완료 확인
+                      </Button>
+                    </>
+                  )}
+                </>
               )}
             </div>
 
@@ -420,10 +498,16 @@ export default function SignupPage() {
             size="lg"
             fullWidth
             loading={isSubmitting}
+            disabled={emailVerify !== "verified"}
             className="mt-6"
           >
             가입 완료
           </Button>
+          {emailVerify !== "verified" && (
+            <p className="mt-2 text-center text-xs text-text-secondary">
+              가입을 완료하려면 이메일 본인 인증이 필요합니다
+            </p>
+          )}
         </form>
 
         <p className="mt-5 text-center text-sm text-text-secondary">

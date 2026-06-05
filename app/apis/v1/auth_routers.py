@@ -83,6 +83,16 @@ async def verify_email(
     )
 
 
+@auth_router.get("/email/verification-status", status_code=status.HTTP_200_OK)
+async def email_verification_status(
+    email: Annotated[str, Query(min_length=3, max_length=80)],
+    service: Annotated[EmailVerificationService, Depends(EmailVerificationService)],
+) -> Response:
+    """이메일 인증 완료 여부 조회. 가입폼의 '인증 완료 확인' 버튼에서 호출."""
+    verified = await service.is_verified(email)
+    return Response(content={"email": email, "verified": verified}, status_code=status.HTTP_200_OK)
+
+
 @auth_router.post("/login", response_model=LoginResponse, status_code=status.HTTP_200_OK)
 async def login(
     request: LoginRequest,
