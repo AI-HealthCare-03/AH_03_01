@@ -171,3 +171,8 @@ html.dark .text-text-secondary  { color: #c0c0c0 !important; }
 html.dark .text-text-tertiary   { color: #909090 !important; }
 html.dark .opacity-90,
 html.dark .opacity-75           { opacity: 1 !important; }
+
+/* ── 노란 버튼(button.bg-brand) 내부 a 태그 — 검은색 강제 유지
+   button + .bg-brand + a 조합으로 specificity를 최대화 */
+html.dark button.bg-brand a,
+html.dark button.\!bg-brand a { color: #111111 !important; }
