@@ -18,7 +18,29 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ko">
+    <html lang="ko" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('theme-mode') || 'light';
+                  var font  = localStorage.getItem('font-size')  || '16';
+                  var isDark = false;
+                  if (theme === 'dark') isDark = true;
+                  else if (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches) isDark = true;
+                  if (isDark) {
+                    document.documentElement.style.setProperty('--ui-page-bg', '#1a1a1a');
+                    document.documentElement.classList.add('dark');
+                  }
+                  document.documentElement.style.fontSize = font + 'px';
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body>
         <Providers>{children}</Providers>
       </body>

@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { ToastProvider } from "@/components/ui/Toast";
+import { useNotificationScheduler } from "@/hooks/useNotificationScheduler";
 
 /* =========================================
    Providers — 클라이언트 컴포넌트 전용
@@ -10,6 +11,11 @@ import { ToastProvider } from "@/components/ui/Toast";
 
 interface ProvidersProps {
   children: ReactNode;
+}
+
+function NotificationSchedulerProvider() {
+  useNotificationScheduler();
+  return null;
 }
 
 export default function Providers({ children }: ProvidersProps) {
@@ -30,7 +36,10 @@ export default function Providers({ children }: ProvidersProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ToastProvider>{children}</ToastProvider>
+      <ToastProvider>
+        <NotificationSchedulerProvider />
+        {children}
+      </ToastProvider>
     </QueryClientProvider>
   );
 }

@@ -40,7 +40,7 @@ html {
 body {
   font-family: var(--font-sans);
   color: var(--color-text-primary);
-  background-color: var(--color-bg-base);
+  background-color: var(--ui-page-bg, var(--color-bg-base));
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -68,3 +68,111 @@ button,
   background: var(--color-border-default);
   border-radius: 3px;
 }
+
+/* ── 다크 모드 ───────────────────────────────────────────
+   (main) layout의 bg-[#f8f8f8] 하드코딩을 override
+──────────────────────────────────────────────────────── */
+html.dark #main-layout {
+  background-color: #1a1a1a !important;
+}
+
+/* health-records 페이지 bg 하드코딩 override */
+html.dark #health-records-layout {
+  background-color: #1a1a1a !important;
+}
+
+/* 챌린지 생성 위저드 bg 하드코딩 override */
+html.dark #challenge-wizard-layout {
+  background-color: #1a1a1a !important;
+}
+
+/* 건강 탭 네비게이션 바 */
+html.dark #health-records-layout .bg-white.border-b {
+  background-color: #242424 !important;
+  border-color: #3a3a3a !important;
+}
+
+/* ── 다크 모드 ───────────────────────────────────────────
+   배경: 차콜(#1a1a1a), 카드: 어두운 회색(#242424)
+   텍스트: 밝은 회색~흰색
+   기존 Tailwind 유틸리티 클래스 override
+──────────────────────────────────────────────────────── */
+html.dark body {
+  background-color: #1a1a1a !important;
+  color: #f0f0f0;
+}
+
+/* 카드·패널 (bg-white) */
+html.dark .bg-white {
+  background-color: #242424 !important;
+  color: #f0f0f0;
+}
+
+/* 서피스 배경 (bg-surface) */
+html.dark .bg-surface {
+  background-color: #2e2e2e !important;
+}
+
+/* 테두리 */
+html.dark .border-border {
+  border-color: #3a3a3a !important;
+}
+
+/* 텍스트 */
+html.dark .text-text-primary   { color: #f0f0f0 !important; }
+html.dark .text-text-secondary  { color: #b0b0b0 !important; }
+html.dark .text-text-tertiary   { color: #7a7a7a !important; }
+/* text-brand-black → 다크모드에서 밝게 */
+html.dark .text-brand-black { color: #f0f0f0 !important; }
+
+/* 상단 헤더 GNB */
+html.dark header {
+  background-color: #1a1a1a !important;
+  border-color: #3a3a3a !important;
+}
+
+/* 입력창 */
+html.dark input,
+html.dark textarea,
+html.dark select {
+  background-color: #2e2e2e !important;
+  color: #f0f0f0 !important;
+  border-color: #3a3a3a !important;
+}
+
+/* 입력 placeholder */
+html.dark input::placeholder,
+html.dark textarea::placeholder { color: #666666 !important; }
+
+/* overflow-hidden 카드 내부 border */
+html.dark .divide-border > * + * { border-color: #3a3a3a !important; }
+
+/* 호버 */
+html.dark .hover\:bg-surface:hover { background-color: #2e2e2e !important; }
+
+/* 스크롤바 */
+html.dark ::-webkit-scrollbar-thumb { background: #444444; }
+
+/* ── 노란 배경(bg-brand, !bg-brand) → 글씨 검은색 ────────
+   같은 요소에 bg-brand + text-brand-black 이 함께 있는 경우 포함 */
+html.dark .bg-brand,
+html.dark .\!bg-brand,
+html.dark .bg-brand *,
+html.dark .\!bg-brand *,
+html.dark .bg-brand.text-brand-black,
+html.dark .\!bg-brand.\!text-brand-black { color: #111111 !important; }
+
+/* bg-brand-black 버튼(검은 버튼) 내부는 흰 글씨 유지 */
+html.dark .bg-brand-black,
+html.dark .bg-brand-black * { color: #ffffff !important; }
+
+/* ── 가시성 보완 ──────────────────────────────────────── */
+html.dark .text-text-secondary  { color: #c0c0c0 !important; }
+html.dark .text-text-tertiary   { color: #909090 !important; }
+html.dark .opacity-90,
+html.dark .opacity-75           { opacity: 1 !important; }
+
+/* ── 노란 버튼(button.bg-brand) 내부 a 태그 — 검은색 강제 유지
+   button + .bg-brand + a 조합으로 specificity를 최대화 */
+html.dark button.bg-brand a,
+html.dark button.\!bg-brand a { color: #111111 !important; }

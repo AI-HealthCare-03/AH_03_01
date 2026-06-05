@@ -76,9 +76,10 @@ class ChallengeRepository:
             qs = qs.filter(start_date__lte=date_to)
         if user_id is not None:
             # Tortoise 가 __in= 에 subquery 객체를 직접 받지 못하므로 list 로 먼저 materialize.
+            # PENDING 상태도 포함 — 초대 코드로 참가 신청 후 승인 대기 중인 챌린지도 목록에 표시
             participating_ids = await ChallengeParticipant.filter(
                 user_id=user_id,
-                status=ParticipantStatus.APPROVED,
+                status__in=[ParticipantStatus.APPROVED, ParticipantStatus.PENDING],
             ).values_list("challenge_id", flat=True)
             qs = qs.filter(Q(creator_id=user_id) | Q(id__in=list(participating_ids)))
         total = await qs.count()

@@ -59,6 +59,7 @@ services:
     environment:
       # 컨테이너 네트워크 안에서는 서비스명으로 해석. .env 의 localhost 를 오버라이드.
       DB_HOST: postgres
+      REDIS_HOST: redis
     command: |
       sh -c "uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     volumes:
@@ -89,6 +90,7 @@ services:
     env_file: .env
     environment:
       DB_HOST: postgres
+      REDIS_HOST: redis
       HF_HOME: /app/.cache/huggingface
       TRANSFORMERS_CACHE: /app/.cache/huggingface
     restart: always

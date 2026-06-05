@@ -30,6 +30,19 @@ class FindIdResponse(BaseModel):
     created_at: date
 
 
+class SendVerificationRequest(BaseModel):
+    email: Annotated[EmailStr, Field(max_length=40)]
+
+
+class VerifyEmailRequest(BaseModel):
+    token: Annotated[str, Field(min_length=10, max_length=128)]
+
+
+class VerifyEmailResponse(BaseModel):
+    email: EmailStr
+    verified: bool
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: Annotated[str, Field(min_length=8)]

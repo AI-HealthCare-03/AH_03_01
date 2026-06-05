@@ -53,6 +53,33 @@ DOCS_DIR = PROJECT_ROOT / "RAG" / "final docs"
 
 FILES: list[Path] = sorted(DOCS_DIR.glob("*.md"))
 
+def _find_file(name_nfc: str) -> Path:
+    """NFC/NFD 인코딩 차이를 무시하고 DOCS_DIR 에서 파일을 찾는다."""
+    import unicodedata
+    nfc = unicodedata.normalize("NFC", name_nfc)
+    for f in DOCS_DIR.iterdir():
+        if unicodedata.normalize("NFC", f.name) == nfc:
+            return f
+    return DOCS_DIR / name_nfc  # 없으면 원래 경로 반환 (오류 메시지용)
+
+
+def _find_latest_by_prefix(prefix: str) -> Path:
+    """prefix 로 시작하는 .md 파일 중 파일명 기준 가장 최신(사전순 마지막)을 반환한다.
+    예) '서비스_이용_가이드_' → '서비스_이용_가이드_20261001.md' 자동 선택.
+    파일이 없으면 오류 메시지용 더미 경로를 반환한다.
+    """
+    import unicodedata
+    nfc_prefix = unicodedata.normalize("NFC", prefix)
+    candidates = [
+        f for f in DOCS_DIR.iterdir()
+        if f.suffix == ".md"
+        and unicodedata.normalize("NFC", f.name).startswith(nfc_prefix)
+    ]
+    if not candidates:
+        return DOCS_DIR / f"{prefix}*.md"  # 없으면 더미 경로 (오류 메시지용)
+    return max(candidates, key=lambda f: unicodedata.normalize("NFC", f.name))
+
+
 # ─────────────────────────────────────────────
 # 청킹 / 임베딩 설정 (팀원 프로토타입과 동일 파라미터)
 # ─────────────────────────────────────────────
