@@ -758,6 +758,10 @@ async def _decompose_query(question: str, query_type: str = "drug_food") -> list
             max_tokens=100,
         )
         text = response.choices[0].message.content.strip()
+        # LLM이 코드펜스나 앞뒤 텍스트를 붙여도 JSON 배열 부분만 추출
+        text = re.sub(r"```json|```", "", text).strip()
+        match = re.search(r"\[.*?\]", text, re.DOTALL)
+        text = match.group(0) if match else text
         queries = json.loads(text)
         if isinstance(queries, list) and len(queries) >= 2:
             _logger.info("query decomposition[%s] 성공: %s → %s", query_type, question[:30], queries)
@@ -801,6 +805,7 @@ async def retrieve_node(state: ChatState) -> dict[str, Any]:
                     top_k=top_k // 2,
                     source_type=source_type,
                     disease=diseases if diseases else None,
+                    topics=state.get("topics") or None,
                 )
                 for chunk in result.chunks:
                     chunk_id = chunk.metadata.get("section_id") or str(chunk.document_id)
@@ -811,9 +816,9 @@ async def retrieve_node(state: ChatState) -> dict[str, Any]:
         else:
             result = await retrieve(
                 query=query,
-                top_k=top_k,
                 source_type=source_type,
-                disease=diseases if diseases else None,
+                disease=state.get("diseases"),
+                topics=state.get("topics") or None,
             )
             return {"retrieved_docs": result.chunks, "retrieval_query": query}
 
