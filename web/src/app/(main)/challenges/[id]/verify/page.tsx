@@ -29,7 +29,8 @@ export default function VerifyPage({ params }: VerifyPageProps) {
   const { showToast } = useToast();
 
   const { data: challenge, isLoading } = useChallenge(challengeId);
-  const { data: verificationsData } = useVerifications(challengeId);
+  /* mine: true — 내 인증만 조회. 다른 멤버의 인증이 섞이면 중복 인증 오탐 발생 */
+  const { data: verificationsData } = useVerifications(challengeId, { mine: true });
   const verifyMutation = useCreateVerification();
 
   /* 오늘 이미 인증했는지 확인 (APPROVED or PENDING) */
@@ -51,6 +52,11 @@ export default function VerifyPage({ params }: VerifyPageProps) {
     const dd = String(d.getDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
   })();
+
+  /* 오늘 이미 인증했는지 확인 (내 인증만, APPROVED or PENDING) */
+  const alreadyVerifiedToday = verificationsData?.items.some(
+    (v) => v.verified_date === today && (v.status === "APPROVED" || v.status === "PENDING")
+  ) ?? false;
 
   /* 체크 인증 */
   const handleCheck = (checked: boolean) => {
