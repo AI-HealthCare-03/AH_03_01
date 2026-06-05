@@ -7,6 +7,7 @@ import { useChallenge } from "@/hooks/queries/useChallenge";
 import { useVerifications } from "@/hooks/queries/useVerifications";
 import { useCreateVerification } from "@/hooks/queries/useCreateVerification";
 import CheckVerify from "@/components/challenges/verify/CheckVerify";
+import MeditationTimer from "@/components/challenges/verify/MeditationTimer";
 import PhotoVerify from "@/components/challenges/verify/PhotoVerify";
 import QuestionnaireVerify from "@/components/challenges/verify/QuestionnaireVerify";
 import RewardCelebrationModal from "@/components/challenges/verify/RewardCelebrationModal";
@@ -50,7 +51,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
   ) ?? false;
 
   /* 체크 인증 */
-  const handleCheck = (checked: boolean) => {
+  const handleCheck = (checked: boolean, caption?: string) => {
     verifyMutation.mutate(
       {
         body: {
@@ -58,6 +59,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
           method: "CHECK",
           verified_date: today,
           checked,
+          caption: caption || undefined,
         },
         method: "CHECK",
       },
@@ -107,7 +109,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
   };
 
   /* 사진 인증. PhotoVerify 가 파일 업로드를 마치고 photoFileId 를 넘겨준다. */
-  const handlePhoto = (memo: string, photoFileId: number) => {
+  const handlePhoto = (caption: string, photoFileId: number) => {
     verifyMutation.mutate(
       {
         body: {
@@ -115,7 +117,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
           method: "PHOTO",
           verified_date: today,
           photo_file_id: photoFileId,
-          memo: memo || undefined,
+          caption: caption || undefined,
         },
         method: "PHOTO",
       },
@@ -133,6 +135,36 @@ export default function VerifyPage({ params }: VerifyPageProps) {
           showToast(extractErrorMessage(err), "error");
         },
       },
+    );
+  };
+
+  /* 명상 타이머 인증 */
+  const handleMeditation = (durationSeconds: number, caption?: string) => {
+    verifyMutation.mutate(
+      {
+        body: {
+          challenge_id: challengeId,
+          method: "CHECK",
+          verified_date: today,
+          checked: true,
+          caption: caption || undefined,
+          duration_seconds: durationSeconds,
+        },
+        method: "CHECK",
+      },
+      {
+        onSuccess: (data) => {
+          if (data.status === "APPROVED") {
+            setRewardOpen(true);
+          } else {
+            showToast("명상 인증이 처리되었어요", "info");
+            router.push(`/challenges/${challengeId}`);
+          }
+        },
+        onError: (err) => {
+          showToast(extractErrorMessage(err), "error");
+        },
+      }
     );
   };
 
@@ -198,6 +230,17 @@ export default function VerifyPage({ params }: VerifyPageProps) {
           2) CHECK → 예/아니오
           3) PHOTO → 사진 업로드 */}
       {(() => {
+        /* 명상 챌린지 → 타이머 */
+        if (challenge.category === "MEDITATION") {
+          return (
+            <MeditationTimer
+              challenge={challenge}
+              onSubmit={handleMeditation}
+              onCancel={() => router.push(`/challenges/${challengeId}`)}
+              loading={verifyMutation.isPending}
+            />
+          );
+        }
         const questionnaireTemplate = (challenge.goal_config as Record<string, unknown> | undefined)?.[
           "questionnaire_template"
         ];

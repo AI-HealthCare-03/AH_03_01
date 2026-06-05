@@ -12,7 +12,7 @@ import type { Challenge } from "@/types/challenge";
 
 interface CheckVerifyProps {
   challenge: Challenge;
-  onSubmit: (checked: boolean) => void;
+  onSubmit: (checked: boolean, caption?: string) => void;
   loading?: boolean;
 }
 
@@ -32,6 +32,7 @@ export default function CheckVerify({
   loading = false,
 }: CheckVerifyProps) {
   const [selected, setSelected] = useState<boolean | null>(null);
+  const [caption, setCaption] = useState("");
 
   const config = CATEGORY_CONFIG[challenge.category] ?? CATEGORY_CONFIG.EXERCISE;
   const question =
@@ -39,7 +40,7 @@ export default function CheckVerify({
 
   const handleSubmit = () => {
     if (selected !== null) {
-      onSubmit(selected);
+      onSubmit(selected, caption.trim() || undefined);
     }
   };
 
@@ -99,6 +100,30 @@ export default function CheckVerify({
           </span>
         </button>
       </div>
+
+      {/* 한 마디 (caption) */}
+      {selected !== null && (
+        <div className="w-full max-w-xs mb-6">
+          <label
+            htmlFor="check-caption"
+            className="block text-sm font-semibold text-text-primary mb-2"
+          >
+            한 마디 <span className="text-text-tertiary font-normal">(선택)</span>
+          </label>
+          <textarea
+            id="check-caption"
+            value={caption}
+            onChange={(e) => setCaption(e.target.value)}
+            rows={2}
+            maxLength={500}
+            placeholder="오늘의 소감을 남겨보세요..."
+            className="w-full px-4 py-3 rounded-[12px] border border-border text-sm resize-none focus:outline-none focus:border-brand-black"
+          />
+          <p className="text-xs text-text-tertiary text-right mt-1">
+            {caption.length}/500
+          </p>
+        </div>
+      )}
 
       {/* 확인 버튼 */}
       <Button
