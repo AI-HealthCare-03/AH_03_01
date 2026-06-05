@@ -218,11 +218,12 @@ export async function createVerification(
 
 /* ─── 인증 목록 ─── */
 export async function fetchVerifications(
-  challengeId: number
+  challengeId: number,
+  options?: { mine?: boolean }
 ): Promise<VerificationListResponse> {
   const { data } = await apiClient.get<VerificationListResponse>(
     "/api/v1/challenge-verifications",
-    { params: { challengeId } }
+    { params: { challengeId, ...(options?.mine ? { mine: true } : {}) } }
   );
   return data;
 }

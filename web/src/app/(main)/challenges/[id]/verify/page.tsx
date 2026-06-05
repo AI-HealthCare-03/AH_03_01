@@ -4,6 +4,7 @@ import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useChallenge } from "@/hooks/queries/useChallenge";
+import { useVerifications } from "@/hooks/queries/useVerifications";
 import { useCreateVerification } from "@/hooks/queries/useCreateVerification";
 import CheckVerify from "@/components/challenges/verify/CheckVerify";
 import PhotoVerify from "@/components/challenges/verify/PhotoVerify";
@@ -28,6 +29,8 @@ export default function VerifyPage({ params }: VerifyPageProps) {
   const { showToast } = useToast();
 
   const { data: challenge, isLoading } = useChallenge(challengeId);
+  /* mine: true — 내 인증만 조회. 다른 멤버의 인증이 섞이면 중복 인증 오탐 발생 */
+  const { data: verificationsData } = useVerifications(challengeId, { mine: true });
   const verifyMutation = useCreateVerification();
 
   const [rewardOpen, setRewardOpen] = useState(false);
@@ -40,6 +43,11 @@ export default function VerifyPage({ params }: VerifyPageProps) {
     const dd = String(d.getDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
   })();
+
+  /* 오늘 이미 인증했는지 확인 (내 인증만, APPROVED or PENDING) */
+  const alreadyVerifiedToday = verificationsData?.items.some(
+    (v) => v.verified_date === today && (v.status === "APPROVED" || v.status === "PENDING")
+  ) ?? false;
 
   /* 체크 인증 */
   const handleCheck = (checked: boolean) => {
@@ -148,6 +156,27 @@ export default function VerifyPage({ params }: VerifyPageProps) {
       <div className="max-w-md mx-auto px-5 py-16 text-center">
         <p className="text-sm text-text-tertiary">챌린지 정보를 불러올 수 없어요</p>
         <Link href="/challenges" className="mt-3 text-sm font-semibold text-brand-black underline block">
+          챌린지로 돌아가기
+        </Link>
+      </div>
+    );
+  }
+
+  /* 오늘 이미 인증한 경우 */
+  if (alreadyVerifiedToday) {
+    return (
+      <div className="max-w-md mx-auto px-5 py-16 text-center">
+        <p className="text-5xl mb-4" aria-hidden="true">✅</p>
+        <p className="text-lg font-black text-text-primary mb-2">
+          오늘 챌린지 인증을 이미 했어요!
+        </p>
+        <p className="text-sm text-text-secondary mb-8">
+          내일 다시 인증할 수 있어요.
+        </p>
+        <Link
+          href={`/challenges/${challengeId}`}
+          className="inline-block px-6 py-3 bg-brand rounded-[12px] text-sm font-bold text-brand-black"
+        >
           챌린지로 돌아가기
         </Link>
       </div>
