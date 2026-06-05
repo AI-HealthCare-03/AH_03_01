@@ -15,6 +15,9 @@ import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { POINT_BALANCE_KEY } from "@/hooks/queries/usePointBalance";
+import { WEEKLY_XP_KEY } from "@/hooks/queries/useWeeklyXp";
 
 /* =========================================
    챌린지 상세 페이지 (10-C08 / 10-C09 / 10-C19)
@@ -39,6 +42,7 @@ function ChallengeDetailContent({
 
   const router = useRouter();
   const { showToast } = useToast();
+  const qc = useQueryClient();
 
   const { data: challenge, isLoading, error } = useChallenge(challengeId);
   const { data: verificationsData } = useVerifications(challengeId);
@@ -50,6 +54,12 @@ function ChallengeDetailContent({
   const verifiedDates =
     verificationsData?.items
       .filter((v) => v.status === "APPROVED")
+      .map((v) => v.created_at.split("T")[0]) ?? [];
+
+  /* AI 검증 대기 날짜 목록 (PENDING 상태) */
+  const pendingDates =
+    verificationsData?.items
+      .filter((v) => v.status === "PENDING")
       .map((v) => v.created_at.split("T")[0]) ?? [];
 
   /* 사진 인증 결과(완료/실패) 알림.
@@ -66,6 +76,9 @@ function ChallengeDetailContent({
     notifiedRef.current = true;
     if (v.status === "APPROVED") {
       showToast("인증 완료! 사진이 챌린지에 맞게 확인되었어요 🎉", "success");
+      /* AI 승인 시 포인트/XP 백엔드에서 지급됨 → GNB 포인트 즉시 반영 */
+      qc.invalidateQueries({ queryKey: POINT_BALANCE_KEY });
+      qc.invalidateQueries({ queryKey: WEEKLY_XP_KEY });
     } else {
       showToast(
         `인증 실패: ${v.rejection_reason ?? "사진이 챌린지와 맞지 않아요. 다시 시도해 주세요."}`,
@@ -74,7 +87,7 @@ function ChallengeDetailContent({
     }
     /* ?pending 제거 — 새로고침/재진입 시 중복 알림 방지 */
     router.replace(`/challenges/${challengeId}`);
-  }, [pendingId, verificationsData, challengeId, router, showToast]);
+  }, [pendingId, verificationsData, challengeId, router, showToast, qc]);
 
   /* 로딩 */
   if (isLoading) {
@@ -165,6 +178,7 @@ function ChallengeDetailContent({
         <PersonalDetail
           challenge={challenge}
           verifiedDates={verifiedDates}
+          pendingDates={pendingDates}
           onShield={() => setShieldOpen(true)}
         />
       )}
