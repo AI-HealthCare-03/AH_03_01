@@ -410,6 +410,7 @@ class VerificationService:
         self.challenge_repo = ChallengeRepository()
         self.image_job_repo = ImageVerificationJobRepository()
         self.attachment_repo = ChallengeVerificationAttachmentRepository()
+        self.reaction_repo = ChallengeReactionRepository()
         self.image_verifier = ImageVerifier()
         self.reward_service = RewardService()
         self.pet_service = PetService()
@@ -462,6 +463,8 @@ class VerificationService:
                     "answers": data.answers or {},
                     "photo_file_id": data.photo_file_id,
                     "shield_inventory_id": data.shield_inventory_id,
+                    "caption": data.caption,
+                    "verified_duration_seconds": data.duration_seconds,
                     "status": initial_status,
                 }
             )
@@ -594,6 +597,39 @@ class VerificationService:
         if verification.user_id != user.id and not user.is_admin:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="본인만 삭제할 수 있습니다.")
         await self.repo.soft_delete(verification)
+
+    async def get_feed(
+        self,
+        user: User,
+        challenge_id: int,
+        page: int,
+        size: int,
+    ) -> tuple[list[dict[str, Any]], int]:
+        participant = await self.participant_repo.get_by_user(challenge_id, user.id)
+        if participant is None or participant.status != ParticipantStatus.APPROVED:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="접근 권한이 없습니다.")
+        items, total = await self.repo.list_feed(challenge_id, page, size)
+        verification_ids = [v.id for v in items]
+        liked_ids = await self.reaction_repo.get_liked_verification_ids(user.id, verification_ids)
+        result: list[dict[str, Any]] = []
+        for v in items:
+            u = getattr(v, "user", None)
+            result.append(
+                {
+                    "id": v.id,
+                    "user_id": v.user_id,
+                    "user_nickname": (u.nickname or u.name) if u else None,
+                    "method": v.method,
+                    "verified_date": v.verified_date,
+                    "caption": getattr(v, "caption", None),
+                    "photo_file_id": v.photo_file_id,
+                    "like_count": v.like_count,
+                    "comment_count": v.comment_count,
+                    "my_like": v.id in liked_ids,
+                    "created_at": v.created_at,
+                }
+            )
+        return result, total
 
 
 class ReactionService:
