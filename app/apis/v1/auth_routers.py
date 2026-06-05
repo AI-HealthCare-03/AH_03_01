@@ -10,11 +10,15 @@ from app.dtos.auth import (
     FindIdResponse,
     LoginRequest,
     LoginResponse,
+    SendVerificationRequest,
     SignUpRequest,
     TokenRefreshResponse,
+    VerifyEmailRequest,
+    VerifyEmailResponse,
 )
 from app.repositories.user_repository import UserRepository
 from app.services.auth import AuthService
+from app.services.email_verification import EmailVerificationService
 from app.services.jwt import JwtService
 
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
@@ -55,6 +59,28 @@ async def find_id(
     """이름 + 휴대폰 번호로 가입 이메일(마스킹) 조회. 미일치 시 404."""
     result = await auth_service.find_id(request)
     return Response(content=result.model_dump(mode="json"), status_code=status.HTTP_200_OK)
+
+
+@auth_router.post("/email/send-verification", status_code=status.HTTP_202_ACCEPTED)
+async def send_email_verification(
+    request: SendVerificationRequest,
+    service: Annotated[EmailVerificationService, Depends(EmailVerificationService)],
+) -> Response:
+    """입력 이메일로 본인 인증 링크 메일을 발송한다. (계정 열거 방지: 항상 202)"""
+    await service.send_verification(str(request.email))
+    return Response(content={"detail": "인증 메일을 발송했습니다."}, status_code=status.HTTP_202_ACCEPTED)
+
+
+@auth_router.post("/email/verify", response_model=VerifyEmailResponse, status_code=status.HTTP_200_OK)
+async def verify_email(
+    request: VerifyEmailRequest,
+    service: Annotated[EmailVerificationService, Depends(EmailVerificationService)],
+) -> Response:
+    """인증 링크의 토큰을 검증하고 이메일을 인증 완료 처리한다. 유효하지 않으면 400."""
+    email = await service.verify(request.token)
+    return Response(
+        content=VerifyEmailResponse(email=email, verified=True).model_dump(), status_code=status.HTTP_200_OK
+    )
 
 
 @auth_router.post("/login", response_model=LoginResponse, status_code=status.HTTP_200_OK)
