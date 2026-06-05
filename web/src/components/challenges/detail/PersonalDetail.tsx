@@ -17,6 +17,7 @@ interface PersonalDetailProps {
   challenge: Challenge;
   verifiedDates: string[];
   pendingDates?: string[];
+  rejectedToday?: boolean;
   onShield: () => void;
 }
 
@@ -24,6 +25,7 @@ export default function PersonalDetail({
   challenge,
   verifiedDates,
   pendingDates = [],
+  rejectedToday = false,
   onShield,
 }: PersonalDetailProps) {
   const catConfig = CATEGORY_CONFIG[challenge.category] ?? CATEGORY_CONFIG.EXERCISE;
@@ -83,6 +85,13 @@ export default function PersonalDetail({
               <span className="text-xl" aria-hidden="true">⏳</span>
               <p className="text-sm font-semibold text-status-info">
                 AI 검증 중... 잠시만 기다려주세요
+              </p>
+            </div>
+          ) : rejectedToday ? (
+            <div className="flex items-center gap-2 py-3 bg-status-danger-bg rounded-[12px] px-4">
+              <span className="text-xl" aria-hidden="true">❌</span>
+              <p className="text-sm font-semibold text-status-danger">
+                오늘 목표를 달성하지 못했어요
               </p>
             </div>
           ) : (

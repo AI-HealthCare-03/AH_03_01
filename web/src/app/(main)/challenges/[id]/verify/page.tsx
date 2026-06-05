@@ -30,7 +30,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
 
   const { data: challenge, isLoading } = useChallenge(challengeId);
   /* mine: true — 내 인증만 조회. 다른 멤버의 인증이 섞이면 중복 인증 오탐 발생 */
-  const { data: verificationsData } = useVerifications(challengeId, { mine: true });
+  const { data: verificationsData, isLoading: isLoadingVerifications } = useVerifications(challengeId, { mine: true });
   const verifyMutation = useCreateVerification();
 
   const [rewardOpen, setRewardOpen] = useState(false);
@@ -44,9 +44,11 @@ export default function VerifyPage({ params }: VerifyPageProps) {
     return `${yyyy}-${mm}-${dd}`;
   })();
 
-  /* 오늘 이미 인증했는지 확인 (내 인증만, APPROVED or PENDING) */
+  /* 오늘 이미 인증했는지 확인 (내 인증만, APPROVED/PENDING/REJECTED 모두 포함)
+     REJECTED도 포함 — 아니요 선택 후 재제출 시 백엔드 409 방지 */
   const alreadyVerifiedToday = verificationsData?.items.some(
-    (v) => v.verified_date === today && (v.status === "APPROVED" || v.status === "PENDING")
+    (v) => v.verified_date === today &&
+           (v.status === "APPROVED" || v.status === "PENDING" || v.status === "REJECTED")
   ) ?? false;
 
   /* 체크 인증 */
@@ -141,7 +143,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
     router.push(`/challenges/${challengeId}`);
   };
 
-  if (isLoading) {
+  if (isLoading || isLoadingVerifications) {
     return (
       <div className="max-w-md mx-auto px-5 py-10 space-y-4">
         <div className="h-16 bg-surface rounded-full animate-pulse mx-auto w-16" />

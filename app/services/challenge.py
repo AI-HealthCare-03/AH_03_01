@@ -445,11 +445,14 @@ class VerificationService:
                 detail="오늘은 이미 해당 챌린지의 인증을 완료했습니다.",
             )
 
-        initial_status = VerificationStatus.PENDING
-        if data.method == VerificationMethod.CHECK and data.checked is True:
-            initial_status = VerificationStatus.APPROVED
+        if data.method == VerificationMethod.CHECK:
+            # 체크 인증: checked=True → 달성(APPROVED), checked=False → 미달성(REJECTED)
+            initial_status = VerificationStatus.APPROVED if data.checked is True else VerificationStatus.REJECTED
         elif data.method == VerificationMethod.SHIELD:
             initial_status = VerificationStatus.APPROVED
+        else:
+            # PHOTO → AI 검증 대기
+            initial_status = VerificationStatus.PENDING
 
         async with in_transaction():
             verification = await self.repo.create(
