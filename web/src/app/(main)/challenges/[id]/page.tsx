@@ -63,6 +63,12 @@ function ChallengeDetailContent({
       .filter((v) => v.status === "PENDING")
       .map((v) => v.created_at.split("T")[0]) ?? [];
 
+  /* 오늘 체크 인증 실패 여부 (CHECK + checked=false → REJECTED) */
+  const rejectedToday =
+    verificationsData?.items.some(
+      (v) => v.status === "REJECTED" && v.verified_date === new Date().toLocaleDateString("sv")
+    ) ?? false;
+
   /* 사진 인증 결과(완료/실패) 알림.
      verify 페이지가 PHOTO 제출 후 ?pending={verificationId} 로 돌려보내면,
      useVerifications 의 폴링이 ai_worker(SigLIP2) 판정 결과를 받아온다.
@@ -180,6 +186,7 @@ function ChallengeDetailContent({
           challenge={challenge}
           verifiedDates={verifiedDates}
           pendingDates={pendingDates}
+          rejectedToday={rejectedToday}
           onShield={() => setShieldOpen(true)}
         />
       )}
