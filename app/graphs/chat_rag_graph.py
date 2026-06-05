@@ -179,6 +179,26 @@ _INLINE_NUMERIC_PATTERN = re.compile(
 )
 
 
+# prefilter 확장: 명확한 서비스 질문 패턴 — 길이 무관, 의료 키워드 없으면 LLM 스킵
+# 비밀번호/로그인/회원가입/탈퇴 등 앱 기능 관련 질문
+_SERVICE_PREFILTER_PATTERN = re.compile(
+    r"비밀번호\s*(변경|찾기|재설정|초기화|설정|잊|까먹)"
+    r"|로그인\s*(방법|이?\s*안|못|문제|오류|에러|안\s*되)"
+    r"|회원\s*(가입|탈퇴|정보\s*수정|등록)"
+    r"|아이디\s*(찾기|변경|잊)"
+    r"|앱\s*(설치|다운|업데이트|오류|버그|삭제)"
+    r"|알림\s*(설정|끄기|켜기|받기|안\s*와)"
+    r"|탈퇴\s*(방법|하고\s*싶|하려)",
+    re.IGNORECASE,
+)
+
+# prefilter 확장: 명백한 개인정보 질문 — 범위 외로 즉시 처리
+_PERSONAL_INFO_PREFILTER_PATTERN = re.compile(
+    r"^(내|제|나의|저의)?\s*(이름|나이|생년월일|전화번호|주소|성별)\s*(이?뭐야|이?뭐에요|알아요?\??|알려줘|뭔가요\??|뭐예요\??)\s*\??$",
+    re.IGNORECASE,
+)
+
+
 def _looks_like_personal_status_question(text: str) -> bool:
     """LLM 분류 보강 — 명백한 본인 상태 평가 요청 여부 (휴리스틱)."""
     stripped = text.strip()
@@ -438,40 +458,65 @@ needs_health_data=false 면 missing_fields=[].
 
 
 def _heuristic_prefilter(question: str) -> dict[str, Any] | None:
-    """LLM 호출 없이 즉시 결정 가능한 매우 보수적 케이스만 prefilter.
+    """LLM 호출 없이 즉시 결정 가능한 케이스를 처리.
 
-    적용 조건 (모두 만족):
-      1. 메시지 길이 ≤ _PREFILTER_MAX_LEN 자
-      2. 의료 토픽 키워드 / 서비스(챌린지·포인트·인증·로그인 등) 키워드 미포함
-      3. 인사·감사·작별 표현 정규식과 매치
+    3가지 경로:
+      A. 명확한 서비스 기능 질문 (비밀번호/로그인/회원 등) → service_guide 즉시 반환
+      B. 명백한 개인정보 질문 (이름/나이 등) → general(범위 외) 즉시 반환
+      C. 인사·감사·작별 (30자 이내, 의료/서비스 키워드 없음) → general 즉시 반환
 
-    매치되면 intent=general / needs_health_data=false 로 즉시 반환.
     불일치하면 None 을 돌려 LLM 으로 위임.
-
-    목적: 단답·인사로 인한 불필요한 LLM 비용·지연 제거 (정확도 손실 거의 없음).
     """
     stripped = question.strip()
+
+    # A. 명확한 서비스 기능 질문 → LLM 없이 service_guide 즉시 반환
+    # 의료 키워드가 없을 때만 (예: "당뇨 환자 비밀번호" 같은 엣지케이스 방지)
+    if _SERVICE_PREFILTER_PATTERN.search(stripped):
+        has_medical = any(kw.lower() in stripped.lower() for kw in _MEDICAL_TOPIC_KEYWORDS)
+        if not has_medical:
+            _logger.info("classify_intent prefilter SERVICE hit: %s", stripped[:30])
+            return {
+                "intent": "service_guide",
+                "diseases": [],
+                "topics": ["service"],
+                "needs_health_data": False,
+                "needs_challenge_catalog": False,
+                "missing_fields": [],
+                "action_hint": None,
+            }
+
+    # B. 명백한 개인정보 질문 → 범위 외 general 즉시 반환
+    if _PERSONAL_INFO_PREFILTER_PATTERN.match(stripped):
+        _logger.info("classify_intent prefilter PERSONAL_INFO hit: %s", stripped[:30])
+        return {
+            "intent": "general",
+            "diseases": [],
+            "topics": [],
+            "needs_health_data": False,
+            "needs_challenge_catalog": False,
+            "missing_fields": [],
+            "action_hint": None,
+        }
+
+    # C. 인사·감사·작별 (기존 로직 유지)
     if len(stripped) > _PREFILTER_MAX_LEN:
         return None
-
-    # 의료/서비스 토픽 단어가 하나라도 있으면 LLM 분류로 위임.
     lowered = stripped.lower()
     for kw in _MEDICAL_TOPIC_KEYWORDS:
         if kw.lower() in lowered:
             return None
-    # 서비스 의심 키워드 — 일부만 (포인트/챌린지/인증/로그인/회원). 명백한 service_guide
-    # 판단도 LLM 에 맡겨 보수적으로 처리.
     for kw in ("챌린지", "포인트", "인증", "로그인", "회원", "알림", "예측"):
         if kw in stripped:
             return None
-
     if not _GREETING_PATTERN.match(stripped):
         return None
 
     return {
         "intent": "general",
-        "disease": None,
+        "diseases": [],
+        "topics": [],
         "needs_health_data": False,
+        "needs_challenge_catalog": False,
         "missing_fields": [],
         "action_hint": None,
     }
