@@ -43,12 +43,15 @@ from tortoise import Tortoise
 from app.core import config
 from app.core.db.databases import TORTOISE_ORM
 from app.models.rag import DocumentType, RAGDocument
+from scripts.rag.topic_mapping import _get_topics
 
 # ─────────────────────────────────────────────
 # 경로 / 대상 파일
 # ─────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DOCS_DIR = PROJECT_ROOT / "RAG" / "final docs"
+
+FILES: list[Path] = sorted(DOCS_DIR.glob("*.md"))
 
 def _find_file(name_nfc: str) -> Path:
     """NFC/NFD 인코딩 차이를 무시하고 DOCS_DIR 에서 파일을 찾는다."""
@@ -77,25 +80,12 @@ def _find_latest_by_prefix(prefix: str) -> Path:
     return max(candidates, key=lambda f: unicodedata.normalize("NFC", f.name))
 
 
-FILES: list[Path] = [
-    _find_file("KDA2025_section_documentation_요약.md"),
-    _find_file("KSH2022_section_documentation_요약.md"),
-    # 이상지질혈증: 기존 DYS_GUIDELINE(figure 7개) 을 흡수·확장한 KSOLA2022(섹션 + 동일 figure)
-    # 로 일원화. DB 의 기존 DYS_GUIDELINE 행은 인덱싱 전에 별도 삭제 필요.
-    _find_file("KSOLA2022_section_documentation_요약.md"),
-    # 서비스 이용가이드: 날짜가 포함된 파일명으로 업데이트될 수 있어 prefix 로 자동 탐색.
-    # RAG/final docs/ 에 새 버전 파일을 넣으면 코드 수정 없이 자동으로 최신본이 선택된다.
-    _find_latest_by_prefix("서비스_이용_가이드_"),
-    # 챌린지 카탈로그 — service 카테고리(GUIDE 와 함께)로 적재되어 질환 횡단으로 검색됨.
-    _find_file("CHALLENGE_CATALOG_documentation.md"),
-]
-
 # ─────────────────────────────────────────────
 # 청킹 / 임베딩 설정 (팀원 프로토타입과 동일 파라미터)
 # ─────────────────────────────────────────────
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 100
-MIN_CHUNK_LEN = 10
+CHUNK_SIZE = 1200
+CHUNK_OVERLAP = 200
+MIN_CHUNK_LEN = 100
 
 EMBEDDING_BATCH = 50
 EMBEDDING_RETRY = 3
@@ -119,6 +109,10 @@ SEC_HEADER = re.compile(
 # (`DocumentType` enum 에 SERVICE_GUIDE 신규 값을 추가하려면 컬럼 길이도 ALTER 가 필요해
 #  최소 변경 원칙상 OTHER + metadata + source 로 우회.)
 SERVICE_GUIDE_SOURCES = {"GUIDE", "CHALLENGE_CATALOG"}
+
+# scripts/rag/index_documents.py 에 추가할 TOPIC_MAPPING
+# topic 값: diagnosis / medication / lifestyle / complication / risk / monitoring / service
+
 
 # M-6 sanity 허용 figure 접두사 — 각 진료지침이 본문에 다른 자료의 figure 를 인용하는
 # 경우가 있어 source_id prefix 외에 추가 허용 (silent 매치 경고 false positive 방지).
@@ -159,15 +153,15 @@ def build_embedding_text(block: str) -> str:
     """팀원과 동일하게 Content + RAG요약 + 키워드 를 합쳐 임베딩 입력 텍스트로 만든다."""
     parts: list[str] = []
 
-    content_match = re.search(r"### Content\s*\n(.*?)(?=### |\Z)", block, re.DOTALL)
+    content_match = re.search(r"### Content\s*\n(.*?)(?=^### |\Z)", block, re.DOTALL | re.MULTILINE)
     if content_match:
         parts.append(content_match.group(1).strip())
 
-    rag_match = re.search(r"#{3,5}.*?RAG 검색용 요약.*?\n(.*?)(?=#{3,5}|\Z)", block, re.DOTALL)
+    rag_match = re.search(r"^#{3,5}.*?RAG 검색용 요약.*?\n(.*?)(?=^#{3,5}|\Z)", block, re.DOTALL | re.MULTILINE)
     if rag_match:
         parts.append("[RAG요약] " + rag_match.group(1).strip())
 
-    kw_match = re.search(r"#{3,5}.*?검색 키워드.*?\n(.*?)(?=#{3,5}|\Z)", block, re.DOTALL)
+    kw_match = re.search(r"^#{3,5}.*?검색 키워드.*?\n(.*?)(?=^#{3,5}|\Z)", block, re.DOTALL | re.MULTILINE)
     if kw_match:
         keywords = [
             line.strip().lstrip("- ").strip()
@@ -298,6 +292,7 @@ async def load_chunks_to_db(
     objects: list[RAGDocument] = []
     for chunk, vec in zip(chunks, embeddings, strict=True):
         sec_meta = chunk["sec_meta"]
+        topics = _get_topics(chunk["section_id"])
         metadata = {
             # 파일/문서 레벨
             "source_id": source_id,
@@ -316,6 +311,7 @@ async def load_chunks_to_db(
             "source_pages": sec_meta.get("source_pages"),
             "content_hash": sec_meta.get("content_hash"),
             "translation_status": sec_meta.get("translation_status"),
+            "topics": topics if topics else None,  # 빈 리스트는 None으로 
         }
         # None 값 제거 (검색 필터/디버깅 가독성)
         metadata = {k: v for k, v in metadata.items() if v is not None}

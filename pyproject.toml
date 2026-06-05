@@ -50,8 +50,12 @@ app = [
 ]
 dev = [
     "coverage>=7.13.2",
+    "datasets>=4.8.5",
+    "langchain-openai>=0.2.0,<1.0.0",   # ← 범위 조정
+    "langchain-community>=0.2.0,<1.0.0",
     "mypy>=1.19.1",
     "pytest-asyncio>=1.3.0",
+    "ragas>=0.2.0,<0.3.0",              # ← 버전 올림
     "ruff>=0.14.14",
     "types-passlib>=1.7.7.20250602",
     "types-python-dateutil>=2.9.0.20260124",

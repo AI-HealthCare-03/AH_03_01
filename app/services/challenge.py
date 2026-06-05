@@ -286,7 +286,11 @@ class ParticipantService:
             active = await self.repo.count_active(challenge_id)
             if active >= challenge.max_participants:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="모집 정원이 가득 찼습니다.")
-            return await self.repo.update_status(participant, ParticipantStatus.APPROVED)
+            participant = await self.repo.update_status(participant, ParticipantStatus.APPROVED)
+            # 승인 후 정원 달성 시 RECRUITING → ACTIVE 자동 전환
+            if active + 1 >= challenge.max_participants and challenge.status == ChallengeStatus.RECRUITING:
+                await self.challenge_repo.update_instance(challenge, {"status": ChallengeStatus.ACTIVE})
+            return participant
         # reject
         if reason:
             participant.left_at = datetime.now(config.TIMEZONE)
@@ -379,6 +383,9 @@ class ParticipantService:
                 else:
                     await self.repo.update_status(existing, ParticipantStatus.APPROVED)
                 await self.invite_repo.update_status(invite, InviteStatus.ACCEPTED)
+                # 수락 후 정원 달성 시 RECRUITING → ACTIVE 자동 전환
+                if active + 1 >= challenge.max_participants and challenge.status == ChallengeStatus.RECRUITING:
+                    await self.challenge_repo.update_instance(challenge, {"status": ChallengeStatus.ACTIVE})
         else:
             await self.invite_repo.update_status(invite, InviteStatus.REJECTED)
         return invite

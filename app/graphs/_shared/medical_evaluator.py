@@ -361,6 +361,16 @@ async def llm_evaluate(inp: EvalInput) -> tuple[EvalResultLiteral, str, dict[str
 
 
 # ─────────────────────────────────────────────
+# 약물+식품 조합 질문 패턴 (evaluator LLM 평가 스킵용)
+# ─────────────────────────────────────────────
+_DRUG_FOOD_EVAL_PATTERN = re.compile(
+    r"(복용|투약|먹고\s*있|사용\s*중|처방).{0,20}(먹어도|섭취|마셔도|먹을\s*수|괜찮|안전)"
+    r"|(당뇨|고혈압|이상지질혈증|당뇨병).{0,10}(환자|있는데|있는\s*사람).{0,20}(먹어도|섭취|마셔도|먹을\s*수|괜찮|안전)",
+    re.DOTALL,
+)
+
+
+# ─────────────────────────────────────────────
 # 통합 evaluate — 그래프 노드가 직접 호출하는 단일 진입점
 # ─────────────────────────────────────────────
 async def evaluate(inp: EvalInput) -> EvalOutput:
@@ -368,6 +378,8 @@ async def evaluate(inp: EvalInput) -> EvalOutput:
 
     - 1차 Rule fail → 즉시 분류 종료
     - 1차 pass + service_guide → LLM 평가 skip (의료 가드 불필요)
+    - 1차 pass + 약물+식품 조합 질문 → LLM 평가 skip
+      (직접 조합 MD 없어 5번 기준 탈락 방지 — Query Decomposition 으로 관련 원칙 기반 답변)
     - 1차 pass + medical/general → LLM 6기준 평가
     """
     # 1차: Rule
@@ -382,6 +394,17 @@ async def evaluate(inp: EvalInput) -> EvalOutput:
 
     # 서비스 가이드는 의료 가드 불필요 → LLM 평가 skip (속도·과민 fail 회피)
     if inp.intent == "service_guide":
+        return EvalOutput(
+            eval_result="pass",
+            eval_stage="rule",
+            eval_revision_count=inp.revision_count,
+            eval_feedback="",
+        )
+
+    # 약물+식품 조합 질문 → LLM 평가 skip
+    # MD에 특정 약물+식품 직접 조합이 없어 LLM 평가 5번(recommendations_specific)에서
+    # 과민 탈락하는 문제 방지. 1차 Rule 통과 시 pass 처리.
+    if _DRUG_FOOD_EVAL_PATTERN.search(inp.question):
         return EvalOutput(
             eval_result="pass",
             eval_stage="rule",

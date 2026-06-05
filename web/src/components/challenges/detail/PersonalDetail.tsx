@@ -16,12 +16,14 @@ import type { Challenge } from "@/types/challenge";
 interface PersonalDetailProps {
   challenge: Challenge;
   verifiedDates: string[];
+  pendingDates?: string[];
   onShield: () => void;
 }
 
 export default function PersonalDetail({
   challenge,
   verifiedDates,
+  pendingDates = [],
   onShield,
 }: PersonalDetailProps) {
   const catConfig = CATEGORY_CONFIG[challenge.category] ?? CATEGORY_CONFIG.EXERCISE;
@@ -36,6 +38,7 @@ export default function PersonalDetail({
      로컬 타임존 기준으로 today 를 만들어 비교한다. */
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const verifiedToday = verifiedDates.includes(todayStr);
+  const pendingToday  = pendingDates.includes(todayStr);
 
   return (
     <div className="max-w-xl mx-auto px-5 py-6 space-y-5">
@@ -75,6 +78,13 @@ export default function PersonalDetail({
                 오늘 인증 완료!
               </p>
             </div>
+          ) : pendingToday ? (
+            <div className="flex items-center gap-2 py-3 bg-status-info-bg rounded-[12px] px-4">
+              <span className="text-xl" aria-hidden="true">⏳</span>
+              <p className="text-sm font-semibold text-status-info">
+                AI 검증 중... 잠시만 기다려주세요
+              </p>
+            </div>
           ) : (
             <div className="space-y-2">
               <Link href={`/challenges/${challenge.id}/verify`}>
@@ -96,7 +106,7 @@ export default function PersonalDetail({
 
       {/* 이번 주 달성 현황 */}
       <div className="bg-white rounded-[16px] border border-border p-5 shadow-sm">
-        <WeekStrip verifiedDates={verifiedDates} />
+        <WeekStrip verifiedDates={verifiedDates} pendingDates={pendingDates} />
       </div>
 
       {/* 보상 정보 */}

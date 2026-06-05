@@ -41,11 +41,13 @@ evaluate 내부 (한 노드, 2단계):
 
 from __future__ import annotations
 
+
 import functools
 import json
 import logging
 import re
 import time
+from pathlib import Path
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict
@@ -81,7 +83,7 @@ _logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────
 # 상수 / 정책
 # ─────────────────────────────────────────────
-MAX_REVISIONS = 2  # 재검색·재생성 합산 상한 (API 계약 eval_revision_count 0~2)
+MAX_REVISIONS = 1  # 재검색·재생성 합산 상한 (API 계약 eval_revision_count 0~2)
 RETRIEVE_TOP_K = 5  # 일반/서비스 기본
 # medical_inquiry 는 생활요법·약물·추적·위험도 4측면이 한 번에 잡혀야 답변 완전성↑.
 # top_k 를 5→8 로 확장 (broader context). RRF 후보 풀도 자동으로 늘어남.
@@ -151,6 +153,51 @@ _PERSONAL_STATUS_NOUN_PATTERN = re.compile(
 # 단독 1인칭 의문문 — "나는?", "저는?", "내가?" (2글자 이상 1인칭만, M-2: "나?"/"저?" 1글자는 제외).
 _PERSONAL_BARE_PATTERN = re.compile(r"^(나는|저는|내가|제가)\s*\?\s*$")
 
+# N2 가드: 약품명·의약품 보관/용법 / 병원·진료 안내 → 무조건 medical_inquiry 강제.
+# LLM이 diseases=[] 를 근거로 service_guide 로 오분류하는 케이스를 차단.
+_DRUG_KEYWORD_PATTERN = re.compile(
+    r"인슐린|스타틴|와파린|메트포르민|티카그렐러|아스피린|"
+    r"혈압약|당뇨약|고지혈증약|이뇨제|베타차단제|"
+    r"보관\s*(방법|온도|기간|법)|용법|용량|복용\s*(방법|법)|처방전",
+    re.IGNORECASE,
+)
+_HOSPITAL_KEYWORD_PATTERN = re.compile(
+    r"어느\s*(병원|과|진료과)|병원\s*(가야|추천|선택)|진료\s*(과|받을|예약)|처방\s*(받을|전)",
+)
+
+# N3 가드: 쿼리 내 인라인 수치 감지 → needs_health_data 강제 False.
+# LLM이 수치가 포함된 쿼리를 "본인 DB 데이터 필요"로 오분류하면
+# fetch_health_data → has_health_data=False → final_missing_info 로 빠지는 문제 차단.
+# 패턴: 의료 수치 단위 또는 위험도 점수 형태 (소수점 포함)
+# 예: "공복혈당 145", "HbA1c 7.8%", "위험도 0.12", "혈압 142/91", "LDL 95 mg/dL"
+_INLINE_NUMERIC_PATTERN = re.compile(
+    r"\d+\.?\d*\s*%"                        # 퍼센트 수치 (HbA1c 7.8%, 위험도 12%)
+    r"|\d+\.?\d*\s*(mg/dL|mmHg|kg|cm|kcal)" # 단위 포함 수치
+    r"|위험도\s*\d+\.?\d*"                  # 위험도 점수 (0.12, 0.35 등)
+    r"|혈압\s*\d+/\d+"                      # 혈압 수치 (130/85)
+    r"|(공복혈당|혈당|LDL|HDL|중성지방|HbA1c|당화혈색소|콜레스테롤)\s*\d+", # 검사 항목 + 수치
+)
+
+
+# prefilter 확장: 명확한 서비스 질문 패턴 — 길이 무관, 의료 키워드 없으면 LLM 스킵
+# 비밀번호/로그인/회원가입/탈퇴 등 앱 기능 관련 질문
+_SERVICE_PREFILTER_PATTERN = re.compile(
+    r"비밀번호\s*(변경|찾기|재설정|초기화|설정|잊|까먹)"
+    r"|로그인\s*(방법|이?\s*안|못|문제|오류|에러|안\s*되)"
+    r"|회원\s*(가입|탈퇴|정보\s*수정|등록)"
+    r"|아이디\s*(찾기|변경|잊)"
+    r"|앱\s*(설치|다운|업데이트|오류|버그|삭제)"
+    r"|알림\s*(설정|끄기|켜기|받기|안\s*와)"
+    r"|탈퇴\s*(방법|하고\s*싶|하려)",
+    re.IGNORECASE,
+)
+
+# prefilter 확장: 명백한 개인정보 질문 — 범위 외로 즉시 처리
+_PERSONAL_INFO_PREFILTER_PATTERN = re.compile(
+    r"^(내|제|나의|저의)?\s*(이름|나이|생년월일|전화번호|주소|성별)\s*(이?뭐야|이?뭐에요|알아요?\??|알려줘|뭔가요\??|뭐예요\??)\s*\??$",
+    re.IGNORECASE,
+)
+
 
 def _looks_like_personal_status_question(text: str) -> bool:
     """LLM 분류 보강 — 명백한 본인 상태 평가 요청 여부 (휴리스틱)."""
@@ -188,6 +235,7 @@ class ChatState(TypedDict, total=False):
     # diseases — multi-disease 라우팅 지원. 1개면 단일 질환, 2개면 OR 매치.
     # 예: "당뇨병 환자의 이상지질혈증" → ["diabetes", "dyslipidemia"]
     diseases: list[DiseaseLiteral]
+    topics: list[str]    # classify_intent 가 추출한 topic 목록 (retrieve 필터용)
     needs_health_data: bool
     needs_challenge_catalog: bool  # 챌린지 카탈로그를 함께 검색 (medical+service 혼합)
     missing_fields: list[str]
@@ -299,6 +347,7 @@ _CLASSIFY_PROMPT = """당신은 만성질환(고혈압·당뇨·이상지질혈�
 {{
   "intent": "medical_inquiry" | "service_guide" | "general",
   "diseases": ["diabetes" | "hypertension" | "dyslipidemia"],
+  "topics": ["diagnosis" | "medication" | "lifestyle" | "complication" | "risk" | "monitoring" | "service" | "challenge"],
   "needs_health_data": true | false,
   "needs_challenge_catalog": true | false,
   "missing_fields": [],
@@ -310,6 +359,26 @@ _CLASSIFY_PROMPT = """당신은 만성질환(고혈압·당뇨·이상지질혈�
 - "service_guide": 앱 사용법·챌린지·포인트·인증·로그인 등 기능 안내 질문
 - "general": 위 둘에 명확히 안 맞거나 인사·잡담
 - 둘 다 관련된 혼합형(예: "내 상태에 맞는 식단·챌린지")은 medical_inquiry 우선.
+
+== topics (list) ==
+질문이 해당하는 의료 주제 카테고리. intent=medical_inquiry 일 때 retrieve 필터로 사용.
+- "diagnosis"   : 진단 기준·선별검사·분류·수치 해석
+- "medication"  : 약물치료·처방·부작용·약물 상호작용·보관·용법·용량
+- "lifestyle"   : 식사·운동·금연·절주·체중관리·자기관리
+- "complication": 합병증·동반질환·장기 손상
+- "risk"        : 위험도 평가·위험인자·심혈관 위험
+- "monitoring"  : 혈압/혈당 측정·추적관리·목표 수치·모니터링
+- "service"     : 서비스 이용안내·기능설명 (intent=service_guide 일 때)
+- "challenge"   : 챌린지 참여·인증·추천 (needs_challenge_catalog=true 일 때)
+예시:
+- "당뇨 식단 어떻게 해야 해?" → ["lifestyle", "medication"]
+- "스타틴 자몽이랑 먹어도 돼?" → ["medication"]
+- "인슐린 펜 보관 방법" → ["medication"]
+- "당뇨 합병증 예방" → ["complication", "lifestyle"]
+- "혈압 목표 수치" → ["monitoring", "diagnosis"]
+- "챌린지 추천해줘" → ["challenge", "service"]
+- "비밀번호 변경" → ["service"]
+intent=general 이면 [].
 
 == needs_challenge_catalog ==
 질문이 **챌린지/운동 프로그램/생활습관 챌린지 추천**을 요구하는지.
@@ -327,6 +396,14 @@ true 면 retrieve 가 의료 진료지침과 함께 CHALLENGE_CATALOG 도 함께
 - "당뇨병 환자의 이상지질혈증 관리" → ["diabetes", "dyslipidemia"] (multi-disease 라우팅)
 - "운동 권고" → [] (질환 비특화)
 - "챌린지 인증 방법" → [] (서비스 질문)
+- "인슐린 펜 보관 방법" → ["diabetes"] (의약품 보관·관리는 medical_inquiry)
+- "고혈압인데 어떤 병원 가야 하나요" → ["hypertension"] (진료 안내도 medical_inquiry)
+
+== intent 혼동 방지 ==
+다음은 반드시 medical_inquiry (service_guide 아님):
+- 약품명·의약품이 포함된 보관/용법/복용 질문: "인슐린", "스타틴", "와파린", "메트포르민" 등
+- 병원·진료·처방 안내 질문: "어느 병원", "진료과", "처방"
+- 증상·진단·합병증 질문 (service_guide 로 분류 절대 금지)
 
 == needs_health_data ==
 다음 조건 중 하나라도 해당하면 **true** (보수적으로 풀게 분류 — 본인 상태 의심되면 true):
@@ -342,11 +419,30 @@ true 면 retrieve 가 의료 진료지침과 함께 CHALLENGE_CATALOG 도 함께
 - 일반 의학 정보 질문 ("DASH 식단이란?", "당뇨병 진단 기준은?", "고혈압 약 부작용은?")
 - 일반 권고 질문 ("고혈압 환자는 어떤 운동?") — 본인이 명시되지 않음
 - 인사/잡담 ("안녕", "고마워")
+- **질문 본문에 수치가 직접 포함된 경우** — 시스템이 해석 가능한 수치이므로 false:
+  예: "LDL 95, TG 650이면 어떻게 해석하나요?" → false
+  예: "공복혈당 185 mg/dL인데 당뇨인가요?" → false
+  예: "HbA1c 7.1%, 혈압 130/85이면?" → false
+  예: "LDL 145, HDL 48, TG 380 mg/dL이면 어떻게 해석하나요?" → false
+  예: "혈압이 138/88 mmHg인데 어느 단계인가요?" → false
+  예: "HDL 35 mg/dL인데 위험한가요?" → false
+  예: "당뇨 위험도 0.12, 공복혈당 145, HbA1c 7.8%인데 식단 어떻게 해야 하나요?" → false
+  예: "위험도 점수 0.35, 혈압 142/91이면 어떤 관리가 필요한가요?" → false
+  단, "내 LDL이 95인데" 처럼 1인칭 + DB 조회 의도가 명확하면 true 유지.
+  단, "나이가 있는 여성인데 LDL이 145인데" 처럼 3인칭 환자 설명 형태도 false.
 
 같은 주제도 1인칭이 붙으면 true 로 전환:
 - "고혈압 식단" → false / "내 고혈압 식단" → true
 - "당뇨 위험" → false / "내가 당뇨 위험군인지" → true
 - "건강 상태 평가법" → false / "나 어때" → **true** (본인 평가 요청)
+
+단, 다음은 질환명이 포함돼도 **false** (일반 정보 질문):
+- "당뇨가 있는데 OO 해도 되나요?" → false (안전 여부·가능 여부 일반 질문)
+- "고혈압인데 OO 먹어도 되나요?" → false (일반 식이 정보)
+- "당뇨 환자인데 OO 운동은?" → false (일반 운동 정보)
+- "당뇨 환자가 OO 먹어도 되나요?" → false (질환 환자 일반 식이 질문)
+- "고혈압 환자가 OO 해도 되나요?" → false (질환 환자 일반 생활 질문)
+- 본인 수치/상태 평가가 아니라 "OO 질환 환자에게 일반적으로 가능한지" 묻는 경우
 
 == missing_fields ==
 needs_health_data=true 일 때 필요한 데이터 필드명을 한국어 키워드 또는 표준 영문 키 중 알아보기 쉬운 쪽으로:
@@ -362,40 +458,65 @@ needs_health_data=false 면 missing_fields=[].
 
 
 def _heuristic_prefilter(question: str) -> dict[str, Any] | None:
-    """LLM 호출 없이 즉시 결정 가능한 매우 보수적 케이스만 prefilter.
+    """LLM 호출 없이 즉시 결정 가능한 케이스를 처리.
 
-    적용 조건 (모두 만족):
-      1. 메시지 길이 ≤ _PREFILTER_MAX_LEN 자
-      2. 의료 토픽 키워드 / 서비스(챌린지·포인트·인증·로그인 등) 키워드 미포함
-      3. 인사·감사·작별 표현 정규식과 매치
+    3가지 경로:
+      A. 명확한 서비스 기능 질문 (비밀번호/로그인/회원 등) → service_guide 즉시 반환
+      B. 명백한 개인정보 질문 (이름/나이 등) → general(범위 외) 즉시 반환
+      C. 인사·감사·작별 (30자 이내, 의료/서비스 키워드 없음) → general 즉시 반환
 
-    매치되면 intent=general / needs_health_data=false 로 즉시 반환.
     불일치하면 None 을 돌려 LLM 으로 위임.
-
-    목적: 단답·인사로 인한 불필요한 LLM 비용·지연 제거 (정확도 손실 거의 없음).
     """
     stripped = question.strip()
+
+    # A. 명확한 서비스 기능 질문 → LLM 없이 service_guide 즉시 반환
+    # 의료 키워드가 없을 때만 (예: "당뇨 환자 비밀번호" 같은 엣지케이스 방지)
+    if _SERVICE_PREFILTER_PATTERN.search(stripped):
+        has_medical = any(kw.lower() in stripped.lower() for kw in _MEDICAL_TOPIC_KEYWORDS)
+        if not has_medical:
+            _logger.info("classify_intent prefilter SERVICE hit: %s", stripped[:30])
+            return {
+                "intent": "service_guide",
+                "diseases": [],
+                "topics": ["service"],
+                "needs_health_data": False,
+                "needs_challenge_catalog": False,
+                "missing_fields": [],
+                "action_hint": None,
+            }
+
+    # B. 명백한 개인정보 질문 → 범위 외 general 즉시 반환
+    if _PERSONAL_INFO_PREFILTER_PATTERN.match(stripped):
+        _logger.info("classify_intent prefilter PERSONAL_INFO hit: %s", stripped[:30])
+        return {
+            "intent": "general",
+            "diseases": [],
+            "topics": [],
+            "needs_health_data": False,
+            "needs_challenge_catalog": False,
+            "missing_fields": [],
+            "action_hint": None,
+        }
+
+    # C. 인사·감사·작별 (기존 로직 유지)
     if len(stripped) > _PREFILTER_MAX_LEN:
         return None
-
-    # 의료/서비스 토픽 단어가 하나라도 있으면 LLM 분류로 위임.
     lowered = stripped.lower()
     for kw in _MEDICAL_TOPIC_KEYWORDS:
         if kw.lower() in lowered:
             return None
-    # 서비스 의심 키워드 — 일부만 (포인트/챌린지/인증/로그인/회원). 명백한 service_guide
-    # 판단도 LLM 에 맡겨 보수적으로 처리.
     for kw in ("챌린지", "포인트", "인증", "로그인", "회원", "알림", "예측"):
         if kw in stripped:
             return None
-
     if not _GREETING_PATTERN.match(stripped):
         return None
 
     return {
         "intent": "general",
-        "disease": None,
+        "diseases": [],
+        "topics": [],
         "needs_health_data": False,
+        "needs_challenge_catalog": False,
         "missing_fields": [],
         "action_hint": None,
     }
@@ -445,6 +566,13 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:
         raw_diseases = [raw_diseases]
     diseases = [str(d) for d in raw_diseases if d in ("diabetes", "hypertension", "dyslipidemia")][:3]
 
+    # topics 파싱 — 허용 값만 필터링
+    _VALID_TOPICS = {"diagnosis", "medication", "lifestyle", "complication", "risk", "monitoring", "service", "challenge"}
+    raw_topics = data.get("topics") or []
+    if not isinstance(raw_topics, list):
+        raw_topics = []
+    topics = [str(t) for t in raw_topics if t in _VALID_TOPICS]
+
     needs = bool(data.get("needs_health_data", False))
     needs_challenge = bool(data.get("needs_challenge_catalog", False))
     missing = data.get("missing_fields") or []
@@ -461,9 +589,32 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:
         if not missing:
             missing = ["profile"]
 
+    # N2 가드: 약품명/보관/용법/병원 키워드 → 무조건 medical_inquiry 강제.
+    # LLM 이 diseases=[] 를 근거로 service_guide 로 오분류하는 케이스 사후 교정.
+    # (예: "인슐린 펜 보관 방법", "고혈압인데 어느 병원 가야 하나요")
+    if intent != "medical_inquiry" and (
+        _DRUG_KEYWORD_PATTERN.search(state["original_question"])
+        or _HOSPITAL_KEYWORD_PATTERN.search(state["original_question"])
+    ):
+        _logger.info("classify_intent N2 guard hit — 약품/병원 질문 강제 medical_inquiry")
+        intent = "medical_inquiry"
+
+    # N3 가드: 쿼리 내 인라인 수치 감지 → needs_health_data 강제 False.
+    # "당뇨 위험도 0.12, 공복혈당 145, HbA1c 7.8%" 처럼 사용자가 수치를 직접 쿼리에
+    # 포함한 경우, LLM 이 needs_health_data=True 로 오분류해
+    # fetch_health_data → has_health_data=False → final_missing_info 로 빠지는 문제 차단.
+    # 인라인 수치가 있으면 쿼리 자체가 컨텍스트이므로 DB 조회 불필요.
+    # 단, 1인칭 본인 상태 질문("나 어때?")은 N1 가드가 먼저 처리하므로 여기선 건드리지 않음.
+    if needs and not _looks_like_personal_status_question(state["original_question"]):
+        if _INLINE_NUMERIC_PATTERN.search(state["original_question"]):
+            _logger.info("classify_intent N3 guard hit — 인라인 수치 감지, needs_health_data 강제 False")
+            needs = False
+            missing = []
+
     return {
         "intent": intent,
         "diseases": diseases,
+        "topics": topics,
         "needs_health_data": needs,
         "needs_challenge_catalog": needs_challenge,
         "missing_fields": missing if needs else [],
@@ -624,6 +775,77 @@ def _intent_to_source_type(intent: IntentLiteral) -> SourceType:
     return "all"
 
 
+# ── Query Decomposition: 약물+식품 조합 질문 분해 ──────────────────────────
+# "OO약 복용 중인데 OO 먹어도 되나요?" 패턴 감지
+# 약물+식품 또는 질환+식품 조합 질문 패턴
+_DRUG_FOOD_PATTERN = re.compile(
+    r"(복용|투약|먹고\s*있|사용\s*중|처방).{0,20}(먹어도|섭취|마셔도|먹을\s*수|괜찮|안전)"
+    r"|(당뇨|고혈압|이상지질혈증|당뇨병).{0,10}(환자|있는데|있는\s*사람).{0,20}(먹어도|섭취|마셔도|먹을\s*수|괜찮|안전)",
+    re.DOTALL,
+)
+
+# Multi-hop 복합 질문 패턴 — 두 가지 이상의 주제가 결합된 질문
+_MULTI_HOP_PATTERN = re.compile(
+    r"(노인|고령|70대|80대).{0,30}(당뇨|혈당|고혈압|혈압|콜레스테롤)"
+    r"|(당뇨|고혈압|이상지질혈증).{0,20}(합병증|신장|망막|신경|알부민뇨)"
+    r"|(SGLT|메트포르민|인슐린|스타틴).{0,30}(신장|간|심장|안전)"
+    r"|(혈압|혈당|콜레스테롤).{0,20}목표.{0,20}(약|치료|선택)",
+    re.DOTALL,
+)
+
+_DECOMPOSE_PROMPT = """다음 질문을 RAG 검색에 최적화된 2개의 독립적인 검색 쿼리로 분해하세요.
+JSON 배열로만 응답하세요. 다른 텍스트 절대 포함 금지.
+
+질문: {question}
+유형: {query_type}
+
+규칙 (유형별):
+[drug_food] 약물+식품 또는 질환+식품 조합:
+- 쿼리 1: 약물 카테고리 주의사항 또는 질환 관리 원칙
+- 쿼리 2: 질환별 식이 권고 또는 영양소 관련 원칙
+
+[multi_hop] 복합/심층 질문:
+- 쿼리 1: 첫 번째 핵심 주제 (질환·상황·대상)
+- 쿼리 2: 두 번째 핵심 주제 (치료·목표·합병증)
+
+각 쿼리는 20자 이내 핵심 키워드로.
+
+예시:
+"인슐린 복용 중 바나나 먹어도 되나요?" [drug_food]
+→ ["인슐린 혈당 식이 주의사항", "당뇨 과일 혈당 식이요법"]
+
+"노인 당뇨 환자 혈당 목표는 어떻게 다른가요?" [multi_hop]
+→ ["노인 당뇨 혈당조절 목표", "고령 당뇨 저혈당 위험"]
+
+"알부민뇨 발견 시 혈압 목표와 약제 선택" [multi_hop]
+→ ["당뇨 신장질환 혈압 목표", "만성콩팥병 항고혈압제 선택"]"""
+
+
+async def _decompose_query(question: str, query_type: str = "drug_food") -> list[str]:
+    """질문을 2개 검색 쿼리로 분해. 실패 시 원본 질문 단일 리스트 반환."""
+    try:
+        response = await _get_client().chat.completions.create(
+            model=config.OPENAI_CHAT_MODEL,
+            messages=[{"role": "user", "content": _DECOMPOSE_PROMPT.format(
+                question=question, query_type=query_type
+            )}],
+            temperature=0,
+            max_tokens=100,
+        )
+        text = response.choices[0].message.content.strip()
+        # LLM이 코드펜스나 앞뒤 텍스트를 붙여도 JSON 배열 부분만 추출
+        text = re.sub(r"```json|```", "", text).strip()
+        match = re.search(r"\[.*?\]", text, re.DOTALL)
+        text = match.group(0) if match else text
+        queries = json.loads(text)
+        if isinstance(queries, list) and len(queries) >= 2:
+            _logger.info("query decomposition[%s] 성공: %s → %s", query_type, question[:30], queries)
+            return queries[:2]
+    except Exception as e:  # noqa: BLE001
+        _logger.warning("query decomposition 실패, 원본 쿼리 사용: %s", _safe_err_repr(e))
+    return [question]
+
+
 async def retrieve_node(state: ChatState) -> dict[str, Any]:
     intent: IntentLiteral = state.get("intent", "general")  # type: ignore[assignment]
     source_type = _intent_to_source_type(intent)
@@ -641,59 +863,65 @@ async def retrieve_node(state: ChatState) -> dict[str, Any]:
     # medical 영역은 4측면(목표·생활요법·약물·추적) 동시 커버를 위해 broader top_k.
     top_k = RETRIEVE_TOP_K_MEDICAL if intent == "medical_inquiry" else RETRIEVE_TOP_K
 
+    # ── Query Decomposition: 약물+식품 / 복합 질문 감지 시 쿼리 분해 후 병합 ──
+    original = state["original_question"]
+    is_drug_food = bool(_DRUG_FOOD_PATTERN.search(original))
+    is_multi_hop = bool(_MULTI_HOP_PATTERN.search(original)) and not is_drug_food
+
     try:
-        result = await retrieve(
-            query=query,
-            top_k=top_k,
-            source_type=source_type,
-            disease=diseases if diseases else None,
-        )
+        if is_drug_food or is_multi_hop:
+            query_type = "drug_food" if is_drug_food else "multi_hop"
+            sub_queries = await _decompose_query(original, query_type)
+            all_chunks: list[Any] = []
+            seen_ids: set[str] = set()
+            for sub_query in sub_queries:
+                result = await retrieve(
+                    query=sub_query,
+                    top_k=top_k // 2,
+                    source_type=source_type,
+                    disease=diseases if diseases else None,
+                    topics=state.get("topics") or None,
+                )
+                for chunk in result.chunks:
+                    chunk_id = chunk.metadata.get("section_id") or str(chunk.document_id)
+                    if chunk_id not in seen_ids:
+                        seen_ids.add(chunk_id)
+                        all_chunks.append(chunk)
+            return {"retrieved_docs": all_chunks, "retrieval_query": query}
+        else:
+            result = await retrieve(
+                query=query,
+                source_type=source_type,
+                disease=state.get("diseases"),
+                topics=state.get("topics") or None,
+            )
+            return {"retrieved_docs": result.chunks, "retrieval_query": query}
+
     except Exception as e:  # noqa: BLE001
         _logger.warning("retrieve 실패, 빈 결과로 진행: %s", _safe_err_repr(e))
         return {"retrieved_docs": [], "retrieval_query": query, "error": _safe_err_repr(e)}
-
-    return {"retrieved_docs": result.chunks, "retrieval_query": query}
 
 
 # ─────────────────────────────────────────────
 # 노드: generate (health_data 컨텍스트 주입)
 # ─────────────────────────────────────────────
-_MEDICAL_SYSTEM = """당신은 만성질환(고혈압·당뇨·이상지질혈증) 환자의 생활습관 관리를 돕는 한국어 의료 챗봇입니다.
+def _load_prompt(filename: str) -> str:
+    """app/graphs/prompts/ 에서 프롬프트 텍스트를 로드한다.
 
-규칙:
-1. 제공된 컨텍스트(진료지침)에 근거해서만 답하고, 컨텍스트에 없는 사실은 추측하지 마세요.
-2. **수치·정량 정보는 반드시 본문에 인용하세요** (의료 답변의 완전성 핵심):
-   - 진단·관리 목표: 구체 수치 (예: "LDL-C 100 mg/dL 미만, 위험인자 동반 시 70 mg/dL 미만",
-     "가정혈압 135/85 mmHg 미만").
-   - 생활요법: 정량 권고 (예: "나트륨 하루 2,400 mg 미만 / 소금 6 g 미만", "유산소 운동 주 5~7회,
-     하루 30분 이상 중강도", "절주 — 남성 2잔/일, 여성 1잔/일 이하").
-   - 추적 검사 주기 (예: "당뇨 환자 지질 검사 진단 시 + 매년 1회 이상").
-   - "관리가 중요합니다" 같은 모호한 일반론 금지. 컨텍스트에 수치가 있으면 그 수치를 인용.
-3. **의료 질문의 4가지 측면을 모두 다루세요** (해당 컨텍스트 있으면):
-   - (a) 관리 목표 (target — 수치·범위)
-   - (b) 생활요법 (식사·운동·체중·금연·절주 — 정량 권고)
-   - (c) 약물치료 (필요 시점·일반 원칙. 특정 약 직접 권고는 금지)
-   - (d) 추적 관리 (검사 주기·재평가 시점)
-4. [사용자 건강 정보] 블록이 제공되면 **반드시** 그 데이터의 수치를 답변 본문에 명시 인용하고
-   진료지침과 비교한 **일반적인 경향**을 설명하세요.
-   - 예: "사용자의 최근 혈압 130/85 mmHg 는 진료지침 정상 범위(120/80 미만)를 다소 벗어나는 경향입니다."
-   - 절대 단정적 진단/위험 등급 부여 금지 ("당신은 당뇨입니다", "정상입니다", "위험합니다" 같은 표현 금지).
-   - "정상 범위", "권고 범위 안/밖" 표현은 사용 가능. "정상이다 / 비정상이다" 단정은 금지.
-   - 약물 복용 결정·용량·특정 약 직접 권고 절대 금지.
-5. 답변 끝에 반드시 "정확한 평가와 처방은 담당 의사 또는 약사와 상담하세요" 권고 포함.
-6. [사용자 건강 정보] 블록이 **없으면** 일반 의학 정보로만 답하고, 본인 데이터에 대한 가정·추측 금지.
-7. [챌린지 카탈로그] 자료가 제공된 경우 그 안에 정의된 챌린지(걷기/러닝/식단/물 마시기 등) 만
-   추천하고, 사용자 상태(가족력·위험도·측정값) 와 매핑된 **구체 목표 예시**(예: "주 5일, 하루 30분 걷기")
-   를 포함하세요. 카탈로그에 없는 챌린지(예: 임의 "30일 챌린지") 절대 생성 금지.
-8. 답변은 명확하고 간결하게. 불릿/문단 구성으로 읽기 좋게. 출처는 본문에 넣지 말고 사실만 전달."""
+    프롬프트 수정은 이 파일이 아닌 prompts/*.txt 만 편집하면 된다.
+    git 에서도 프롬프트 변경 이력을 코드와 분리해 추적할 수 있다.
+    """
+    prompt_path = Path(__file__).parent / "prompts" / filename
+    if not prompt_path.exists():
+        raise FileNotFoundError(
+            f"프롬프트 파일을 찾을 수 없습니다: {prompt_path}\n"
+            f"app/graphs/prompts/{filename} 파일이 있는지 확인하세요."
+        )
+    return prompt_path.read_text(encoding="utf-8").strip()
 
-_SERVICE_SYSTEM = """당신은 만성질환 생활습관 관리 서비스의 사용 안내 챗봇입니다.
 
-규칙:
-1. 제공된 서비스 가이드 컨텍스트에 근거해서만 답하세요.
-2. 의료 정보·진단 관련 질문이면 정중히 거절하고 의료 챗봇 모드로 이동하라고 안내.
-3. 답변은 단계별 절차나 기능 설명으로 명확하게.
-4. 의료 면책 문구는 포함하지 않습니다."""
+_MEDICAL_SYSTEM = _load_prompt("medical_system.txt")
+_SERVICE_SYSTEM = _load_prompt("service_system.txt")
 
 
 # _format_context 는 _shared.medical_evaluator 에서 import (위 import 블록 참조).
