@@ -9,6 +9,7 @@ prediction model/
 test_imgs/
 ai_worker/rag/chroma_db/
 ai_worker/rag/output/chunks.json
+ai_worker/rag/output/ragas_result.json
 scripts/rag/output/
 
 # DB dumps (PHI 포함 가능 — 절대 커밋 금지, Drive 공유만)
