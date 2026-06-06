@@ -90,16 +90,21 @@ async def _collect_single(
 
     print(f"\n  [{idx}/{total}] {question}")
     try:
-        result = await run_chat_rag(
-            question=question,
-            user_id=None,           # 평가용 — 건강 데이터 없이 일반 RAG 경로
-            thread_id=f"ragas-eval-{idx}",
-        )
+        from app.graphs.chat_rag_graph import ChatRAGGraph, _state_to_result
+        graph = ChatRAGGraph()
+        initial = {
+            "user_id": None,
+            "thread_id": f"ragas-eval-{idx}",
+            "original_question": question,
+            "eval_revision_count": 0,
+            "eval_mode": True,
+        }
+        final_state = await graph.ainvoke(initial)
+        result = _state_to_result(final_state)
         answer = result.answer or ""
-        # RetrievedChunk 리스트 → 텍스트 리스트
         ctx_texts: list[str] = [
-    chunk.chunk_text for chunk in (result.sources or []) if chunk.chunk_text
-]
+            chunk.chunk_text for chunk in (result.sources or []) if chunk.chunk_text
+        ]
     except Exception as e:
         print(f"    ❌ 오류: {e}")
         answer = ""

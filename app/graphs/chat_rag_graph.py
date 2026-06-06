@@ -236,6 +236,7 @@ class ChatState(TypedDict, total=False):
     # 예: "당뇨병 환자의 이상지질혈증" → ["diabetes", "dyslipidemia"]
     diseases: list[DiseaseLiteral]
     topics: list[str]    # classify_intent 가 추출한 topic 목록 (retrieve 필터용)
+    eval_mode: bool      # 평가 모드: True 면 needs_health_data 강제 False (ragas_eval 전용)
     needs_health_data: bool
     needs_challenge_catalog: bool  # 챌린지 카탈로그를 함께 검색 (medical+service 혼합)
     missing_fields: list[str]
@@ -610,6 +611,13 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:
             _logger.info("classify_intent N3 guard hit — 인라인 수치 감지, needs_health_data 강제 False")
             needs = False
             missing = []
+
+    # eval_mode 가드: 평가 모드에서는 needs_health_data 강제 False → retrieve 직진.
+    # ragas_eval.py 전용. 실 서비스에서는 eval_mode=False(기본값)라 영향 없음.
+    if state.get("eval_mode"):
+        _logger.info("classify_intent eval_mode 가드 hit — needs_health_data 강제 False")
+        needs = False
+        missing = []
 
     return {
         "intent": intent,
