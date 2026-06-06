@@ -264,7 +264,7 @@ async def _dense_search(
 # ─────────────────────────────────────────────
 # Sparse 검색 (BM25)
 # ─────────────────────────────────────────────
-def _sparse_search(
+def _sparse_search(  # noqa: C901
     bm: _BM25Index,
     query: str,
     top_k: int,
