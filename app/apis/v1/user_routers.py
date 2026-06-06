@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from app.core.responses import ORJSONResponse as Response
 from app.dependencies.security import get_request_user
-from app.dtos.users import PasswordChangeRequest, UserInfoResponse, UserUpdateRequest
+from app.dtos.users import PasswordChangeRequest, UserInfoResponse, UserUpdateRequest, WithdrawRequest
 from app.models.files import FileUpload
 from app.models.users import User
 from app.services.users import UserManageService
@@ -91,4 +91,15 @@ async def change_my_password(
     user_manage_service: Annotated[UserManageService, Depends(UserManageService)],
 ) -> Response:
     await user_manage_service.change_password(user=user, data=body)
+    return Response(content=None, status_code=status.HTTP_204_NO_CONTENT)
+
+
+@user_router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def withdraw_me(
+    user: Annotated[User, Depends(get_request_user)],
+    user_manage_service: Annotated[UserManageService, Depends(UserManageService)],
+    body: WithdrawRequest | None = None,
+) -> Response:
+    """회원 탈퇴(soft delete). 탈퇴 이유는 선택. 30일 보관 후 파기(별도 잡)."""
+    await user_manage_service.withdraw(user=user, reason=body.reason if body else None)
     return Response(content=None, status_code=status.HTTP_204_NO_CONTENT)
