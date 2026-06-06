@@ -4,10 +4,13 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.apis.v1 import v1_routers
 from app.core import config
 from app.core.db.databases import initialize_tortoise
+from app.core.limiter import limiter
 from app.core.responses import ORJSONResponse
 
 _logger = logging.getLogger(__name__)
@@ -15,6 +18,11 @@ _logger = logging.getLogger(__name__)
 app = FastAPI(
     default_response_class=ORJSONResponse, docs_url="/api/docs", redoc_url="/api/redoc", openapi_url="/api/openapi.json"
 )
+
+# 레이트리밋(slowapi): 라우터의 @limiter.limit 데코레이터가 app.state.limiter 를 참조.
+app.state.limiter = limiter
+# slowapi 핸들러 시그니처가 Starlette 의 (Request, Exception) 와 정확히 일치하지 않음(알려진 타입 이슈).
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 # 로컬 프론트엔드(Next.js dev) 와 운영 도메인에서 호출 허용.
 app.add_middleware(
