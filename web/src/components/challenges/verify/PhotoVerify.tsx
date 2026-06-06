@@ -17,7 +17,7 @@ import type { Challenge } from "@/types/challenge";
 
 interface PhotoVerifyProps {
   challenge: Challenge;
-  onSubmit: (memo: string, photoFileId: number) => void;
+  onSubmit: (caption: string, photoFileId: number) => void;
   loading?: boolean;
 }
 
@@ -27,7 +27,7 @@ export default function PhotoVerify({
   loading = false,
 }: PhotoVerifyProps) {
   const [preview, setPreview] = useState<string | null>(null);
-  const [memo, setMemo] = useState("");
+  const [caption, setCaption] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -54,7 +54,7 @@ export default function PhotoVerify({
     setUploading(true);
     try {
       const uploaded = await uploadFile(selectedFile, "verification");
-      onSubmit(memo, uploaded.id);
+      onSubmit(caption, uploaded.id);
     } catch (err) {
       showToast(extractErrorMessage(err), "error");
     } finally {
@@ -144,22 +144,22 @@ export default function PhotoVerify({
       {/* 메모 */}
       <div>
         <label
-          htmlFor="verify-memo"
+          htmlFor="verify-caption"
           className="block text-sm font-semibold text-text-primary mb-2"
         >
-          메모 <span className="text-text-tertiary font-normal">(선택)</span>
+          한 마디 <span className="text-text-tertiary font-normal">(선택)</span>
         </label>
         <textarea
-          id="verify-memo"
-          value={memo}
-          onChange={(e) => setMemo(e.target.value)}
+          id="verify-caption"
+          value={caption}
+          onChange={(e) => setCaption(e.target.value)}
           rows={3}
-          maxLength={200}
+          maxLength={500}
           placeholder="오늘의 활동을 간단히 기록해보세요..."
           className="w-full px-4 py-3 rounded-[12px] border border-border text-sm resize-none focus:outline-none focus:border-brand-black"
         />
         <p className="text-xs text-text-tertiary text-right mt-1">
-          {memo.length}/200
+          {caption.length}/500
         </p>
       </div>
 

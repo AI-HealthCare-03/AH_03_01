@@ -20,6 +20,7 @@ from app.dtos.challenge import (
 )
 from app.models.challenge import (
     Challenge,
+    ChallengeCategory,
     ChallengeInvite,
     ChallengeParticipant,
     ChallengeReaction,
@@ -425,7 +426,9 @@ class VerificationService:
         participant = await self.participant_repo.get_by_user(challenge.id, user.id)
         if participant is None or participant.status != ParticipantStatus.APPROVED:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="참여 중인 챌린지가 아닙니다.")
-        if not _method_matches(challenge.verification_type, data.method):
+        # 명상 챌린지는 타이머(CHECK) 인증으로 처리 — verification_type 무관하게 허용
+        is_meditation = challenge.category == ChallengeCategory.MEDITATION
+        if not is_meditation and not _method_matches(challenge.verification_type, data.method):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"이 챌린지는 {challenge.verification_type.value} 인증만 허용합니다.",

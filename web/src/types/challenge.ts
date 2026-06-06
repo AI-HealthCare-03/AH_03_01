@@ -144,7 +144,8 @@ export interface CreateVerificationRequest {
   checked?: boolean;
   photo_file_id?: number;
   shield_inventory_id?: number;
-  memo?: string;
+  caption?: string;
+  duration_seconds?: number;
   /* 설문형 인증 응답 (예: 당뇨발 9문항 → {template, wound, blister, ...}) */
   answers?: Record<string, string>;
 }
