@@ -250,6 +250,7 @@ class VerificationFeedItem(BaseModel):
     verified_date: date
     caption: str | None
     photo_file_id: int | None
+    verified_duration_seconds: int | None
     like_count: int
     comment_count: int
     my_like: bool
@@ -289,12 +290,18 @@ class ReactionResponse(BaseSerializerModel):
     user_id: UUID
     type: ReactionType
     content: str | None
+    parent_id: int | None
     created_at: datetime
+
+
+class ReactionWithReplies(ReactionResponse):
+    replies: list[ReactionResponse] = []
 
 
 class ReactionListResponse(BaseModel):
     like_count: int
-    comments: list[ReactionResponse]
+    my_like: bool
+    comments: list[ReactionWithReplies]
 
 
 # ---------------------------------------------------------------------------

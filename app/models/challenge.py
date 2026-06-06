@@ -332,6 +332,13 @@ class ChallengeReaction(models.Model):
     user_id: int
     type = fields.CharEnumField(enum_type=ReactionType)
     content = fields.TextField(null=True)
+    parent: fields.ForeignKeyNullableRelation["ChallengeReaction"] = fields.ForeignKeyField(
+        "models.ChallengeReaction",
+        related_name="replies",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
+    parent_id: int | None
     is_deleted = fields.BooleanField(default=False)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)

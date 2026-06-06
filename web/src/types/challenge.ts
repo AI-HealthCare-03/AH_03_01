@@ -175,9 +175,14 @@ export interface CreateReactionRequest {
   content?: string;
 }
 
+export interface ReactionWithReplies extends VerificationReaction {
+  replies: VerificationReaction[];
+}
+
 export interface ReactionListResponse {
-  items: VerificationReaction[];
-  total: number;
+  like_count: number;
+  my_like: boolean;
+  comments: ReactionWithReplies[];
 }
 
 /* ─── 요약 ─── */
@@ -233,6 +238,30 @@ export interface ChallengeGoalConfig {
   questionnaire_template?: string;
   /* 보조 분류 */
   kind?: "WEIGHT";
+}
+
+/* ─── 피드 ─── */
+export interface VerificationFeedItem {
+  id: number;
+  user_id: string;
+  user_nickname: string | null;
+  method: VerificationMethod;
+  verified_date: string;
+  caption: string | null;
+  photo_file_id: number | null;
+  verified_duration_seconds: number | null;
+  like_count: number;
+  comment_count: number;
+  my_like: boolean;
+  created_at: string;
+}
+
+export interface VerificationFeedResponse {
+  page: number;
+  size: number;
+  total_elements: number;
+  total_pages: number;
+  items: VerificationFeedItem[];
 }
 
 /* ─── 위저드 폼 상태 ─── */

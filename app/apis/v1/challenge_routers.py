@@ -28,6 +28,7 @@ from app.dtos.challenge import (
     ReactionListResponse,
     ReactionResponse,
     ReactionUpdateRequest,
+    ReactionWithReplies,
     VerificationCreateRequest,
     VerificationFeedItem,
     VerificationFeedResponse,
@@ -544,12 +545,50 @@ async def list_reactions(
     user: Annotated[User, Depends(get_request_user)],
     service: Annotated[ReactionService, Depends(ReactionService)],
 ) -> Response:
-    verification, comments = await service.list(user, verification_id)
+    verification, comments, my_like = await service.list(user, verification_id)
     payload = ReactionListResponse(
         like_count=verification.like_count,
-        comments=[ReactionResponse.model_validate(c) for c in comments],
+        my_like=my_like,
+        comments=[
+            ReactionWithReplies(
+                **ReactionResponse.model_validate(c).model_dump(),
+                replies=[ReactionResponse.model_validate(r) for r in getattr(c, "reply_list", [])],
+            )
+            for c in comments
+        ],
     )
     return Response(payload.model_dump(), status_code=status.HTTP_200_OK)
+
+
+@challenge_verifications_router.post(
+    "/{verification_id}/reactions/toggle-like",
+    status_code=status.HTTP_200_OK,
+)
+async def toggle_like(
+    verification_id: int,
+    user: Annotated[User, Depends(get_request_user)],
+    service: Annotated[ReactionService, Depends(ReactionService)],
+) -> Response:
+    liked, like_count = await service.toggle_like(user, verification_id)
+    return Response({"liked": liked, "like_count": like_count}, status_code=status.HTTP_200_OK)
+
+
+@challenge_verifications_router.post(
+    "/{verification_id}/reactions/{reaction_id}/replies",
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_reply(
+    verification_id: int,
+    reaction_id: int,
+    body: ReactionCreateRequest,
+    user: Annotated[User, Depends(get_request_user)],
+    service: Annotated[ReactionService, Depends(ReactionService)],
+) -> Response:
+    reply = await service.create_reply(user, verification_id, reaction_id, body.content or "")
+    return Response(
+        ReactionResponse.model_validate(reply).model_dump(),
+        status_code=status.HTTP_201_CREATED,
+    )
 
 
 @challenge_verifications_router.post(
