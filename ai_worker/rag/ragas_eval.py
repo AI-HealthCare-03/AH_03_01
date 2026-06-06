@@ -25,15 +25,16 @@ from pathlib import Path
 
 # nest_asyncio를 가장 먼저 패치 — ragas 내부 event loop 충돌 방지
 import nest_asyncio
+
 nest_asyncio.apply()
 
-from datasets import Dataset
-from langchain_core.messages import HumanMessage
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from ragas import evaluate
-from ragas.embeddings import LangchainEmbeddingsWrapper
-from ragas.llms import LangchainLLMWrapper
-from ragas.metrics import (
+from datasets import Dataset  # noqa: E402
+from langchain_core.messages import HumanMessage  # noqa: E402
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings  # noqa: E402
+from ragas import evaluate  # noqa: E402
+from ragas.embeddings import LangchainEmbeddingsWrapper  # noqa: E402
+from ragas.llms import LangchainLLMWrapper  # noqa: E402
+from ragas.metrics import (  # noqa: E402
     answer_relevancy,
     context_precision,
     context_recall,
@@ -86,7 +87,6 @@ async def _collect_single(
     total: int,
 ) -> tuple[str, list[str]]:
     """단일 질문에 대해 ChatRAGGraph를 실행하고 (answer, ctx_texts) 반환."""
-    from app.graphs.chat_rag_graph import run_chat_rag
 
     print(f"\n  [{idx}/{total}] {question}")
     try:
@@ -116,6 +116,7 @@ async def _collect_single(
 
 async def _collect_all(eval_dataset: list[dict]) -> dict:
     from tortoise import Tortoise
+
     from app.core.db.databases import TORTOISE_ORM
     from app.graphs.chat_rag_graph import ChatRAGGraph  # noqa: F401
 
@@ -153,8 +154,9 @@ async def _collect_all(eval_dataset: list[dict]) -> dict:
 
 
 def collect_answers(eval_dataset: list[dict], seed: int | None = None) -> dict:
-    import nest_asyncio
     import random
+
+    import nest_asyncio
     nest_asyncio.apply()
 
     # RAGAS 평가용 필터링 — 서비스 범위 밖 질문 제외
