@@ -12,7 +12,9 @@ import {
   SleepBedTimeForm,
   SleepDurationForm,
   SleepWakeForm,
-  SleepGroupForm,
+  SleepGroupBedTimeForm,
+  SleepGroupDurationForm,
+  SleepGroupWakeForm,
 } from "./step4/SleepForms";
 /* Diet */
 import {
@@ -117,7 +119,13 @@ export default function WizardStep4({ form, onChange }: WizardStep4Props) {
 
   /* ─── SLEEP ─── */
   if (category === "SLEEP") {
-    if (isGroup) return <SleepGroupForm form={form} onChange={onChange} />;
+    if (isGroup) {
+      switch (step3Mode) {
+        case "BED_TIME":       return <SleepGroupBedTimeForm form={form} onChange={onChange} />;
+        case "SLEEP_DURATION": return <SleepGroupDurationForm form={form} onChange={onChange} />;
+        case "WAKE_TIME":      return <SleepGroupWakeForm form={form} onChange={onChange} />;
+      }
+    }
     switch (step3Mode) {
       case "BED_TIME":       return <SleepBedTimeForm form={form} onChange={onChange} />;
       case "SLEEP_DURATION": return <SleepDurationForm form={form} onChange={onChange} />;
