@@ -311,7 +311,7 @@ async def load_chunks_to_db(
             "source_pages": sec_meta.get("source_pages"),
             "content_hash": sec_meta.get("content_hash"),
             "translation_status": sec_meta.get("translation_status"),
-            "topics": topics if topics else None,  # 빈 리스트는 None으로 
+            "topics": topics if topics else None,  # 빈 리스트는 None으로
         }
         # None 값 제거 (검색 필터/디버깅 가독성)
         metadata = {k: v for k, v in metadata.items() if v is not None}
