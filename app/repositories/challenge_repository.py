@@ -378,6 +378,33 @@ class ChallengeReactionRepository:
         ).values_list("verification_id", flat=True)
         return set(liked)
 
+    async def list_comments_with_replies(self, verification_id: int) -> list[ChallengeReaction]:
+        top_level = list(
+            await self._model.filter(
+                verification_id=verification_id,
+                type=ReactionType.COMMENT,
+                parent_id__isnull=True,
+                is_deleted=False,
+            ).prefetch_related("user").order_by("created_at")
+        )
+        for comment in top_level:
+            comment.reply_list = list(  # type: ignore[attr-defined]
+                await self._model.filter(
+                    parent_id=comment.id,
+                    type=ReactionType.COMMENT,
+                    is_deleted=False,
+                ).prefetch_related("user").order_by("created_at")
+            )
+        return top_level
+
+    async def get_user_like(self, verification_id: int, user_id: int) -> ChallengeReaction | None:
+        return await self._model.get_or_none(
+            verification_id=verification_id,
+            user_id=user_id,
+            type=ReactionType.LIKE,
+            is_deleted=False,
+        )
+
     async def update_content(self, reaction: ChallengeReaction, content: str) -> ChallengeReaction:
         reaction.content = content
         await reaction.save(update_fields=["content"])

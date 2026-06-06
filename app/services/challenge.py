@@ -629,6 +629,7 @@ class VerificationService:
                     "verified_date": v.verified_date,
                     "caption": getattr(v, "caption", None),
                     "photo_file_id": v.photo_file_id,
+                    "verified_duration_seconds": getattr(v, "verified_duration_seconds", None),
                     "like_count": v.like_count,
                     "comment_count": v.comment_count,
                     "my_like": v.id in liked_ids,
@@ -644,10 +645,36 @@ class ReactionService:
         self.verification_repo = ChallengeVerificationRepository()
         self.participant_repo = ChallengeParticipantRepository()
 
-    async def list(self, user: User, verification_id: int) -> tuple[ChallengeVerification, list[ChallengeReaction]]:
+    async def list(self, user: User, verification_id: int) -> tuple[ChallengeVerification, list[ChallengeReaction], bool]:
         verification = await self._access(user, verification_id)
-        comments = await self.repo.list_comments(verification_id)
-        return verification, comments
+        comments = await self.repo.list_comments_with_replies(verification_id)
+        my_like = await self.repo.get_user_like(verification_id, user.id) is not None
+        return verification, comments, my_like
+
+    async def toggle_like(
+        self,
+        user: User,
+        verification_id: int,
+    ) -> tuple[bool, int]:
+        """좋아요 토글. (liked: bool, new_like_count: int) 반환."""
+        verification = await self._access(user, verification_id)
+        existing = await self.repo.get_user_like(verification_id, user.id)
+        if existing:
+            async with in_transaction():
+                await self.repo.soft_delete(existing)
+                await self.verification_repo.increment_counter(verification, likes=-1)
+            return False, max(0, verification.like_count - 1)
+        async with in_transaction():
+            await self.repo.create(
+                data={
+                    "verification_id": verification_id,
+                    "user_id": user.id,
+                    "type": ReactionType.LIKE,
+                    "content": None,
+                }
+            )
+            await self.verification_repo.increment_counter(verification, likes=1)
+        return True, verification.like_count + 1
 
     async def create(
         self,
@@ -656,10 +683,6 @@ class ReactionService:
         data: ReactionCreateRequest,
     ) -> ChallengeReaction:
         verification = await self._access(user, verification_id)
-        if data.type == ReactionType.LIKE:
-            existing = await self.repo.get_existing_like(verification_id, user.id)
-            if existing:
-                return existing
         async with in_transaction():
             reaction = await self.repo.create(
                 data={
@@ -674,6 +697,33 @@ class ReactionService:
             else:
                 await self.verification_repo.increment_counter(verification, comments=1)
         return reaction
+
+    async def create_reply(
+        self,
+        user: User,
+        verification_id: int,
+        parent_reaction_id: int,
+        content: str,
+    ) -> ChallengeReaction:
+        await self._access(user, verification_id)
+        parent = await self.repo.get(parent_reaction_id)
+        if parent is None or parent.type != ReactionType.COMMENT:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="댓글을 찾을 수 없습니다.")
+        async with in_transaction():
+            reply = await self.repo.create(
+                data={
+                    "verification_id": verification_id,
+                    "user_id": user.id,
+                    "type": ReactionType.COMMENT,
+                    "content": content,
+                    "parent_id": parent_reaction_id,
+                }
+            )
+            await self.verification_repo.increment_counter(
+                await self.verification_repo.get(verification_id),
+                comments=1,
+            )
+        return reply
 
     async def update(self, user: User, reaction_id: int, data: ReactionUpdateRequest) -> ChallengeReaction:
         reaction = await self.repo.get(reaction_id)
