@@ -1,10 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse as Response
 
 from app.core import config
 from app.core.config import Env
+from app.core.limiter import limiter
 from app.dtos.auth import (
     FindIdRequest,
     FindIdResponse,
@@ -25,16 +26,20 @@ auth_router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @auth_router.post("/signup", status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def signup(
-    request: SignUpRequest,
+    request: Request,
+    payload: SignUpRequest,
     auth_service: Annotated[AuthService, Depends(AuthService)],
 ) -> Response:
-    await auth_service.signup(request)
+    await auth_service.signup(payload)
     return Response(content={"detail": "회원가입이 성공적으로 완료되었습니다."}, status_code=status.HTTP_201_CREATED)
 
 
 @auth_router.get("/check-email", status_code=status.HTTP_200_OK)
+@limiter.limit("30/minute")
 async def check_email_available(
+    request: Request,
     email: Annotated[str, Query(min_length=3, max_length=80)],
 ) -> Response:
     """이메일 사용 가능 여부 확인. 가입 폼의 중복 확인 버튼에서 호출."""
@@ -43,7 +48,9 @@ async def check_email_available(
 
 
 @auth_router.get("/check-nickname", status_code=status.HTTP_200_OK)
+@limiter.limit("30/minute")
 async def check_nickname_available(
+    request: Request,
     nickname: Annotated[str, Query(min_length=2, max_length=10)],
 ) -> Response:
     """닉네임 사용 가능 여부 확인. (ERD: USER.nickname varchar(10) NN unique)"""
@@ -52,39 +59,47 @@ async def check_nickname_available(
 
 
 @auth_router.post("/find-id", response_model=FindIdResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
 async def find_id(
-    request: FindIdRequest,
+    request: Request,
+    payload: FindIdRequest,
     auth_service: Annotated[AuthService, Depends(AuthService)],
 ) -> Response:
     """이름 + 휴대폰 번호로 가입 이메일(마스킹) 조회. 미일치 시 404."""
-    result = await auth_service.find_id(request)
+    result = await auth_service.find_id(payload)
     return Response(content=result.model_dump(mode="json"), status_code=status.HTTP_200_OK)
 
 
 @auth_router.post("/email/send-verification", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("3/minute")
 async def send_email_verification(
-    request: SendVerificationRequest,
+    request: Request,
+    payload: SendVerificationRequest,
     service: Annotated[EmailVerificationService, Depends(EmailVerificationService)],
 ) -> Response:
     """입력 이메일로 본인 인증 링크 메일을 발송한다. (계정 열거 방지: 항상 202)"""
-    await service.send_verification(str(request.email))
+    await service.send_verification(str(payload.email))
     return Response(content={"detail": "인증 메일을 발송했습니다."}, status_code=status.HTTP_202_ACCEPTED)
 
 
 @auth_router.post("/email/verify", response_model=VerifyEmailResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("10/minute")
 async def verify_email(
-    request: VerifyEmailRequest,
+    request: Request,
+    payload: VerifyEmailRequest,
     service: Annotated[EmailVerificationService, Depends(EmailVerificationService)],
 ) -> Response:
     """인증 링크의 토큰을 검증하고 이메일을 인증 완료 처리한다. 유효하지 않으면 400."""
-    email = await service.verify(request.token)
+    email = await service.verify(payload.token)
     return Response(
         content=VerifyEmailResponse(email=email, verified=True).model_dump(), status_code=status.HTTP_200_OK
     )
 
 
 @auth_router.get("/email/verification-status", status_code=status.HTTP_200_OK)
+@limiter.limit("30/minute")
 async def email_verification_status(
+    request: Request,
     email: Annotated[str, Query(min_length=3, max_length=80)],
     service: Annotated[EmailVerificationService, Depends(EmailVerificationService)],
 ) -> Response:
@@ -94,11 +109,13 @@ async def email_verification_status(
 
 
 @auth_router.post("/login", response_model=LoginResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
 async def login(
-    request: LoginRequest,
+    request: Request,
+    payload: LoginRequest,
     auth_service: Annotated[AuthService, Depends(AuthService)],
 ) -> Response:
-    user = await auth_service.authenticate(request)
+    user = await auth_service.authenticate(payload)
     tokens = await auth_service.login(user)
     resp = Response(
         content=LoginResponse(access_token=str(tokens["access_token"])).model_dump(), status_code=status.HTTP_200_OK
