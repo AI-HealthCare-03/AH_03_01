@@ -41,15 +41,14 @@ evaluate 내부 (한 노드, 2단계):
 
 from __future__ import annotations
 
-
 import functools
 import json
 import logging
 import re
 import time
-from pathlib import Path
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -236,6 +235,7 @@ class ChatState(TypedDict, total=False):
     # 예: "당뇨병 환자의 이상지질혈증" → ["diabetes", "dyslipidemia"]
     diseases: list[DiseaseLiteral]
     topics: list[str]    # classify_intent 가 추출한 topic 목록 (retrieve 필터용)
+    eval_mode: bool      # 평가 모드: True 면 needs_health_data 강제 False (ragas_eval 전용)
     needs_health_data: bool
     needs_challenge_catalog: bool  # 챌린지 카탈로그를 함께 검색 (medical+service 혼합)
     missing_fields: list[str]
@@ -522,7 +522,7 @@ def _heuristic_prefilter(question: str) -> dict[str, Any] | None:
     }
 
 
-async def classify_intent(state: ChatState) -> dict[str, Any]:
+async def classify_intent(state: ChatState) -> dict[str, Any]:  # noqa: C901
     # 보수적 휴리스틱으로 명백한 인사·단답은 LLM 호출 없이 즉시 결정.
     # is_greeting=True 면 decide_after_classify 가 final_greeting 로 곧장 분기해 retrieve/generate 모두 스킵.
     prefilter = _heuristic_prefilter(state["original_question"])
@@ -567,11 +567,11 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:
     diseases = [str(d) for d in raw_diseases if d in ("diabetes", "hypertension", "dyslipidemia")][:3]
 
     # topics 파싱 — 허용 값만 필터링
-    _VALID_TOPICS = {"diagnosis", "medication", "lifestyle", "complication", "risk", "monitoring", "service", "challenge"}
+    _valid_topics = {"diagnosis", "medication", "lifestyle", "complication", "risk", "monitoring", "service", "challenge"}
     raw_topics = data.get("topics") or []
     if not isinstance(raw_topics, list):
         raw_topics = []
-    topics = [str(t) for t in raw_topics if t in _VALID_TOPICS]
+    topics = [str(t) for t in raw_topics if t in _valid_topics]
 
     needs = bool(data.get("needs_health_data", False))
     needs_challenge = bool(data.get("needs_challenge_catalog", False))
@@ -610,6 +610,13 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:
             _logger.info("classify_intent N3 guard hit — 인라인 수치 감지, needs_health_data 강제 False")
             needs = False
             missing = []
+
+    # eval_mode 가드: 평가 모드에서는 needs_health_data 강제 False → retrieve 직진.
+    # ragas_eval.py 전용. 실 서비스에서는 eval_mode=False(기본값)라 영향 없음.
+    if state.get("eval_mode"):
+        _logger.info("classify_intent eval_mode 가드 hit — needs_health_data 강제 False")
+        needs = False
+        missing = []
 
     return {
         "intent": intent,
