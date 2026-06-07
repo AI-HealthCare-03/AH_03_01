@@ -68,7 +68,7 @@ export default function HealthQuizCard() {
       {/* 하단 링크 */}
       <div className="mt-auto pt-2 border-t border-border">
         <Link
-          href="/quiz"
+          href="/community/quiz"
           className="text-xs font-medium text-text-tertiary hover:text-text-primary transition-colors"
         >
           퀴즈 풀러가기 →
