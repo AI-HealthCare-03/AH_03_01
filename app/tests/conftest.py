@@ -66,7 +66,7 @@ def bypass_email_verification() -> Generator[None, None]:
 
     실제 signup 은 EmailVerificationService.is_verified() 통과가 필요하지만(Redis 의존),
     대부분의 테스트는 가입을 사전조건으로만 쓰므로 인증을 True 로 우회한다.
-    게이트 자체의 동작은 test_signup_email_verification_gate.py 에서 별도 검증.
+    게이트 자체의 동작은 auth_apis/test_security_gates.py 에서 별도 검증.
     """
     with patch.object(EmailVerificationService, "is_verified", new=AsyncMock(return_value=True)):
         yield
