@@ -20,6 +20,7 @@ TORTOISE_APP_MODELS = [
     "app.models.files",
     "app.models.experience",
     "app.models.ml_inference",
+    "app.models.community",
 ]
 
 
