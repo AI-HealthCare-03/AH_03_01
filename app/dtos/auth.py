@@ -38,6 +38,21 @@ class PreviousAccountResponse(BaseModel):
     restore_deadline: datetime
 
 
+class RestoreRequest(BaseModel):
+    email: Annotated[EmailStr, Field(max_length=40)]
+
+
+class RestoredAccountResponse(BaseModel):
+    """복구 완료 응답. 이메일 인증을 마친 본인이므로 상세 통계 포함."""
+
+    email: EmailStr
+    created_at: datetime
+    deleted_at: datetime
+    challenge_count: int
+    points: int
+    pet_name: str | None = None
+
+
 class SendVerificationRequest(BaseModel):
     email: Annotated[EmailStr, Field(max_length=40)]
 
