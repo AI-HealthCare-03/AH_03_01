@@ -140,7 +140,8 @@ class ChallengeService:
         if challenge.creator_id == user.id:
             return challenge
         participation = await self.participant_repo.get_by_user(challenge_id, user.id)
-        if participation is None or participation.status not in {ParticipantStatus.APPROVED, ParticipantStatus.PENDING}:
+        # 승인된 참여자만 상세 접근 허용. 승인 대기(PENDING) 멤버는 차단(보안상 엄격).
+        if participation is None or participation.status != ParticipantStatus.APPROVED:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="접근 권한이 없습니다.")
         return challenge
 
