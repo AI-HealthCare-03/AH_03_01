@@ -12,6 +12,8 @@ from app.dtos.auth import (
     LoginRequest,
     LoginResponse,
     PreviousAccountResponse,
+    RestoredAccountResponse,
+    RestoreRequest,
     SendVerificationRequest,
     SignUpRequest,
     TokenRefreshResponse,
@@ -80,6 +82,18 @@ async def previous_account(
 ) -> Response:
     """재가입 시 복구 가능한 탈퇴 계정 감지. 인증 전이므로 마스킹 이메일·탈퇴일·복구마감만. 없으면 404."""
     result = await auth_service.get_previous_account(email)
+    return Response(content=result.model_dump(mode="json"), status_code=status.HTTP_200_OK)
+
+
+@auth_router.post("/restore", response_model=RestoredAccountResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
+async def restore_account(
+    request: Request,
+    payload: RestoreRequest,
+    auth_service: Annotated[AuthService, Depends(AuthService)],
+) -> Response:
+    """탈퇴 계정 복구. 이메일 본인 인증 필수. 복구 후 상세 통계 반환. 미인증 400 / 미존재 404."""
+    result = await auth_service.restore_account(str(payload.email))
     return Response(content=result.model_dump(mode="json"), status_code=status.HTTP_200_OK)
 
 

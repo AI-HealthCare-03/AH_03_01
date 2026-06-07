@@ -14,6 +14,7 @@ from app.dtos.auth import (
     FindIdResponse,
     LoginRequest,
     PreviousAccountResponse,
+    RestoredAccountResponse,
     SignUpRequest,
 )
 from app.models.users import User
@@ -115,6 +116,51 @@ class AuthService:
             deleted_at=user.deleted_at,
             restore_deadline=deadline,
         )
+
+    async def restore_account(self, email: str) -> RestoredAccountResponse:
+        """이메일 본인 인증을 마친 사용자의 탈퇴 계정을 복구(is_deleted=false)한다.
+
+        보관 기간 내 탈퇴 계정만 복구 가능. 인증 완료자에게만 상세 통계를 반환한다.
+        """
+        if not await self.email_verification.is_verified(email):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이메일 본인 인증이 필요합니다.")
+
+        user = await self.user_repo.get_deleted_by_email(email)
+        if user is None or user.deleted_at is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="복구 가능한 탈퇴 계정이 없습니다.")
+        if user.deleted_at + timedelta(days=ACCOUNT_RETENTION_DAYS) <= datetime.now(config.TIMEZONE):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="복구 가능한 탈퇴 계정이 없습니다.")
+
+        prev_deleted_at = user.deleted_at
+        user.is_deleted = False
+        user.is_active = True
+        user.deleted_at = None  # type: ignore[assignment]  # null=True 필드(스텁은 datetime)
+        user.withdrawal_reason = None  # type: ignore[assignment]  # null=True 필드(스텁은 str)
+        async with in_transaction():
+            await user.save(update_fields=["is_deleted", "is_active", "deleted_at", "withdrawal_reason", "updated_at"])
+        await self.email_verification.consume(email)
+
+        stats = await self._account_stats(user.id)
+        return RestoredAccountResponse(
+            email=user.email,
+            created_at=user.created_at,
+            deleted_at=prev_deleted_at,
+            challenge_count=stats["challenge_count"],
+            points=stats["points"],
+            pet_name=stats["pet_name"],
+        )
+
+    @staticmethod
+    async def _account_stats(user_id: object) -> dict:
+        """복구 계정의 요약 통계(챌린지 수·포인트·펫 이름). 순환 import 방지 위해 지연 import."""
+        from app.models.challenge import ChallengeParticipant, ParticipantStatus  # noqa: PLC0415
+        from app.repositories.pet_repository import PetRepository  # noqa: PLC0415
+        from app.services.pet import PointService  # noqa: PLC0415
+
+        points = await PointService().balance(user_id)  # type: ignore[arg-type]  # UUID PK (스텁 int)
+        pet = await PetRepository().get_by_user(user_id)  # type: ignore[arg-type]
+        challenge_count = await ChallengeParticipant.filter(user_id=user_id, status=ParticipantStatus.APPROVED).count()
+        return {"challenge_count": challenge_count, "points": points, "pet_name": pet.name if pet else None}
 
     @staticmethod
     def _mask_email(email: str) -> str:
