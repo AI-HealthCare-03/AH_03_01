@@ -24,14 +24,14 @@ export interface NotifItem {
 const CATEGORIES: Array<"전체" | NotifCategory> = ["전체", "복약", "챌린지", "커뮤니티", "위험도"];
 
 /* ── 알림 저장 유틸 (외부에서도 사용 가능) ──────────── */
-export function pushNotification(item: Omit<NotifItem, "id" | "timestamp" | "read">) {
+export function pushNotification(item: Omit<NotifItem, "id" | "timestamp" | "read">, ts?: number) {
   try {
     const raw = localStorage.getItem(NOTIF_HISTORY_KEY);
     const list: NotifItem[] = raw ? JSON.parse(raw) : [];
     const next: NotifItem = {
       ...item,
       id: Math.random().toString(36).slice(2, 10),
-      timestamp: Date.now(),
+      timestamp: ts ?? Date.now(),
       read: false,
     };
     // 최대 100개 유지
