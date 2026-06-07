@@ -26,6 +26,12 @@ class PasswordChangeRequest(BaseModel):
     new_password: Annotated[str, Field(min_length=8, max_length=64)]
 
 
+class WithdrawRequest(BaseModel):
+    """회원 탈퇴 요청. 탈퇴 이유는 선택(프론트 탈퇴 폼에서 선택/작성)."""
+
+    reason: Annotated[str | None, Field(None, max_length=500)]
+
+
 class UserInfoResponse(BaseSerializerModel):
     id: UUID
     email: str

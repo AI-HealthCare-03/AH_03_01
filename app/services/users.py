@@ -1,6 +1,9 @@
+from datetime import datetime
+
 from fastapi import HTTPException, status
 from tortoise.transactions import in_transaction
 
+from app.core import config
 from app.core.utils.common import normalize_phone_number
 from app.core.utils.security import hash_password, verify_password
 from app.dtos.users import PasswordChangeRequest, UserUpdateRequest
@@ -65,3 +68,29 @@ class UserManageService:
         user.hashed_password = hash_password(data.new_password)
         async with in_transaction():
             await user.save(update_fields=["hashed_password", "updated_at"])
+
+    async def withdraw(self, user: User, reason: str | None = None) -> None:
+        """회원 탈퇴 (soft delete). is_deleted=true·deleted_at=now 로 표시하고 비활성화.
+
+        실제 정보는 30일간 보관 후 파기(별도 잡). 보관 기간 내 재가입 시 복구 가능.
+        탈퇴 즉시 로그인 세션 무효화를 위해 refresh_token_hash 도 제거한다.
+        """
+        if user.is_deleted:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 탈퇴한 계정입니다.")
+
+        user.is_deleted = True
+        user.is_active = False
+        user.deleted_at = datetime.now(config.TIMEZONE)
+        user.withdrawal_reason = reason  # type: ignore[assignment]  # null=True 필드(스텁은 str)
+        user.refresh_token_hash = None  # type: ignore[assignment]  # null=True 필드(스텁은 str)
+        async with in_transaction():
+            await user.save(
+                update_fields=[
+                    "is_deleted",
+                    "is_active",
+                    "deleted_at",
+                    "withdrawal_reason",
+                    "refresh_token_hash",
+                    "updated_at",
+                ]
+            )
