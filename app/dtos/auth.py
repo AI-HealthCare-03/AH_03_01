@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, EmailStr, Field
@@ -28,6 +28,14 @@ class FindIdRequest(BaseModel):
 class FindIdResponse(BaseModel):
     masked_email: str
     created_at: date
+
+
+class PreviousAccountResponse(BaseModel):
+    """탈퇴 계정 감지(복구 가능 여부). 인증 전이므로 최소 정보만 — 상세 통계는 복구(인증) 단계에서."""
+
+    masked_email: str
+    deleted_at: datetime
+    restore_deadline: datetime
 
 
 class SendVerificationRequest(BaseModel):

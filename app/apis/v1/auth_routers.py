@@ -11,6 +11,7 @@ from app.dtos.auth import (
     FindIdResponse,
     LoginRequest,
     LoginResponse,
+    PreviousAccountResponse,
     SendVerificationRequest,
     SignUpRequest,
     TokenRefreshResponse,
@@ -67,6 +68,18 @@ async def find_id(
 ) -> Response:
     """이름 + 휴대폰 번호로 가입 이메일(마스킹) 조회. 미일치 시 404."""
     result = await auth_service.find_id(payload)
+    return Response(content=result.model_dump(mode="json"), status_code=status.HTTP_200_OK)
+
+
+@auth_router.get("/previous-account", response_model=PreviousAccountResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("10/minute")
+async def previous_account(
+    request: Request,
+    email: Annotated[str, Query(min_length=3, max_length=80)],
+    auth_service: Annotated[AuthService, Depends(AuthService)],
+) -> Response:
+    """재가입 시 복구 가능한 탈퇴 계정 감지. 인증 전이므로 마스킹 이메일·탈퇴일·복구마감만. 없으면 404."""
+    result = await auth_service.get_previous_account(email)
     return Response(content=result.model_dump(mode="json"), status_code=status.HTTP_200_OK)
 
 
