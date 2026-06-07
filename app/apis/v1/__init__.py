@@ -25,6 +25,7 @@ from app.apis.v1.pet_routers import (
     rewards_router,
     store_router,
 )
+from app.apis.v1.community_routers import posts_router
 from app.apis.v1.risk_recommendation_routers import risk_recommendations_router
 from app.apis.v1.user_routers import user_router
 
@@ -51,3 +52,4 @@ v1_routers.include_router(risk_recommendations_router)
 v1_routers.include_router(files_router)
 v1_routers.include_router(experience_router)
 v1_routers.include_router(leaderboard_router)
+v1_routers.include_router(posts_router)
