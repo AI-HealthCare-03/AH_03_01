@@ -115,7 +115,7 @@ class ChallengeResponse(BaseSerializerModel):
     max_participants: int
     start_date: date
     end_date: date
-    creator_id: UUID
+    creator_id: UUID | None
     created_at: datetime
     cadence: ChallengeCadence = ChallengeCadence.DAILY
     goal_config: dict[str, Any] = Field(default_factory=dict)
