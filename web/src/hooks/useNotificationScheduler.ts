@@ -5,6 +5,55 @@ import { MEDICATION_STORAGE_KEY, type Medication } from "@/components/health/Med
 import { pushNotification } from "@/components/layout/NotificationDropdown";
 
 const NOTIF_SETTINGS_KEY = "notification-settings";
+export const LAST_SEEN_KEY = "notif-last-seen";
+const MAX_REPLAY_MS = 7 * 86_400_000; // 최대 7일 소급
+
+/** 마지막 접속 이후 놓친 알림을 소급 생성 */
+function replayMissed(settings: Settings) {
+  const raw = localStorage.getItem(LAST_SEEN_KEY);
+  if (!raw) return;
+  const lastSeen = parseInt(raw);
+  const now = Date.now();
+  if (now - lastSeen < 60_000) return; // 1분 미만이면 스킵
+
+  const from = Math.max(lastSeen, now - MAX_REPLAY_MS);
+
+  if (settings.challengeRemind) {
+    const [hh, mm] = settings.challengeTime.split(":").map(Number);
+    const dt = new Date(from);
+    dt.setHours(hh, mm, 0, 0);
+    if (dt.getTime() <= from) dt.setDate(dt.getDate() + 1);
+    while (dt.getTime() < now) {
+      pushNotification(
+        { category: "챌린지", title: "🏃 챌린지 리마인드", body: "오늘 챌린지를 아직 완료하지 않았어요." },
+        dt.getTime(),
+      );
+      dt.setDate(dt.getDate() + 1);
+    }
+  }
+
+  if (settings.medication) {
+    try {
+      const meds: Medication[] = JSON.parse(localStorage.getItem(MEDICATION_STORAGE_KEY) ?? "[]");
+      meds.filter((m) => m.active).forEach((med) => {
+        const label = med.dosageAmount ? `${med.name} ${med.dosageAmount}${med.dosageUnit}` : med.name;
+        med.times.forEach((t) => {
+          const [hh, mm] = t.split(":").map(Number);
+          const dt = new Date(from);
+          dt.setHours(hh, mm, 0, 0);
+          if (dt.getTime() <= from) dt.setDate(dt.getDate() + 1);
+          while (dt.getTime() < now) {
+            pushNotification(
+              { category: "복약", title: "💊 복약 알림", body: `${label} 복용 시간이었어요.` },
+              dt.getTime(),
+            );
+            dt.setDate(dt.getDate() + 1);
+          }
+        });
+      });
+    } catch { /* 무시 */ }
+  }
+}
 
 interface Settings {
   medication: boolean;
@@ -54,6 +103,7 @@ export function useNotificationScheduler() {
     if (typeof window === "undefined") return;
 
     const timers: ReturnType<typeof setTimeout>[] = [];
+    let firstRun = true;
 
     function scheduleAll() {
       // 기존 타이머 전부 제거
@@ -65,6 +115,13 @@ export function useNotificationScheduler() {
         const raw = localStorage.getItem(NOTIF_SETTINGS_KEY);
         if (raw) settings = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
       } catch { /* 무시 */ }
+
+      // 최초 1회: 놓친 알림 소급 생성 후 last_seen 갱신
+      if (firstRun) {
+        replayMissed(settings);
+        firstRun = false;
+      }
+      localStorage.setItem(LAST_SEEN_KEY, Date.now().toString());
 
       // ── 복약 알림 ────────────────────────────────
       // pushNotification(내역 저장)은 권한 무관, 브라우저 알림만 권한 필요
@@ -124,6 +181,7 @@ export function useNotificationScheduler() {
     window.addEventListener("storage", handleStorage);
 
     return () => {
+      localStorage.setItem(LAST_SEEN_KEY, Date.now().toString());
       timers.forEach(clearTimeout);
       window.removeEventListener("notif-reschedule", handleReschedule);
       window.removeEventListener("storage", handleStorage);
