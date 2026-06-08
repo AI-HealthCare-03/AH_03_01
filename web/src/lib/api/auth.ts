@@ -1,5 +1,13 @@
+import axios from "axios";
 import apiClient from "./client";
-import type { LoginRequest, LoginResponse, SignupRequest, SignupResponse } from "@/types";
+import type {
+  LoginRequest,
+  LoginResponse,
+  PreviousAccount,
+  RestoredAccount,
+  SignupRequest,
+  SignupResponse,
+} from "@/types";
 
 /* =========================================
    인증 API 래퍼
@@ -147,28 +155,42 @@ export async function verifySms(
 }
 
 /**
- * 이전 계정 조회
- * TODO(backend): /api/v1/auth/previous-account 엔드포인트 추가 필요
+ * 이전(탈퇴) 계정 감지
+ * GET /api/v1/auth/previous-account?email=...
+ * 탈퇴 계정이 없으면(404) null 반환 — 정상 신규 가입 흐름으로 분기한다.
  */
 export async function getPreviousAccount(
-  _email: string
-): Promise<import("@/types").PreviousAccount | null> {
-  throw new Error(
-    "TODO(backend): /api/v1/auth/previous-account 엔드포인트 추가 필요"
-  );
+  email: string
+): Promise<PreviousAccount | null> {
+  try {
+    const res = await apiClient.get<PreviousAccount>(
+      "/api/v1/auth/previous-account",
+      { params: { email } }
+    );
+    return res.data;
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.status === 404) return null;
+    throw err;
+  }
 }
 
 /**
- * 이전 계정 복원
- * TODO(backend): /api/v1/auth/restore 엔드포인트 추가 필요
+ * 탈퇴 계정 복구 (전체 복원)
+ * POST /api/v1/auth/restore — 이메일 본인 인증 필수. 복구 후 상세 통계 반환.
  */
-export async function restoreAccount(
-  _email: string,
-  _keys: string[]
-): Promise<void> {
-  throw new Error(
-    "TODO(backend): /api/v1/auth/restore 엔드포인트 추가 필요"
-  );
+export async function restoreAccount(email: string): Promise<RestoredAccount> {
+  const res = await apiClient.post<RestoredAccount>("/api/v1/auth/restore", {
+    email,
+  });
+  return res.data;
+}
+
+/**
+ * 탈퇴 계정 즉시 영구 파기 ('새로 시작하기')
+ * POST /api/v1/auth/destroy — 이메일 본인 인증 필수.
+ */
+export async function destroyPreviousAccount(email: string): Promise<void> {
+  await apiClient.post("/api/v1/auth/destroy", { email });
 }
 
 /**
