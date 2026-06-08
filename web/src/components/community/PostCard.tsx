@@ -1,10 +1,10 @@
 import Link from "next/link";
 import type { PostListItem } from "@/types/community";
 
-export default function PostCard({ post }: { post: PostListItem }) {
+export default function PostCard({ post, basePath = "/community/board" }: { post: PostListItem; basePath?: string }) {
   return (
     <Link
-      href={`/community/board/${post.id}`}
+      href={`${basePath}/${post.id}`}
       className="block p-4 bg-white border border-border rounded-[12px] hover:shadow-sm transition-shadow"
     >
       <div className="flex items-center gap-1.5 mb-1">
