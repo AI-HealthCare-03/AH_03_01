@@ -93,6 +93,7 @@ class _BM25Index:
     sources: list[str]
     diseases: list[str | None]  # metadata.disease ("diabetes" | "hypertension" | "dyslipidemia" | "general" | None)
     topics: list[list[str]]     # metadata.topics (["diagnosis", "medication", ...] | [])
+    use_restrictions: list[str | None]  # metadata.use_restriction ("included_for_rag" | "pediatric_only" | None)
 
 
 _bm25_index: _BM25Index | None = None
@@ -112,6 +113,7 @@ async def _build_bm25_index() -> _BM25Index:
     sources: list[str] = []
     diseases: list[str | None] = []
     topics: list[list[str]] = []
+    use_restrictions: list[str | None] = []
     for r in rows:
         corpus.append(_tokenize(r.chunk_text))
         chunk_ids.append(r.id)
@@ -119,6 +121,7 @@ async def _build_bm25_index() -> _BM25Index:
         sources.append(r.source)
         diseases.append((r.metadata or {}).get("disease"))
         topics.append((r.metadata or {}).get("topics") or [])
+        use_restrictions.append((r.metadata or {}).get("use_restriction"))
 
     if not corpus:
         # 빈 corpus 인 경우 BM25Okapi 가 ZeroDivision 을 던지므로 더미 문서 1개 추가
@@ -128,6 +131,7 @@ async def _build_bm25_index() -> _BM25Index:
         sources = [""]
         diseases = [None]
         topics = [[]]
+        use_restrictions = [None]
 
     return _BM25Index(
         bm25=BM25Okapi(corpus),
@@ -136,6 +140,7 @@ async def _build_bm25_index() -> _BM25Index:
         sources=sources,
         diseases=diseases,
         topics=topics,
+        use_restrictions=use_restrictions,
     )
 
 
@@ -238,15 +243,35 @@ def _build_filter_sql(
     return ("".join(clauses), args)
 
 
+def _build_pediatric_exclusion_sql(next_idx: int) -> tuple[str, list[Any]]:
+    """소아 전용 섹션(use_restriction=pediatric_only)을 검색에서 제외하는 WHERE 절.
+
+    include_pediatric=False(기본)일 때 호출. pediatric_only 섹션은 성인 질문에서
+    오검색되어 Faithfulness를 낮추므로 기본적으로 제외한다.
+    """
+    clause = f" AND (\"metadata\" ->> 'use_restriction') IS DISTINCT FROM ${next_idx} "
+    return clause, ["pediatric_only"]
+
+
 async def _dense_search(
     query_embedding: list[float],
     top_k: int,
     source_type: SourceType,
     diseases: list[str] | None,
     topics: list[str] | None = None,
+    ped_clause: str = "",
+    ped_args: list[Any] | None = None,
 ) -> list[tuple[int, float]]:
     """(document_id, cosine_similarity) 튜플 리스트, 유사도 내림차순."""
     filter_sql, filter_args = _build_filter_sql(source_type, diseases, topics)
+    # pediatric 제외 절 추가 (include_pediatric=False일 때)
+    if ped_clause:
+        # ped_args의 바인드 인덱스를 기존 args 뒤로 조정
+        adjusted_ped_clause = ped_clause.replace(
+            "$2", f"${len(filter_args) + 2}"
+        )
+        filter_sql += adjusted_ped_clause
+        filter_args += (ped_args or [])
     # asyncpg 는 vector 컬럼 코덱 등록되어 있어 list[float] 그대로 전달 가능 (databases.py 의 init).
     sql = f"""
         SELECT "id", 1 - ("embedding" <=> $1) AS similarity
@@ -271,6 +296,8 @@ def _sparse_search(  # noqa: C901
     source_type: SourceType,
     diseases: list[str] | None,
     topics: list[str] | None = None,
+    ped_clause: str = "",
+    ped_args: list[Any] | None = None,
 ) -> list[tuple[int, float]]:
     """BM25 점수 기준 상위 top_k (document_id, score).
 
@@ -304,6 +331,12 @@ def _sparse_search(  # noqa: C901
         topic_set = set(topics)
         for i, chunk_topics in enumerate(bm.topics):
             if chunk_topics and not topic_set.intersection(chunk_topics):
+                scores[i] = mask_value
+
+    # pediatric_only 섹션 제외 (include_pediatric=False일 때 ped_args=["pediatric_only"])
+    if ped_args and source_type != "service":
+        for i, use_restr in enumerate(bm.use_restrictions):
+            if use_restr in ped_args:
                 scores[i] = mask_value
 
     # 마스크되지 않은 점수만 상위 top_k. BM25 음수 점수도 정상 결과로 인정 (corpus
@@ -374,6 +407,7 @@ async def retrieve(
     source_type: SourceType = "all",
     disease: str | list[str] | None = None,
     topics: list[str] | None = None,
+    include_pediatric: bool = False,
 ) -> RetrievalResult:
     """하이브리드 검색.
 
@@ -409,8 +443,20 @@ async def retrieve(
     query_emb = await _embed_query(query)
     bm = await _get_bm25_index()
 
-    dense = await _dense_search(query_emb, candidate_k, source_type, diseases, topics)
-    sparse = _sparse_search(bm, query, candidate_k, source_type, diseases, topics)
+    # include_pediatric=False(기본)이면 소아 전용 섹션을 검색풀에서 제외.
+    # is_pediatric 질문(소아·어린이·청소년 키워드)일 때만 True로 전달.
+    effective_topics = topics
+    if not include_pediatric and source_type != "service":
+        ped_clause, ped_args = _build_pediatric_exclusion_sql(2)
+        # topics 필터와 별도로 pediatric 제외 절을 dense/sparse에 전달하기 위해
+        # extra_filter로 넘긴다.
+    else:
+        ped_clause, ped_args = "", []
+
+    dense = await _dense_search(query_emb, candidate_k, source_type, diseases, effective_topics,
+                                 ped_clause=ped_clause, ped_args=ped_args)
+    sparse = _sparse_search(bm, query, candidate_k, source_type, diseases, effective_topics,
+                             ped_clause=ped_clause, ped_args=ped_args)
 
     debug.dense_hits = len(dense)
     debug.sparse_hits = len(sparse)

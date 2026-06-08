@@ -218,6 +218,11 @@ def parse_file(filepath: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:  
         if sec_meta.get("use_restriction", "") == "excluded_from_rag":
             skipped += 1
             continue
+        # pediatric_only 섹션은 일반 성인 검색풀에서 제외.
+        # 소아 전용 검색 경로가 생기면 별도 처리 예정.
+        if sec_meta.get("use_restriction", "") == "pediatric_only":
+            skipped += 1
+            continue
 
         full_text = build_embedding_text(block)
         if not full_text or len(full_text.strip()) < MIN_CHUNK_LEN:

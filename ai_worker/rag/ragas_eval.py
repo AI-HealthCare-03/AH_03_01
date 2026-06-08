@@ -45,8 +45,8 @@ from ragas.metrics import (  # noqa: E402
 # 경로 설정
 # ─────────────────────────────────────────────
 BASE = Path(__file__).parent
-EVAL_DATASET_PATH = BASE / "rag_eval_qa_dataset.jsonl"
-EVAL_SAMPLE_SIZE = 20
+EVAL_DATASET_PATH = BASE / "rag_eval_qa_dataset_v2.jsonl"
+EVAL_SAMPLE_SIZE = 50
 
 
 # ─────────────────────────────────────────────
@@ -317,7 +317,8 @@ def print_results(ragas_result, ko_ar_scores: list[float], data: dict):
 # 실행
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
+    # seed=42 고정 — 매번 같은 50개 샘플로 평가해 개선 효과를 정확히 측정
     dataset = load_eval_dataset(EVAL_DATASET_PATH)
-    data = collect_answers(dataset)        # 매번 랜덤
+    data = collect_answers(dataset, seed=42)
     result, ko_ar = run_ragas_evaluation(data)
     print_results(result, ko_ar, data)

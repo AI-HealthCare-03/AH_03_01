@@ -191,6 +191,20 @@ _SERVICE_PREFILTER_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# N4 가드 패턴: 약물 일반 정보 질문 (부작용·효능·작용기전·복약법 등)
+# 본인 수치·데이터 없이 답할 수 있는 질문 → needs_health_data 강제 False
+_DRUG_GENERAL_INFO_PATTERN = re.compile(
+    r"부작용|이상반응|근육통|근육통증|횡문근융해|두통|어지럼"    r"|약\s*(끊|중단|바꿔|바꾸|그냥\s*먹|먹어도\s*되)"    r"|효과|효능|작용|기전|원리"    r"|언제\s*먹|어떻게\s*먹|같이\s*먹|함께\s*먹",
+    re.IGNORECASE,
+)
+
+# 소아 관련 질문 감지 패턴 — is_pediatric=True 로 설정해 pediatric_only 섹션 포함 검색
+_PEDIATRIC_PATTERN = re.compile(
+    r"소아|어린이|아이(?!디)|청소년|소년|소녀"
+    r"|\d{1,2}\s*세\s*(?:아이|아동|어린|소아|청소년|남아|여아)",
+    re.IGNORECASE,
+)
+
 # prefilter 확장: 명백한 개인정보 질문 — 범위 외로 즉시 처리
 _PERSONAL_INFO_PREFILTER_PATTERN = re.compile(
     r"^(내|제|나의|저의)?\s*(이름|나이|생년월일|전화번호|주소|성별)\s*(이?뭐야|이?뭐에요|알아요?\??|알려줘|뭔가요\??|뭐예요\??)\s*\??$",
@@ -271,6 +285,8 @@ class ChatState(TypedDict, total=False):
     # 평가 모드 플래그 — True 시 fetch_health_data(DB 조회) 를 건너뛰고 retrieve 로 직행.
     # ragas_eval.py 에서 ainvoke 호출 시 주입한다.
     eval_mode: bool
+    # 소아 관련 질문 여부 — True 시 retrieve 에서 pediatric_only 섹션 포함 검색.
+    is_pediatric: bool
 
 
 # ─────────────────────────────────────────────
@@ -612,6 +628,15 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:  # noqa: C901
             _logger.info("classify_intent N3 guard hit — 인라인 수치 감지, needs_health_data 강제 False")
             needs = False
             missing = []
+    # N4 가드: 약물 일반 정보 질문 (부작용·효능·복약법 등) → needs_health_data 강제 False.
+    # 약품명이 포함돼도 본인 수치 없이 답할 수 있는 케이스.
+    # 예: "스타틴 먹은 후 근육통이 심해요. 끊어도 되나요?"
+    if needs and _DRUG_GENERAL_INFO_PATTERN.search(state["original_question"]):
+        _logger.info("classify_intent N4 guard hit — 약물 일반정보 질문, needs_health_data 강제 False")
+        needs = False
+        missing = []
+
+    is_pediatric = bool(_PEDIATRIC_PATTERN.search(state["original_question"]))
 
     return {
         "intent": intent,
@@ -621,6 +646,7 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:  # noqa: C901
         "needs_challenge_catalog": needs_challenge,
         "missing_fields": missing if needs else [],
         "action_hint": "navigate_to_health_info" if needs else None,
+        "is_pediatric": is_pediatric,
     }
 
 
@@ -875,6 +901,8 @@ async def retrieve_node(state: ChatState) -> dict[str, Any]:
     is_drug_food = bool(_DRUG_FOOD_PATTERN.search(original))
     is_multi_hop = bool(_MULTI_HOP_PATTERN.search(original)) and not is_drug_food
 
+    is_pediatric = bool(state.get("is_pediatric"))
+
     try:
         if is_drug_food or is_multi_hop:
             query_type = "drug_food" if is_drug_food else "multi_hop"
@@ -888,6 +916,7 @@ async def retrieve_node(state: ChatState) -> dict[str, Any]:
                     source_type=source_type,
                     disease=diseases if diseases else None,
                     topics=state.get("topics") or None,
+                    include_pediatric=is_pediatric,
                 )
                 for chunk in result.chunks:
                     chunk_id = chunk.metadata.get("section_id") or str(chunk.document_id)
@@ -901,6 +930,7 @@ async def retrieve_node(state: ChatState) -> dict[str, Any]:
                 source_type=source_type,
                 disease=state.get("diseases"),
                 topics=state.get("topics") or None,
+                include_pediatric=is_pediatric,
             )
             # RRF 후 동일 section_id 중복 제거: 점수 높은 첫 번째 청크만 유지
             seen_ids: set[str] = set()
@@ -1252,14 +1282,13 @@ def _build_graph() -> Any:
     return g.compile()
 
 
-_compiled_graph: Any | None = None
+# 모듈 임포트 시점에 미리 빌드 — 첫 요청 콜드스타트 방지.
+# 서버 기동 시 그래프가 초기화되어 첫 질문도 빠르게 응답 가능.
+_compiled_graph: Any = _build_graph()
 
 
 def ChatRAGGraph() -> Any:  # noqa: N802 — API 계약 문서 명칭 보존
-    """컴파일된 그래프 (lazy singleton)."""
-    global _compiled_graph
-    if _compiled_graph is None:
-        _compiled_graph = _build_graph()
+    """컴파일된 그래프 (eager singleton)."""
     return _compiled_graph
 
 
