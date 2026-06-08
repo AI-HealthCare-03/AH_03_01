@@ -28,3 +28,15 @@ class PostListResponse(BaseModel):
     total: int
     page: int
     size: int
+
+
+class PostCreateRequest(BaseModel):
+    title: str
+    content: str
+    category: PostCategory
+
+
+class PostUpdateRequest(BaseModel):
+    title: str | None = None
+    content: str | None = None
+    category: PostCategory | None = None

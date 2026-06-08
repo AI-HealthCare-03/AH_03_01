@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.dependencies.security import get_request_user
-from app.dtos.community import PostDetailResponse, PostListItem, PostListResponse
+from app.dtos.community import PostCreateRequest, PostDetailResponse, PostListItem, PostListResponse, PostUpdateRequest
 from app.models.community import Post, PostCategory
 from app.models.users import User
 from app.repositories.community_repository import PostRepository
@@ -36,3 +36,38 @@ async def get_post(post_id: int, _: User = Depends(get_request_user)) -> PostDet
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
     await repo.increment_view(post.id, post.view_count)
     return PostDetailResponse(**_to_item(post).model_dump(), content=post.content, updated_at=post.updated_at)
+
+
+@posts_router.post("", response_model=PostDetailResponse, status_code=status.HTTP_201_CREATED)
+async def create_post(body: PostCreateRequest, current_user: User = Depends(get_request_user)) -> PostDetailResponse:
+    repo = PostRepository()
+    post = await repo.create_post(
+        author_id=current_user.id, title=body.title, content=body.content, category=body.category
+    )
+    post = await repo.get_post(post.id)
+    return PostDetailResponse(**_to_item(post).model_dump(), content=post.content, updated_at=post.updated_at)
+
+
+@posts_router.patch("/{post_id}", response_model=PostDetailResponse)
+async def update_post(
+    post_id: int, body: PostUpdateRequest, current_user: User = Depends(get_request_user)
+) -> PostDetailResponse:
+    repo = PostRepository()
+    post = await repo.get_post(post_id)
+    if not post:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
+    if post.author_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="수정 권한이 없습니다.")
+    post = await repo.update_post(post, title=body.title, content=body.content, category=body.category)
+    return PostDetailResponse(**_to_item(post).model_dump(), content=post.content, updated_at=post.updated_at)
+
+
+@posts_router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_post(post_id: int, current_user: User = Depends(get_request_user)) -> None:
+    repo = PostRepository()
+    post = await repo.get_post(post_id)
+    if not post:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
+    if post.author_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="삭제 권한이 없습니다.")
+    await repo.delete_post(post)
