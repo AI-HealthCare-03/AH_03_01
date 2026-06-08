@@ -205,7 +205,9 @@ export default function SignupPage() {
         // 사용 중인 이메일이 '복구 가능한 탈퇴 계정'이면 복구 안내 페이지로 이동한다.
         const previous = await getPreviousAccount(email);
         if (previous) {
-          router.push(`${ROUTES.ACCOUNT_RESTORE}?email=${encodeURIComponent(email)}`);
+          // 이메일을 URL 쿼리로 노출하지 않도록 sessionStorage 로 전달.
+          sessionStorage.setItem("restore_email", email);
+          router.push(ROUTES.ACCOUNT_RESTORE);
           return;
         }
         setEmailDupl("taken");
