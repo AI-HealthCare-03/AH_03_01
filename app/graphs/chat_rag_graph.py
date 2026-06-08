@@ -198,6 +198,13 @@ _DRUG_GENERAL_INFO_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# 소아 관련 질문 감지 패턴 — is_pediatric=True 로 설정해 pediatric_only 섹션 포함 검색
+_PEDIATRIC_PATTERN = re.compile(
+    r"소아|어린이|아이(?!디)|청소년|소년|소녀"
+    r"|\d{1,2}\s*세\s*(?:아이|아동|어린|소아|청소년|남아|여아)",
+    re.IGNORECASE,
+)
+
 # prefilter 확장: 명백한 개인정보 질문 — 범위 외로 즉시 처리
 _PERSONAL_INFO_PREFILTER_PATTERN = re.compile(
     r"^(내|제|나의|저의)?\s*(이름|나이|생년월일|전화번호|주소|성별)\s*(이?뭐야|이?뭐에요|알아요?\??|알려줘|뭔가요\??|뭐예요\??)\s*\??$",
@@ -278,6 +285,8 @@ class ChatState(TypedDict, total=False):
     # 평가 모드 플래그 — True 시 fetch_health_data(DB 조회) 를 건너뛰고 retrieve 로 직행.
     # ragas_eval.py 에서 ainvoke 호출 시 주입한다.
     eval_mode: bool
+    # 소아 관련 질문 여부 — True 시 retrieve 에서 pediatric_only 섹션 포함 검색.
+    is_pediatric: bool
 
 
 # ─────────────────────────────────────────────
@@ -627,6 +636,8 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:  # noqa: C901
         needs = False
         missing = []
 
+    is_pediatric = bool(_PEDIATRIC_PATTERN.search(state["original_question"]))
+
     return {
         "intent": intent,
         "diseases": diseases,
@@ -635,6 +646,7 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:  # noqa: C901
         "needs_challenge_catalog": needs_challenge,
         "missing_fields": missing if needs else [],
         "action_hint": "navigate_to_health_info" if needs else None,
+        "is_pediatric": is_pediatric,
     }
 
 
@@ -889,6 +901,8 @@ async def retrieve_node(state: ChatState) -> dict[str, Any]:
     is_drug_food = bool(_DRUG_FOOD_PATTERN.search(original))
     is_multi_hop = bool(_MULTI_HOP_PATTERN.search(original)) and not is_drug_food
 
+    is_pediatric = bool(state.get("is_pediatric"))
+
     try:
         if is_drug_food or is_multi_hop:
             query_type = "drug_food" if is_drug_food else "multi_hop"
@@ -902,6 +916,7 @@ async def retrieve_node(state: ChatState) -> dict[str, Any]:
                     source_type=source_type,
                     disease=diseases if diseases else None,
                     topics=state.get("topics") or None,
+                    include_pediatric=is_pediatric,
                 )
                 for chunk in result.chunks:
                     chunk_id = chunk.metadata.get("section_id") or str(chunk.document_id)
@@ -915,6 +930,7 @@ async def retrieve_node(state: ChatState) -> dict[str, Any]:
                 source_type=source_type,
                 disease=state.get("diseases"),
                 topics=state.get("topics") or None,
+                include_pediatric=is_pediatric,
             )
             # RRF 후 동일 section_id 중복 제거: 점수 높은 첫 번째 청크만 유지
             seen_ids: set[str] = set()
