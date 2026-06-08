@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Bell } from "lucide-react";
+import { notifHistoryKey } from "@/lib/notifKeys";
 
 /* ─────────────────────────────────────────────────────
    알림 드롭다운 컴포넌트
-   알림 내역은 localStorage("notification-history") 에 저장
+   알림 내역은 localStorage("notification-history:{userId}") 에 유저별 저장
 ───────────────────────────────────────────────────── */
 
+/** @deprecated 직접 사용하지 말고 notifHistoryKey() 를 사용하세요 */
 export const NOTIF_HISTORY_KEY = "notification-history";
 
 export type NotifCategory = "복약" | "챌린지" | "커뮤니티" | "위험도";
@@ -26,7 +28,7 @@ const CATEGORIES: Array<"전체" | NotifCategory> = ["전체", "복약", "챌린
 /* ── 알림 저장 유틸 (외부에서도 사용 가능) ──────────── */
 export function pushNotification(item: Omit<NotifItem, "id" | "timestamp" | "read">, ts?: number) {
   try {
-    const raw = localStorage.getItem(NOTIF_HISTORY_KEY);
+    const raw = localStorage.getItem(notifHistoryKey());
     const list: NotifItem[] = raw ? JSON.parse(raw) : [];
     const next: NotifItem = {
       ...item,
@@ -35,7 +37,7 @@ export function pushNotification(item: Omit<NotifItem, "id" | "timestamp" | "rea
       read: false,
     };
     // 최대 100개 유지
-    localStorage.setItem(NOTIF_HISTORY_KEY, JSON.stringify([next, ...list].slice(0, 100)));
+    localStorage.setItem(notifHistoryKey(), JSON.stringify([next, ...list].slice(0, 100)));
     // 드롭다운에 갱신 신호 전송
     window.dispatchEvent(new CustomEvent("notif-updated"));
   } catch { /* 무시 */ }
@@ -43,7 +45,7 @@ export function pushNotification(item: Omit<NotifItem, "id" | "timestamp" | "rea
 
 function loadNotifications(): NotifItem[] {
   try {
-    const raw = localStorage.getItem(NOTIF_HISTORY_KEY);
+    const raw = localStorage.getItem(notifHistoryKey());
     return raw ? JSON.parse(raw) : [];
   } catch { return []; }
 }
@@ -104,7 +106,7 @@ export default function NotificationDropdown() {
   const markAllRead = () => {
     const next = list.map((n) => ({ ...n, read: true }));
     setList(next);
-    try { localStorage.setItem(NOTIF_HISTORY_KEY, JSON.stringify(next)); } catch { /* 무시 */ }
+    try { localStorage.setItem(notifHistoryKey(), JSON.stringify(next)); } catch { /* 무시 */ }
   };
 
   return (
