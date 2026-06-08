@@ -191,6 +191,13 @@ _SERVICE_PREFILTER_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# N4 가드 패턴: 약물 일반 정보 질문 (부작용·효능·작용기전·복약법 등)
+# 본인 수치·데이터 없이 답할 수 있는 질문 → needs_health_data 강제 False
+_DRUG_GENERAL_INFO_PATTERN = re.compile(
+    r"부작용|이상반응|근육통|근육통증|횡문근융해|두통|어지럼"    r"|약\s*(끊|중단|바꿔|바꾸|그냥\s*먹|먹어도\s*되)"    r"|효과|효능|작용|기전|원리"    r"|언제\s*먹|어떻게\s*먹|같이\s*먹|함께\s*먹",
+    re.IGNORECASE,
+)
+
 # prefilter 확장: 명백한 개인정보 질문 — 범위 외로 즉시 처리
 _PERSONAL_INFO_PREFILTER_PATTERN = re.compile(
     r"^(내|제|나의|저의)?\s*(이름|나이|생년월일|전화번호|주소|성별)\s*(이?뭐야|이?뭐에요|알아요?\??|알려줘|뭔가요\??|뭐예요\??)\s*\??$",
@@ -612,6 +619,13 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:  # noqa: C901
             _logger.info("classify_intent N3 guard hit — 인라인 수치 감지, needs_health_data 강제 False")
             needs = False
             missing = []
+    # N4 가드: 약물 일반 정보 질문 (부작용·효능·복약법 등) → needs_health_data 강제 False.
+    # 약품명이 포함돼도 본인 수치 없이 답할 수 있는 케이스.
+    # 예: "스타틴 먹은 후 근육통이 심해요. 끊어도 되나요?"
+    if needs and _DRUG_GENERAL_INFO_PATTERN.search(state["original_question"]):
+        _logger.info("classify_intent N4 guard hit — 약물 일반정보 질문, needs_health_data 강제 False")
+        needs = False
+        missing = []
 
     return {
         "intent": intent,
@@ -1252,14 +1266,13 @@ def _build_graph() -> Any:
     return g.compile()
 
 
-_compiled_graph: Any | None = None
+# 모듈 임포트 시점에 미리 빌드 — 첫 요청 콜드스타트 방지.
+# 서버 기동 시 그래프가 초기화되어 첫 질문도 빠르게 응답 가능.
+_compiled_graph: Any = _build_graph()
 
 
 def ChatRAGGraph() -> Any:  # noqa: N802 — API 계약 문서 명칭 보존
-    """컴파일된 그래프 (lazy singleton)."""
-    global _compiled_graph
-    if _compiled_graph is None:
-        _compiled_graph = _build_graph()
+    """컴파일된 그래프 (eager singleton)."""
     return _compiled_graph
 
 
