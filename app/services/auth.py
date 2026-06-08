@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 
 from fastapi.exceptions import HTTPException
@@ -24,6 +25,8 @@ from app.services.jwt import JwtService
 
 # 탈퇴(soft delete) 후 개인정보 보관 기간. 이 기간 내에는 복구 가능, 경과 시 파기(개인정보처리방침 기준).
 ACCOUNT_RETENTION_DAYS = 30
+
+logger = logging.getLogger(__name__)
 
 
 class AuthService:
@@ -154,6 +157,27 @@ class AuthService:
             points=stats["points"],
             pet_name=stats["pet_name"],
         )
+
+    async def destroy_previous_account(self, email: str) -> None:
+        """이메일 본인 인증을 마친 사용자의 탈퇴 계정을 즉시 영구 파기(하드 삭제)한다.
+
+        '새로 시작하기' — 30일 보관 기간을 기다리지 않고 본인 요청으로 파기.
+        DB cascade 로 PII/PHI 동반 삭제(챌린지는 creator SET_NULL 로 보존).
+        """
+        if not await self.email_verification.is_verified(email):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이메일 본인 인증이 필요합니다.")
+
+        user = await self.user_repo.get_deleted_by_email(email)
+        if user is None or user.deleted_at is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="파기할 탈퇴 계정이 없습니다.")
+        if user.is_banned:  # 정지 계정은 본인 파기로 자료 인멸 못 하게 차단(운영/조사 보존)
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="정지된 계정은 파기할 수 없습니다.")
+
+        async with in_transaction():
+            await user.delete()
+        await self.email_verification.consume(email)
+        # 감사 추적: 비가역 영구 파기 — PII 마스킹(이메일)하여 기록.
+        logger.info("탈퇴 계정 영구 파기 user_id=%s email=%s", user.id, self._mask_email(email))
 
     @staticmethod
     async def _account_stats(user_id: object) -> dict:

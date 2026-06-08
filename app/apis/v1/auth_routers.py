@@ -7,6 +7,7 @@ from app.core import config
 from app.core.config import Env
 from app.core.limiter import limiter
 from app.dtos.auth import (
+    DestroyRequest,
     FindIdRequest,
     FindIdResponse,
     LoginRequest,
@@ -95,6 +96,18 @@ async def restore_account(
     """탈퇴 계정 복구. 이메일 본인 인증 필수. 복구 후 상세 통계 반환. 미인증 400 / 미존재 404."""
     result = await auth_service.restore_account(str(payload.email))
     return Response(content=result.model_dump(mode="json"), status_code=status.HTTP_200_OK)
+
+
+@auth_router.post("/destroy", status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
+async def destroy_previous_account(
+    request: Request,
+    payload: DestroyRequest,
+    auth_service: Annotated[AuthService, Depends(AuthService)],
+) -> Response:
+    """탈퇴 계정 즉시 영구 파기('새로 시작하기'). 이메일 본인 인증 필수. 미인증 400 / 미존재 404 / 정지 403."""
+    await auth_service.destroy_previous_account(str(payload.email))
+    return Response(content={"detail": "이전 계정이 파기되었습니다."}, status_code=status.HTTP_200_OK)
 
 
 @auth_router.post("/email/send-verification", status_code=status.HTTP_202_ACCEPTED)
