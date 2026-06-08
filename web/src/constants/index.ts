@@ -34,7 +34,6 @@ export const PASSWORD_STRENGTH_LABELS = {
 export const WITHDRAWAL_REASONS = [
   "서비스 이용이 불편해요",
   "원하는 기능이 없어요",
-  "개인정보 보호가 걱정돼요",
   "자주 사용하지 않아요",
   "다른 서비스로 이동할게요",
   "기타",
