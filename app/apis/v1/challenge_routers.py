@@ -148,6 +148,34 @@ async def list_challenges(
         size=size,
         mine_only=mine,
     )
+
+    # 사용자별 달성 현황 일괄 조회
+    from app.models.challenge import ChallengeVerification, VerificationStatus
+    challenge_ids = [ch.id for ch in items]
+    approved_counts: dict[int, int] = {}
+    missed_counts: dict[int, int] = {}
+    if challenge_ids:
+        verif_rows = await ChallengeVerification.filter(
+            challenge_id__in=challenge_ids,
+            user_id=user.id,
+            status=VerificationStatus.APPROVED,
+        ).values("challenge_id")
+        for row in verif_rows:
+            cid = row["challenge_id"]
+            approved_counts[cid] = approved_counts.get(cid, 0) + 1
+
+        from app.models.challenge import ChallengeParticipant
+        part_rows = await ChallengeParticipant.filter(
+            challenge_id__in=challenge_ids,
+            user_id=user.id,
+        ).values("challenge_id", "missed_count")
+        for row in part_rows:
+            missed_counts[row["challenge_id"]] = row["missed_count"] or 0
+
+    from datetime import date as _date
+    def _total_days(ch) -> int:
+        return max(1, (ch.end_date - ch.start_date).days + 1)
+
     payload = ChallengeListResponse(
         page=page,
         size=size,
@@ -162,6 +190,9 @@ async def list_challenges(
                 category=ch.category,
                 start_date=ch.start_date,
                 end_date=ch.end_date,
+                my_progress=approved_counts.get(ch.id, 0),
+                total_days=_total_days(ch),
+                missed_count=missed_counts.get(ch.id, 0),
             )
             for ch in items
         ],
