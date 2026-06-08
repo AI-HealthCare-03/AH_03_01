@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getPost, deletePost } from "@/lib/api/community";
+import { renderMarkdown } from "@/components/community/MarkdownEditor";
 import { useMe } from "@/hooks/queries/useMe";
 import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
@@ -69,8 +70,11 @@ export default function PostDetailPage({ params }: { params: Promise<{ id: strin
 
       <hr className="border-border mb-4" />
 
-      {/* 본문 — 마크다운 렌더링은 3d에서 추가 */}
-      <p className="text-sm text-text-primary leading-relaxed whitespace-pre-wrap">{post.content}</p>
+      {/* 본문 */}
+      <div
+        className="text-sm text-text-primary leading-relaxed"
+        dangerouslySetInnerHTML={{ __html: renderMarkdown(post.content) }}
+      />
 
       <hr className="border-border mt-6 mb-4" />
 

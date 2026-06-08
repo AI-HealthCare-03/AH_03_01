@@ -1,0 +1,22 @@
+import Link from "next/link";
+import type { PostListItem } from "@/types/community";
+
+export default function PostCard({ post }: { post: PostListItem }) {
+  return (
+    <Link
+      href={`/community/board/${post.id}`}
+      className="block p-4 bg-white border border-border rounded-[12px] hover:shadow-sm transition-shadow"
+    >
+      <div className="flex items-center gap-1.5 mb-1">
+        {post.is_pinned && (
+          <span className="text-[10px] font-bold px-1.5 py-0.5 bg-red-100 text-red-600 rounded">📌 고정</span>
+        )}
+        <p className="text-sm font-semibold text-text-primary truncate">{post.title}</p>
+      </div>
+      <p className="text-xs text-text-tertiary">
+        {post.author_nickname ?? "익명"} · 조회 {post.view_count} ·{" "}
+        {new Date(post.created_at).toLocaleDateString("ko-KR")}
+      </p>
+    </Link>
+  );
+}
