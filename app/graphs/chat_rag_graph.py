@@ -269,6 +269,9 @@ class ChatState(TypedDict, total=False):
     confidence: float
 
     error: str | None
+    # 평가 모드 플래그 — True 시 fetch_health_data(DB 조회) 를 건너뛰고 retrieve 로 직행.
+    # ragas_eval.py 에서 ainvoke 호출 시 주입한다.
+    eval_mode: bool
 
 
 # ─────────────────────────────────────────────
@@ -625,6 +628,11 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:
 def decide_after_classify(state: ChatState) -> Literal["final_greeting", "fetch_health_data", "retrieve"]:
     if state.get("is_greeting"):
         return "final_greeting"
+    # eval_mode 시 fetch_health_data(DB 조회) 를 건너뛰고 retrieve 로 직행.
+    # needs_health_data=True 여도 평가 환경에선 유저 DB 가 없어 final_missing_info 로
+    # 빠져 컨텍스트 0개가 되는 문제를 방지한다.
+    if state.get("eval_mode"):
+        return "retrieve"
     return "fetch_health_data" if state.get("needs_health_data") else "retrieve"
 
 
