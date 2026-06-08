@@ -42,6 +42,10 @@ class RestoreRequest(BaseModel):
     email: Annotated[EmailStr, Field(max_length=40)]
 
 
+class DestroyRequest(BaseModel):
+    email: Annotated[EmailStr, Field(max_length=40)]
+
+
 class RestoredAccountResponse(BaseModel):
     """복구 완료 응답. 이메일 인증을 마친 본인이므로 상세 통계 포함."""
 
