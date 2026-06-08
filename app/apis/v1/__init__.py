@@ -10,6 +10,7 @@ from app.apis.v1.challenge_routers import (
     challenges_router,
 )
 from app.apis.v1.chatbot_routers import chatbot_router
+from app.apis.v1.community_routers import posts_router
 from app.apis.v1.experience_routers import experience_router, leaderboard_router
 from app.apis.v1.files_routers import files_router
 from app.apis.v1.health_routers import (
@@ -25,7 +26,6 @@ from app.apis.v1.pet_routers import (
     rewards_router,
     store_router,
 )
-from app.apis.v1.community_routers import posts_router
 from app.apis.v1.risk_recommendation_routers import risk_recommendations_router
 from app.apis.v1.user_routers import user_router
 

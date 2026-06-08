@@ -19,17 +19,17 @@ def _to_item(p: Post) -> PostListItem:
 
 @posts_router.get("", response_model=PostListResponse)
 async def list_posts(
-    page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
-    category: PostCategory | None = Query(None),
-    _: User = Depends(get_request_user),
+    page: int = Query(1, ge=1),  # noqa: B008
+    size: int = Query(20, ge=1, le=100),  # noqa: B008
+    category: PostCategory | None = Query(None),  # noqa: B008
+    _: User = Depends(get_request_user),  # noqa: B008
 ) -> PostListResponse:
     posts, total = await PostRepository().list_posts(page, size, category)
     return PostListResponse(items=[_to_item(p) for p in posts], total=total, page=page, size=size)
 
 
 @posts_router.get("/{post_id}", response_model=PostDetailResponse)
-async def get_post(post_id: int, _: User = Depends(get_request_user)) -> PostDetailResponse:
+async def get_post(post_id: int, _: User = Depends(get_request_user)) -> PostDetailResponse:  # noqa: B008
     repo = PostRepository()
     post = await repo.get_post(post_id)
     if not post:
@@ -39,7 +39,7 @@ async def get_post(post_id: int, _: User = Depends(get_request_user)) -> PostDet
 
 
 @posts_router.post("", response_model=PostDetailResponse, status_code=status.HTTP_201_CREATED)
-async def create_post(body: PostCreateRequest, current_user: User = Depends(get_request_user)) -> PostDetailResponse:
+async def create_post(body: PostCreateRequest, current_user: User = Depends(get_request_user)) -> PostDetailResponse:  # noqa: B008
     repo = PostRepository()
     post = await repo.create_post(
         author_id=current_user.id, title=body.title, content=body.content, category=body.category
@@ -50,7 +50,7 @@ async def create_post(body: PostCreateRequest, current_user: User = Depends(get_
 
 @posts_router.patch("/{post_id}", response_model=PostDetailResponse)
 async def update_post(
-    post_id: int, body: PostUpdateRequest, current_user: User = Depends(get_request_user)
+    post_id: int, body: PostUpdateRequest, current_user: User = Depends(get_request_user)  # noqa: B008
 ) -> PostDetailResponse:
     repo = PostRepository()
     post = await repo.get_post(post_id)
@@ -63,7 +63,7 @@ async def update_post(
 
 
 @posts_router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_post(post_id: int, current_user: User = Depends(get_request_user)) -> None:
+async def delete_post(post_id: int, current_user: User = Depends(get_request_user)) -> None:  # noqa: B008
     repo = PostRepository()
     post = await repo.get_post(post_id)
     if not post:

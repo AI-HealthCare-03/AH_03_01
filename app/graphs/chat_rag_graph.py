@@ -41,15 +41,14 @@ evaluate 내부 (한 노드, 2단계):
 
 from __future__ import annotations
 
-
 import functools
 import json
 import logging
 import re
 import time
-from pathlib import Path
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -525,7 +524,7 @@ def _heuristic_prefilter(question: str) -> dict[str, Any] | None:
     }
 
 
-async def classify_intent(state: ChatState) -> dict[str, Any]:
+async def classify_intent(state: ChatState) -> dict[str, Any]:  # noqa: C901
     # 보수적 휴리스틱으로 명백한 인사·단답은 LLM 호출 없이 즉시 결정.
     # is_greeting=True 면 decide_after_classify 가 final_greeting 로 곧장 분기해 retrieve/generate 모두 스킵.
     prefilter = _heuristic_prefilter(state["original_question"])
@@ -570,11 +569,11 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:
     diseases = [str(d) for d in raw_diseases if d in ("diabetes", "hypertension", "dyslipidemia")][:3]
 
     # topics 파싱 — 허용 값만 필터링
-    _VALID_TOPICS = {"diagnosis", "medication", "lifestyle", "complication", "risk", "monitoring", "service", "challenge"}
+    _valid_topics = {"diagnosis", "medication", "lifestyle", "complication", "risk", "monitoring", "service", "challenge"}
     raw_topics = data.get("topics") or []
     if not isinstance(raw_topics, list):
         raw_topics = []
-    topics = [str(t) for t in raw_topics if t in _VALID_TOPICS]
+    topics = [str(t) for t in raw_topics if t in _valid_topics]
 
     needs = bool(data.get("needs_health_data", False))
     needs_challenge = bool(data.get("needs_challenge_catalog", False))
