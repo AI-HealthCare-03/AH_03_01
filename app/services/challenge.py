@@ -194,6 +194,7 @@ class ChallengeService:
         keyword: str | None,
         date_from: date | None,
         date_to: date | None,
+        sort_by: str | None = None,
         page: int,
         size: int,
         mine_only: bool,
@@ -206,6 +207,7 @@ class ChallengeService:
             keyword=keyword,
             date_from=date_from,
             date_to=date_to,
+            sort_by=sort_by,
             page=page,
             size=size,
         )

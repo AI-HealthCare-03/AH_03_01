@@ -133,6 +133,7 @@ async def list_challenges(
     date_from: Annotated[date | None, Query(alias="from")] = None,
     date_to: Annotated[date | None, Query(alias="to")] = None,
     mine: Annotated[bool, Query()] = False,
+    sort_by: Annotated[str | None, Query(alias="sortBy")] = None,  # start_date | end_date
     page: Annotated[int, Query(ge=1)] = 1,
     size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> Response:
@@ -144,6 +145,7 @@ async def list_challenges(
         keyword=keyword,
         date_from=date_from,
         date_to=date_to,
+        sort_by=sort_by,
         page=page,
         size=size,
         mine_only=mine,

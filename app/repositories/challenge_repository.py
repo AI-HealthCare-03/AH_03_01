@@ -60,6 +60,7 @@ class ChallengeRepository:
         keyword: str | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
+        sort_by: str | None = None,   # "start_date" | "end_date" | None(기본: created_at)
         page: int = 1,
         size: int = 20,
     ) -> tuple[list[Challenge], int]:
@@ -85,7 +86,8 @@ class ChallengeRepository:
             ).values_list("challenge_id", flat=True)
             qs = qs.filter(Q(creator_id=user_id) | Q(id__in=list(participating_ids)))
         total = await qs.count()
-        items = await qs.order_by("-created_at").offset((page - 1) * size).limit(size)
+        _order = {"start_date": "start_date", "end_date": "end_date"}.get(sort_by or "", "-created_at")
+        items = await qs.order_by(_order).offset((page - 1) * size).limit(size)
         return list(items), total
 
     async def update_instance(self, challenge: Challenge, data: dict[str, Any]) -> Challenge:

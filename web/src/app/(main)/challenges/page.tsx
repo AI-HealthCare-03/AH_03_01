@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import ChallengeCard from "@/components/challenges/ChallengeCard";
@@ -18,9 +18,35 @@ import Button from "@/components/ui/Button";
 
 type TabKey = "active" | "completed" | "recommended";
 
+type SortKey = "start_date" | "end_date" | undefined;
+type PeriodKey = "1w" | "1m" | undefined;
+
 function ChallengeListContent() {
   const searchParams = useSearchParams();
   const tab = (searchParams.get("tab") ?? "active") as TabKey;
+
+  /* 필터/정렬 상태 */
+  const [period, setPeriod] = useState<PeriodKey>(undefined);
+  const [sortBy, setSortBy] = useState<SortKey>(undefined);
+
+  /* 기간 필터 → from/to 계산 */
+  const getDateRange = () => {
+    const today = new Date();
+    const fmt = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (period === "1w") {
+      const to = new Date(today);
+      to.setDate(today.getDate() + 7);
+      return { from: fmt(today), to: fmt(to) };
+    }
+    if (period === "1m") {
+      const to = new Date(today);
+      to.setMonth(today.getMonth() + 1);
+      return { from: fmt(today), to: fmt(to) };
+    }
+    return { from: undefined, to: undefined };
+  };
+  const { from, to } = getDateRange();
 
   /* 진행중/완료 챌린지.
      "진행중" 탭은 ACTIVE(시작됨) + RECRUITING(그룹, 멤버 모집 중) 모두 포함. */
@@ -28,16 +54,25 @@ function ChallengeListContent() {
     mine: true,
     status: "ACTIVE",
     size: 20,
+    from,
+    to,
+    sortBy,
   });
   const { data: recruitingData, isLoading: recruitingLoading } = useChallenges({
     mine: true,
     status: "RECRUITING",
     size: 20,
+    from,
+    to,
+    sortBy,
   });
   const { data: completedData, isLoading: completedLoading } = useChallenges({
     mine: true,
     status: "COMPLETED",
     size: 20,
+    from,
+    to,
+    sortBy,
   });
 
   /* 추천 - latest hypertension prediction 기반 */
@@ -76,9 +111,54 @@ function ChallengeListContent() {
       </div>
 
       {/* 탭 */}
-      <div className="mb-5">
+      <div className="mb-3">
         <ChallengeListTabs currentTab={tab} />
       </div>
+
+      {/* 필터 / 정렬 바 (진행중·완료 탭만) */}
+      {tab !== "recommended" && (
+        <div className="flex flex-wrap items-center gap-2 mb-5">
+          {/* 기간 필터 */}
+          <div className="flex gap-1.5">
+            {([undefined, "1w", "1m"] as PeriodKey[]).map((p) => (
+              <button
+                key={String(p)}
+                type="button"
+                onClick={() => setPeriod(p === period ? undefined : p)}
+                className={[
+                  "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors",
+                  period === p
+                    ? "bg-brand-black text-white border-brand-black"
+                    : "bg-white text-text-secondary border-border hover:border-brand-black",
+                ].join(" ")}
+              >
+                {p === undefined ? "전체" : p === "1w" ? "1주일" : "1개월"}
+              </button>
+            ))}
+          </div>
+
+          <div className="w-px h-4 bg-border" />
+
+          {/* 정렬 */}
+          <div className="flex gap-1.5">
+            {([undefined, "start_date", "end_date"] as SortKey[]).map((s) => (
+              <button
+                key={String(s)}
+                type="button"
+                onClick={() => setSortBy(s === sortBy ? undefined : s)}
+                className={[
+                  "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors",
+                  sortBy === s
+                    ? "bg-brand-black text-white border-brand-black"
+                    : "bg-white text-text-secondary border-border hover:border-brand-black",
+                ].join(" ")}
+              >
+                {s === undefined ? "기본순" : s === "start_date" ? "시작 날짜순" : "마감 임박순"}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="md:flex md:gap-6">
         {/* 메인 콘텐츠 */}
