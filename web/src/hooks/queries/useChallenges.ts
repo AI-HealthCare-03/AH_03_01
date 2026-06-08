@@ -10,6 +10,9 @@ export function useChallenges(params: {
   scope?: ChallengeScope;
   size?: number;
   page?: number;
+  from?: string;
+  to?: string;
+  sortBy?: "start_date" | "end_date";
 }) {
   return useQuery({
     queryKey: [CHALLENGES_KEY, params],
