@@ -44,14 +44,15 @@ class RewardService:
     def __init__(self) -> None:
         self.point_repo = PointTransactionRepository()
 
-    async def grant_daily(self, *, user_id: int, challenge_id: int, verification_id: int) -> RewardResult:
+    async def grant_daily(self, *, user_id: int, challenge_id: int, verification_id: int, challenge_title: str | None = None) -> RewardResult:
         amount = random.choice(self.DAILY_OPTIONS)
+        label = challenge_title or f"챌린지 {challenge_id}"
         tx = await self.point_repo.grant(
             user_id=user_id,
             amount=amount,
             source=PointSource.CHALLENGE_DAILY,
             source_id=verification_id,
-            description=f"챌린지 {challenge_id} 일일 인증 보상",
+            description=f"{label} 일일 인증 보상",
         )
         return RewardResult(
             transaction=tx,
@@ -61,14 +62,15 @@ class RewardService:
             description=tx.description or "",
         )
 
-    async def grant_period_completion(self, *, user_id: int, challenge_id: int) -> RewardResult:
+    async def grant_period_completion(self, *, user_id: int, challenge_id: int, challenge_title: str | None = None) -> RewardResult:
         amount = self.PERIOD_REWARD
+        label = challenge_title or f"챌린지 {challenge_id}"
         tx = await self.point_repo.grant(
             user_id=user_id,
             amount=amount,
             source=PointSource.CHALLENGE_PERIOD,
             source_id=challenge_id,
-            description=f"챌린지 {challenge_id} 기간 달성 보상",
+            description=f"{label} 기간 달성 보상",
         )
         return RewardResult(
             transaction=tx,
@@ -84,6 +86,7 @@ class RewardService:
         user_id: int,
         challenge_id: int,
         difficulty_level: str,
+        challenge_title: str | None = None,
     ) -> RewardResult:
         amount = self.GROUP_TABLE.get(difficulty_level, 0)
         if amount <= 0:
@@ -93,7 +96,7 @@ class RewardService:
             amount=amount,
             source=PointSource.CHALLENGE_GROUP,
             source_id=challenge_id,
-            description=f"챌린지 {challenge_id} 그룹 난이도 {difficulty_level} 달성 보상",
+            description=f"{challenge_title or f'챌린지 {challenge_id}'} 그룹 달성 보상",
         )
         return RewardResult(
             transaction=tx,
