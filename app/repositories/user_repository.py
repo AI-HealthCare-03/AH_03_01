@@ -56,6 +56,17 @@ class UserRepository:
         """이메일로 탈퇴(soft delete) 계정을 조회. 가장 최근 탈퇴 건."""
         return await self._model.filter(email=email, is_deleted=True).order_by("-deleted_at").first()
 
+    async def list_purgeable(self, before: datetime, *, limit: int | None = None) -> list[User]:
+        """보관 기간이 지난 탈퇴 계정(파기 대상)을 오래된 탈퇴 순으로 조회한다.
+
+        조건: is_deleted=True AND deleted_at <= before (= now - 보관기간).
+        deleted_at 이 NULL 인 비정상 row 는 대상에서 제외된다(filter 의 __lte 가 NULL 을 매치하지 않음).
+        """
+        query = self._model.filter(is_deleted=True, deleted_at__lte=before).order_by("deleted_at")
+        if limit is not None:
+            query = query.limit(limit)
+        return await query
+
     async def exists_by_email(self, email: str) -> bool:
         return await self._model.filter(email=email).exists()
 
