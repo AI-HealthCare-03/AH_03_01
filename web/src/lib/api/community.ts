@@ -1,4 +1,5 @@
 import apiClient from "./client";
+import { resolveMediaUrl } from "@/lib/api/media";
 import type {
   PostListResponse,
   PostDetail,
@@ -33,4 +34,13 @@ export async function updatePost(id: number, data: PostUpdateRequest): Promise<P
 
 export async function deletePost(id: number): Promise<void> {
   await apiClient.delete(`/api/v1/posts/${id}`);
+}
+
+export async function uploadImage(file: File): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await apiClient.post<{ url: string }>("/api/v1/posts/images", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return resolveMediaUrl(res.data.url) ?? res.data.url;
 }

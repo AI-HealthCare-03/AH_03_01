@@ -1,4 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pathlib import Path
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+
+from app.core import config
 
 from app.dependencies.security import get_request_user
 from app.dtos.community import PostCreateRequest, PostDetailResponse, PostListItem, PostListResponse, PostUpdateRequest
@@ -15,6 +20,24 @@ def _to_item(p: Post) -> PostListItem:
         view_count=p.view_count, author_id=p.author_id,
         author_nickname=p.author.nickname, created_at=p.created_at,
     )
+
+
+@posts_router.post("/images", status_code=status.HTTP_201_CREATED)
+async def upload_post_image(
+    file: UploadFile = File(...),  # noqa: B008
+    _: User = Depends(get_request_user),  # noqa: B008
+) -> dict[str, str]:
+    if file.content_type not in config.ALLOWED_IMAGE_MIME:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="허용되지 않는 파일 형식입니다.")
+    contents = await file.read()
+    if len(contents) > config.UPLOAD_MAX_BYTES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="파일 크기가 너무 큽니다.")
+    ext = file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "jpg"
+    filename = f"{uuid4().hex}.{ext}"
+    upload_dir = Path(config.MEDIA_ROOT) / "community"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    (upload_dir / filename).write_bytes(contents)
+    return {"url": f"{config.MEDIA_URL_PREFIX}/community/{filename}"}
 
 
 @posts_router.get("", response_model=PostListResponse)

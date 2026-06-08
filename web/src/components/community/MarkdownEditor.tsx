@@ -1,6 +1,8 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
+import { uploadImage } from "@/lib/api/community";
+import { API_BASE_URL } from "@/constants";
 
 interface Props {
   value: string;
@@ -23,6 +25,10 @@ export function renderMarkdown(text: string): string {
     .replace(/~~(.+?)~~/g, "<s>$1</s>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
     .replace(/`(.+?)`/g, '<code class="bg-surface px-1 rounded text-xs font-mono">$1</code>')
+    .replace(/!\[(.+?)\]\((.+?)\)/g, (_, alt, src) => {
+      const fullSrc = /^https?:\/\//i.test(src) ? src : `${API_BASE_URL}${src.startsWith("/") ? "" : "/"}${src}`;
+      return `<img src="${fullSrc}" alt="${alt}" class="max-w-full rounded my-2" />`;
+    })
     .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" class="text-blue-600 underline" target="_blank" rel="noopener">$1</a>')
     .replace(/\n/g, "<br />");
 }
@@ -44,6 +50,22 @@ const TOOLS = [
 
 export default function MarkdownEditor({ value, onChange, placeholder }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const url = await uploadImage(file);
+      const pos = textareaRef.current?.selectionStart ?? value.length;
+      onChange(value.slice(0, pos) + `![이미지](${url})` + value.slice(pos));
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
 
   function insert(before: string, after = "", plain = false) {
     const el = textareaRef.current;
@@ -69,6 +91,12 @@ export default function MarkdownEditor({ value, onChange, placeholder }: Props) 
             {icon}
           </button>
         ))}
+        <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleImageUpload} />
+        <button type="button" title="이미지 업로드" disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
+          className="px-2 py-1 text-sm text-text-secondary hover:text-text-primary hover:bg-white rounded transition-colors disabled:opacity-40">
+          {uploading ? "⏳" : "🖼"}
+        </button>
       </div>
 
       {/* 에디터 + 미리보기 분할 */}
