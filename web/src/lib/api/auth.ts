@@ -172,9 +172,9 @@ export async function restoreAccount(
 }
 
 /**
- * 회원탈퇴
- * TODO(backend): /api/v1/users/me 엔드포인트 DELETE 확인 필요
+ * 회원탈퇴 (soft delete)
+ * DELETE /api/v1/users/me — 탈퇴 이유(reason)는 선택. 30일 보관 후 파기.
  */
-export async function deleteAccount(_reason: string): Promise<void> {
-  await apiClient.delete("/api/v1/users/me");
+export async function deleteAccount(reason: string): Promise<void> {
+  await apiClient.delete("/api/v1/users/me", { data: { reason } });
 }
