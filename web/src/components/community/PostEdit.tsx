@@ -1,17 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createPost } from "@/lib/api/community";
-import MarkdownEditor from "./MarkdownEditor";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getPost, updatePost } from "@/lib/api/community";
+import MarkdownEditor from "@/components/community/MarkdownEditor";
 import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
 import type { PostCategory } from "@/types/community";
-
-const LABEL: Record<PostCategory, string> = {
-  INFO: "정보공유", FREE: "자유게시판", NOTICE: "공지사항",
-};
 
 const BACK_PATH: Record<PostCategory, string> = {
   INFO: "/community/board",
@@ -19,18 +15,28 @@ const BACK_PATH: Record<PostCategory, string> = {
   NOTICE: "/community/notice",
 };
 
-export default function PostForm({ category }: { category: PostCategory }) {
+export default function PostEdit({ postId }: { postId: number }) {
   const router = useRouter();
   const qc = useQueryClient();
   const { showToast } = useToast();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
 
+  const { data: post } = useQuery({
+    queryKey: ["post", postId],
+    queryFn: () => getPost(postId),
+  });
+
+  useEffect(() => {
+    if (post) { setTitle(post.title); setContent(post.content); }
+  }, [post]);
+
   const { mutate, isPending } = useMutation({
-    mutationFn: () => createPost({ title, content, category }),
-    onSuccess: (post) => {
-      qc.invalidateQueries({ queryKey: ["posts"] });
-      router.push(`${BACK_PATH[category]}/${post.id}`);
+    mutationFn: () => updatePost(postId, { title, content }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["post", postId] });
+      const backPath = post ? BACK_PATH[post.category] : "/community/board";
+      router.push(`${backPath}/${postId}`);
     },
     onError: (err) => showToast(extractErrorMessage(err), "error"),
   });
@@ -43,9 +49,11 @@ export default function PostForm({ category }: { category: PostCategory }) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <h2 className="text-base font-bold text-text-primary">{LABEL[category]} 게시글 작성</h2>
+      <h2 className="text-base font-bold text-text-primary">게시글 수정</h2>
       <input
-        type="text" value={title} onChange={(e) => setTitle(e.target.value)}
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
         placeholder="제목을 입력하세요"
         className="px-4 py-2.5 text-sm border border-border rounded-[12px] outline-none focus:border-brand-black"
       />
@@ -57,7 +65,7 @@ export default function PostForm({ category }: { category: PostCategory }) {
         </button>
         <button type="submit" disabled={isPending}
           className="px-4 py-2 text-sm font-semibold bg-brand-black text-white rounded-[8px] hover:opacity-80 disabled:opacity-50 transition-opacity">
-          등록
+          저장
         </button>
       </div>
     </form>

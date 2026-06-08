@@ -56,7 +56,7 @@ export default function PostDetail({ postId }: { postId: number }) {
         {isAuthor && (
           <div className="flex gap-2 shrink-0">
             <Link
-              href={`/community/board/${postId}/edit`}
+              href={`${backPath}/${postId}/edit`}
               className="px-3 py-1.5 text-xs font-semibold border border-border rounded-[8px] hover:bg-surface transition-colors"
             >
               수정

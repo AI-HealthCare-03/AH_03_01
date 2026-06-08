@@ -28,24 +28,30 @@ export function renderMarkdown(text: string): string {
 }
 
 const TOOLS = [
-  { icon: "B", style: "font-bold", title: "굵게 (Ctrl+B)", before: "**", after: "**" },
+  { icon: "B", style: "font-bold", title: "굵게", before: "**", after: "**" },
   { icon: "I", style: "italic", title: "기울기", before: "*", after: "*" },
   { icon: "S", style: "line-through", title: "취소선", before: "~~", after: "~~" },
+  { icon: "H1", style: "text-xs font-bold", title: "제목 1", before: "# ", after: "", plain: true },
+  { icon: "H2", style: "text-xs font-bold", title: "제목 2", before: "## ", after: "", plain: true },
+  { icon: "H3", style: "text-xs font-bold", title: "제목 3", before: "### ", after: "", plain: true },
   { icon: "</>", style: "font-mono text-xs", title: "인라인 코드", before: "`", after: "`" },
-  { icon: "❝", style: "", title: "인용", before: "> ", after: "" },
+  { icon: "❝", style: "", title: "인용", before: "> ", after: "", plain: true },
+  { icon: "•", style: "", title: "글머리 기호", before: "- ", after: "", plain: true },
+  { icon: "1.", style: "text-xs", title: "번호 목록", before: "1. ", after: "", plain: true },
+  { icon: "—", style: "", title: "구분선", before: "\n---\n", after: "", plain: true },
   { icon: "🔗", style: "", title: "링크", before: "[", after: "](url)" },
-] as const;
+];
 
 export default function MarkdownEditor({ value, onChange, placeholder }: Props) {
   const [preview, setPreview] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  function insert(before: string, after = "") {
+  function insert(before: string, after = "", plain = false) {
     const el = textareaRef.current;
     if (!el) return;
     const s = el.selectionStart;
     const e = el.selectionEnd;
-    const sel = value.slice(s, e) || "텍스트";
+    const sel = value.slice(s, e) || (plain ? "" : "텍스트");
     onChange(value.slice(0, s) + before + sel + after + value.slice(e));
     setTimeout(() => {
       el.focus();
@@ -73,9 +79,9 @@ export default function MarkdownEditor({ value, onChange, placeholder }: Props) 
         </div>
         {!preview && (
           <div className="flex gap-0.5">
-            {TOOLS.map(({ icon, style, title, before, after }) => (
+            {TOOLS.map(({ icon, style, title, before, after, plain = false }) => (
               <button key={title} type="button" title={title}
-                onClick={() => insert(before, after)}
+                onClick={() => insert(before, after, plain)}
                 className={`px-2 py-1 text-sm text-text-secondary hover:text-text-primary hover:bg-white rounded transition-colors ${style}`}>
                 {icon}
               </button>
