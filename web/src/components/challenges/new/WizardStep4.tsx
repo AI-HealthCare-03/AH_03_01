@@ -135,14 +135,15 @@ export default function WizardStep4({ form, onChange }: WizardStep4Props) {
 
   /* ─── DIET ─── */
   if (category === "DIET") {
-    if (isGroup) {
-      /* 그룹 DIET step3Mode="WEIGHT" 는 WeightGroupForm */
-      if (step3Mode === "WEIGHT") return <WeightGroupForm form={form} onChange={onChange} />;
-      return <DietGroupForm form={form} onChange={onChange} />;
-    }
-    if (step3Mode === "WEIGHT") return <WeightPersonalForm form={form} onChange={onChange} />;
+    if (isGroup) return <DietGroupForm form={form} onChange={onChange} />;
     if (step3Mode === "AVOID") return <DietAvoidForm form={form} onChange={onChange} />;
     if (step3Mode === "INCLUDE") return <DietIncludeForm form={form} onChange={onChange} />;
+  }
+
+  /* ─── WEIGHT_MANAGEMENT ─── */
+  if (category === "WEIGHT_MANAGEMENT") {
+    if (isGroup) return <WeightGroupForm form={form} onChange={onChange} />;
+    return <WeightPersonalForm form={form} onChange={onChange} />;
   }
 
   /* ─── DISEASE_CARE ─── */

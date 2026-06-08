@@ -45,11 +45,11 @@ function inferCadence(
   step3Mode: string | null
 ): ChallengeCadence {
   if (scope === "GROUP") {
-    /* GROUP_MEMBERS: NO_SMOKING / NO_ALCOHOL / WEIGHT(DIET+kind=WEIGHT) */
+    /* GROUP_MEMBERS: NO_SMOKING / NO_ALCOHOL / WEIGHT_MANAGEMENT */
     if (
       category === "NO_SMOKING" ||
       category === "NO_ALCOHOL" ||
-      step3Mode === "WEIGHT"
+      category === "WEIGHT_MANAGEMENT"
     ) {
       return "GROUP_MEMBERS";
     }
@@ -80,6 +80,8 @@ function shouldSkipStep3(
   scope: ChallengeScope,
   category: ChallengeCategory
 ): boolean {
+  /* 체중 관리는 개인/그룹 모두 step3 없이 step4로 바로 */
+  if (category === "WEIGHT_MANAGEMENT") return true;
   /* 그룹 + 단순 카테고리는 step3 없이 step4로 바로 */
   if (scope === "GROUP") {
     /* DIET 그룹은 식단 종류를 step3에서 고름 → skip 안 함 */
@@ -117,8 +119,14 @@ function isStep4Valid(form: WizardFormState): boolean {
     if (!goal_config.group_target_count) return false;
   }
   /* DIET 개인 */
-  if (category === "DIET" && scope === "PERSONAL" && step3Mode !== "WEIGHT") {
+  if (category === "DIET" && scope === "PERSONAL") {
     if (!goal_config.diet_targets || goal_config.diet_targets.length === 0) return false;
+  }
+  /* WEIGHT_MANAGEMENT */
+  if (category === "WEIGHT_MANAGEMENT") {
+    if (!goal_config.weight_loss_mode) return false;
+    if (goal_config.weight_loss_mode === "USER_INPUT" && !goal_config.weight_loss_kg) return false;
+    if (scope === "GROUP" && !goal_config.group_target_members) return false;
   }
   /* DIET 그룹 */
   if (category === "DIET" && scope === "GROUP") {
