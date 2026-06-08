@@ -520,6 +520,7 @@ class VerificationService:
                     user_id=user.id,
                     challenge_id=challenge.id,
                     verification_id=verification.id,
+                    challenge_title=challenge.title,
                 )
                 # 펫이 있는 경우 인증당 XP 가산. 펫 없으면 무시.
                 await self.pet_service.grant_xp(
