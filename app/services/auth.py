@@ -130,6 +130,8 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="복구 가능한 탈퇴 계정이 없습니다.")
         if user.deleted_at + timedelta(days=ACCOUNT_RETENTION_DAYS) <= datetime.now(config.TIMEZONE):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="복구 가능한 탈퇴 계정이 없습니다.")
+        if user.is_banned:  # 운영자 제재(ban) 우회 방지 — get_request_user 와 동일하게 정지 계정은 하드 차단
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="정지된 계정은 복구할 수 없습니다.")
 
         prev_deleted_at = user.deleted_at
         user.is_deleted = False
@@ -140,7 +142,10 @@ class AuthService:
             await user.save(update_fields=["is_deleted", "is_active", "deleted_at", "withdrawal_reason", "updated_at"])
         await self.email_verification.consume(email)
 
-        stats = await self._account_stats(user.id)
+        try:
+            stats = await self._account_stats(user.id)
+        except Exception:  # noqa: BLE001  # 부가 통계 실패가 이미 커밋된 복구를 500 으로 깨뜨리지 않도록 폴백
+            stats = {"challenge_count": 0, "points": 0, "pet_name": None}
         return RestoredAccountResponse(
             email=user.email,
             created_at=user.created_at,
