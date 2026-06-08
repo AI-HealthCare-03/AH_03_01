@@ -49,15 +49,21 @@ export interface User {
   created_at: string;
 }
 
-/* 이전 계정 (복원) */
+/* 이전(탈퇴) 계정 감지 — GET /api/v1/auth/previous-account (인증 전, 마스킹) */
 export interface PreviousAccount {
+  masked_email: string;
+  deleted_at: string;
+  restore_deadline: string;
+}
+
+/* 복구 완료 응답 — POST /api/v1/auth/restore (이메일 인증 후, 상세 통계) */
+export interface RestoredAccount {
   email: string;
   created_at: string;
   deleted_at: string;
   challenge_count: number;
   points: number;
   pet_name?: string;
-  restore_deadline: string;
 }
 
 export type RestoreDataKey =

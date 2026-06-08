@@ -23,6 +23,7 @@ import {
   checkNicknameAvailable,
   sendEmailVerification,
   checkEmailVerified,
+  getPreviousAccount,
   signup,
 } from "@/lib/api/auth";
 import { extractErrorMessage } from "@/lib/api/client";
@@ -202,11 +203,19 @@ export default function SignupPage() {
     setEmailDupl("checking");
     try {
       const res = await checkEmailAvailable(email);
-      setEmailDupl(res.available ? "available" : "taken");
-      showToast(
-        res.available ? "사용 가능한 이메일이에요" : "이미 사용 중인 이메일입니다",
-        res.available ? "success" : "error",
-      );
+      if (!res.available) {
+        // 사용 중인 이메일이 '복구 가능한 탈퇴 계정'이면 복구 안내 페이지로 이동한다.
+        const previous = await getPreviousAccount(email);
+        if (previous) {
+          router.push(`${ROUTES.ACCOUNT_RESTORE}?email=${encodeURIComponent(email)}`);
+          return;
+        }
+        setEmailDupl("taken");
+        showToast("이미 사용 중인 이메일입니다", "error");
+        return;
+      }
+      setEmailDupl("available");
+      showToast("사용 가능한 이메일이에요", "success");
     } catch (err) {
       setEmailDupl("idle");
       showToast(extractErrorMessage(err), "error");
