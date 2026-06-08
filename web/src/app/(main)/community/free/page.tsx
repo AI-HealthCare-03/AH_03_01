@@ -17,7 +17,7 @@ export default function FreeBoardPage() {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-bold text-text-primary">자유게시판</h2>
         <Link
-          href="/community/board/new?category=FREE"
+          href="/community/free/new"
           className="px-3 py-1.5 text-sm font-semibold bg-brand-black text-white rounded-[8px] hover:opacity-80 transition-opacity"
         >
           글쓰기
@@ -29,7 +29,7 @@ export default function FreeBoardPage() {
         <p className="py-12 text-center text-sm text-text-tertiary">아직 게시글이 없어요.</p>
       ) : (
         <div className="flex flex-col gap-2">
-          {data.items.map((post) => <PostCard key={post.id} post={post} />)}
+          {data.items.map((post) => <PostCard key={post.id} post={post} basePath="/community/free" />)}
         </div>
       )}
     </div>
