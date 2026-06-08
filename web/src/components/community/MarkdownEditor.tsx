@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef } from "react";
 
 interface Props {
   value: string;
@@ -43,7 +43,6 @@ const TOOLS = [
 ];
 
 export default function MarkdownEditor({ value, onChange, placeholder }: Props) {
-  const [preview, setPreview] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   function insert(before: string, after = "", plain = false) {
@@ -61,48 +60,35 @@ export default function MarkdownEditor({ value, onChange, placeholder }: Props) 
 
   return (
     <div className="border border-border rounded-[12px] overflow-hidden">
-      {/* 탭 + 툴바 */}
-      <div className="flex items-center justify-between border-b border-border bg-surface px-2">
-        <div className="flex">
-          {(["편집", "미리보기"] as const).map((label) => {
-            const isPreview = label === "미리보기";
-            return (
-              <button key={label} type="button" onClick={() => setPreview(isPreview)}
-                className={["px-3 py-2 text-sm font-medium transition-colors",
-                  preview === isPreview
-                    ? "bg-white text-text-primary border-b-2 border-brand-black -mb-px"
-                    : "text-text-secondary hover:text-text-primary"].join(" ")}>
-                {label}
-              </button>
-            );
-          })}
-        </div>
-        {!preview && (
-          <div className="flex gap-0.5">
-            {TOOLS.map(({ icon, style, title, before, after, plain = false }) => (
-              <button key={title} type="button" title={title}
-                onClick={() => insert(before, after, plain)}
-                className={`px-2 py-1 text-sm text-text-secondary hover:text-text-primary hover:bg-white rounded transition-colors ${style}`}>
-                {icon}
-              </button>
-            ))}
-          </div>
-        )}
+      {/* 툴바 */}
+      <div className="flex items-center border-b border-border bg-surface px-2 gap-0.5 flex-wrap">
+        {TOOLS.map(({ icon, style, title, before, after, plain = false }) => (
+          <button key={title} type="button" title={title}
+            onClick={() => insert(before, after, plain)}
+            className={`px-2 py-1 text-sm text-text-secondary hover:text-text-primary hover:bg-white rounded transition-colors ${style}`}>
+            {icon}
+          </button>
+        ))}
       </div>
 
-      {preview ? (
-        <div className="min-h-[200px] px-4 py-3 text-sm text-text-primary leading-relaxed"
+      {/* 에디터 + 미리보기 분할 */}
+      <div className="flex min-h-[250px]">
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-1/2 px-4 py-3 text-sm text-text-primary resize-none outline-none border-r border-border"
+        />
+        <div
+          className="w-1/2 px-4 py-3 text-sm text-text-primary leading-relaxed overflow-y-auto"
           dangerouslySetInnerHTML={{
             __html: value
               ? renderMarkdown(value)
               : '<span class="text-[var(--color-text-tertiary)]">미리보기가 여기에 표시됩니다.</span>',
           }}
         />
-      ) : (
-        <textarea ref={textareaRef} value={value} onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder} rows={10}
-          className="w-full px-4 py-3 text-sm text-text-primary resize-y outline-none" />
-      )}
+      </div>
     </div>
   );
 }
