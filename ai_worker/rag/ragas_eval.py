@@ -45,7 +45,7 @@ from ragas.metrics import (  # noqa: E402
 # 경로 설정
 # ─────────────────────────────────────────────
 BASE = Path(__file__).parent
-EVAL_DATASET_PATH = BASE / "rag_eval_qa_dataset_v2.jsonl"
+EVAL_DATASET_PATH = BASE / "rag_eval_qa_dataset_v3.jsonl"
 EVAL_SAMPLE_SIZE = 50
 
 

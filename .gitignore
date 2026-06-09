@@ -11,6 +11,8 @@ ai_worker/rag/chroma_db/
 ai_worker/rag/output/chunks.json
 ai_worker/rag/output/ragas_result.json
 scripts/rag/output/
+ai_worker/rag/rag_eval_qa_dataset_v3.jsonl
+ai_worker/rag/output/
 
 # DB dumps (PHI 포함 가능 — 절대 커밋 금지, Drive 공유만)
 infra/db/*.sql
@@ -131,7 +133,3 @@ pets-*.png
 # 로컬 미디어 업로드 디렉터리 + verify 스크린샷
 .media/
 verify-*.png
-ai_worker/rag/output/
-ai_worker/rag/rag_eval_qa_dataset.jsonl
-ai_worker/rag/output/
-ai_worker/rag/rag_eval_qa_dataset_v2.jsonl
