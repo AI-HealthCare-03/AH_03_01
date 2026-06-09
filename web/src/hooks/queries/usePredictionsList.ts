@@ -11,5 +11,6 @@ export function usePredictionsList(params?: {
   return useQuery({
     queryKey: [PREDICTIONS_LIST_KEY, params],
     queryFn: () => fetchPredictionsList(params),
+    staleTime: 0,  // 항상 최신 데이터 요청
   });
 }

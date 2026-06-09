@@ -112,7 +112,7 @@ export default function RiskDonut({
             className="text-lg font-black"
             style={{ color: config.color, lineHeight: 1 }}
           >
-            {score}%
+            {Math.round(Number(score))}%
           </span>
         </div>
       </div>
