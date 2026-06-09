@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from app.models.community import Post, PostCategory
+from app.models.community import Comment, Post, PostCategory
 
 
 class PostRepository:
@@ -38,3 +38,34 @@ class PostRepository:
 
     async def delete_post(self, post: Post) -> None:
         await post.delete()
+
+
+class CommentRepository:
+    async def list_comments(self, post_id: int) -> list[Comment]:
+        return list(
+            await Comment.filter(post_id=post_id, parent_id=None)
+            .prefetch_related("author")
+            .order_by("created_at")
+        )
+
+    async def list_replies(self, parent_id: int) -> list[Comment]:
+        return list(
+            await Comment.filter(parent_id=parent_id)
+            .prefetch_related("author")
+            .order_by("created_at")
+        )
+
+    async def get_comment(self, comment_id: int) -> Comment | None:
+        return await Comment.get_or_none(id=comment_id).prefetch_related("author")
+
+    async def create_comment(self, post_id: int, author_id: UUID, content: str, parent_id: int | None) -> Comment:
+        comment = await Comment.create(post_id=post_id, author_id=author_id, content=content, parent_id=parent_id)
+        return await Comment.get(id=comment.id).prefetch_related("author")
+
+    async def update_comment(self, comment: Comment, content: str) -> Comment:
+        comment.content = content
+        await comment.save()
+        return comment
+
+    async def delete_comment(self, comment: Comment) -> None:
+        await comment.delete()

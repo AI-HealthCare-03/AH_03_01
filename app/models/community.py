@@ -29,3 +29,23 @@ class Post(models.Model):
     class Meta:
         table = "community_posts"
         ordering = ["-is_pinned", "-created_at"]
+
+
+class Comment(models.Model):
+    id = fields.BigIntField(primary_key=True)
+    content = fields.TextField()
+    post: fields.ForeignKeyRelation["Post"] = fields.ForeignKeyField(
+        "models.Post", related_name="comments", on_delete=fields.CASCADE
+    )
+    author: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(
+        "models.User", related_name="comments", on_delete=fields.CASCADE
+    )
+    parent: fields.ForeignKeyNullableRelation["Comment"] = fields.ForeignKeyField(
+        "models.Comment", related_name="replies", on_delete=fields.CASCADE, null=True
+    )
+    created_at = fields.DatetimeField(auto_now_add=True)
+    updated_at = fields.DatetimeField(auto_now=True)
+
+    class Meta:
+        table = "community_comments"
+        ordering = ["created_at"]

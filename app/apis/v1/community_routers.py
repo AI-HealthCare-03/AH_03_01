@@ -6,10 +6,19 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from app.core import config
 
 from app.dependencies.security import get_request_user
-from app.dtos.community import PostCreateRequest, PostDetailResponse, PostListItem, PostListResponse, PostUpdateRequest
-from app.models.community import Post, PostCategory
+from app.dtos.community import (
+    CommentCreateRequest,
+    CommentResponse,
+    CommentUpdateRequest,
+    PostCreateRequest,
+    PostDetailResponse,
+    PostListItem,
+    PostListResponse,
+    PostUpdateRequest,
+)
+from app.models.community import Comment, Post, PostCategory
 from app.models.users import User
-from app.repositories.community_repository import PostRepository
+from app.repositories.community_repository import CommentRepository, PostRepository
 
 posts_router = APIRouter(prefix="/posts", tags=["community"])
 
@@ -94,3 +103,63 @@ async def delete_post(post_id: int, current_user: User = Depends(get_request_use
     if post.author_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="삭제 권한이 없습니다.")
     await repo.delete_post(post)
+
+
+# ── 댓글 ─────────────────────────────────────────────────────────────────────
+
+comments_router = APIRouter(prefix="/posts/{post_id}/comments", tags=["comments"])
+
+
+def _build_comment(c: Comment, replies: list[Comment] | None = None) -> CommentResponse:
+    return CommentResponse(
+        id=c.id, content=c.content, author_id=c.author_id,
+        author_nickname=c.author.nickname, parent_id=c.parent_id,
+        created_at=c.created_at, updated_at=c.updated_at,
+        replies=[_build_comment(r) for r in (replies or [])],
+    )
+
+
+@comments_router.get("", response_model=list[CommentResponse])
+async def list_comments(post_id: int, _: User = Depends(get_request_user)) -> list[CommentResponse]:  # noqa: B008
+    repo = CommentRepository()
+    comments = await repo.list_comments(post_id)
+    result = []
+    for c in comments:
+        replies = await repo.list_replies(c.id)
+        result.append(_build_comment(c, replies))
+    return result
+
+
+@comments_router.post("", response_model=CommentResponse, status_code=status.HTTP_201_CREATED)
+async def create_comment(
+    post_id: int, body: CommentCreateRequest, current_user: User = Depends(get_request_user)  # noqa: B008
+) -> CommentResponse:
+    comment = await CommentRepository().create_comment(post_id, current_user.id, body.content, body.parent_id)
+    return _build_comment(comment)
+
+
+@comments_router.patch("/{comment_id}", response_model=CommentResponse)
+async def update_comment(
+    post_id: int, comment_id: int, body: CommentUpdateRequest, current_user: User = Depends(get_request_user)  # noqa: B008
+) -> CommentResponse:
+    repo = CommentRepository()
+    comment = await repo.get_comment(comment_id)
+    if not comment or comment.post_id != post_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="댓글을 찾을 수 없습니다.")
+    if comment.author_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="수정 권한이 없습니다.")
+    comment = await repo.update_comment(comment, body.content)
+    return _build_comment(comment)
+
+
+@comments_router.delete("/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_comment(
+    post_id: int, comment_id: int, current_user: User = Depends(get_request_user)  # noqa: B008
+) -> None:
+    repo = CommentRepository()
+    comment = await repo.get_comment(comment_id)
+    if not comment or comment.post_id != post_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="댓글을 찾을 수 없습니다.")
+    if comment.author_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="삭제 권한이 없습니다.")
+    await repo.delete_comment(comment)
