@@ -37,7 +37,7 @@ export default function SimpleAuthShell({
           </Link>
         ) : (
           <Link href="/" className="text-xl font-black text-brand-black">
-            헬씨루틴
+            케어로그
           </Link>
         )}
         {title && (

@@ -31,7 +31,7 @@ export default function GNB() {
       <header className="hidden md:flex items-center justify-between px-8 h-16 border-b border-border bg-white sticky top-0 z-40">
         {/* 로고 */}
         <Link href="/" className="text-xl font-black text-brand-black">
-          헬씨루틴
+          케어로그
         </Link>
 
         {/* 네비 링크 */}
