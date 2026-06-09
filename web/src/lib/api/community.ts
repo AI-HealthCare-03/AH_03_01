@@ -48,6 +48,15 @@ export async function createComment(postId: number, data: CommentCreateRequest):
   return res.data;
 }
 
+export async function updateComment(postId: number, commentId: number, data: { content: string }): Promise<Comment> {
+  const res = await apiClient.patch<Comment>(`/api/v1/posts/${postId}/comments/${commentId}`, data);
+  return res.data;
+}
+
+export async function deleteComment(postId: number, commentId: number): Promise<void> {
+  await apiClient.delete(`/api/v1/posts/${postId}/comments/${commentId}`);
+}
+
 export async function uploadImage(file: File): Promise<string> {
   const form = new FormData();
   form.append("file", file);

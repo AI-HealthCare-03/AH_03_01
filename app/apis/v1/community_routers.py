@@ -26,8 +26,8 @@ posts_router = APIRouter(prefix="/posts", tags=["community"])
 def _to_item(p: Post) -> PostListItem:
     return PostListItem(
         id=p.id, title=p.title, category=p.category, is_pinned=p.is_pinned,
-        view_count=p.view_count, author_id=p.author_id,
-        author_nickname=p.author.nickname, created_at=p.created_at,
+        view_count=p.view_count, comment_count=getattr(p, "comment_count", 0),
+        author_id=p.author_id, author_nickname=p.author.nickname, created_at=p.created_at,
     )
 
 

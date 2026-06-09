@@ -6,6 +6,7 @@ export interface PostListItem {
   category: PostCategory;
   is_pinned: boolean;
   view_count: number;
+  comment_count: number;
   author_id: string;
   author_nickname: string | null;
   created_at: string;
