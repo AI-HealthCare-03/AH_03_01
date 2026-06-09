@@ -2,11 +2,12 @@
 
 /* =========================================
    Step3 — DIET 카테고리
-   개인: AVOID / INCLUDE / WEIGHT
+   개인: AVOID / INCLUDE
    그룹: 식단 종류 선택 (MEDITERRANEAN 등)
+   체중 관리는 WEIGHT_MANAGEMENT 카테고리로 분리됨
    ========================================= */
 
-export type DietPersonalMode = "AVOID" | "INCLUDE" | "WEIGHT";
+export type DietPersonalMode = "AVOID" | "INCLUDE";
 
 interface DietModeStepProps {
   scope: "PERSONAL" | "GROUP";
@@ -31,12 +32,6 @@ const PERSONAL_OPTIONS: {
     emoji: "✅",
     title: "특정 음식 먹기",
     desc: "채소, 과일, 생선 등 건강 식품 섭취",
-  },
-  {
-    value: "WEIGHT",
-    emoji: "⚖️",
-    title: "체중 관리",
-    desc: "감량 목표 또는 체중 유지",
   },
 ];
 
