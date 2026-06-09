@@ -179,6 +179,28 @@ class AuthService:
         # 감사 추적: 비가역 영구 파기 — PII 마스킹(이메일)하여 기록.
         logger.info("탈퇴 계정 영구 파기 user_id=%s email=%s", user.id, self._mask_email(email))
 
+    async def reset_password(self, email: str, name: str, new_password: str) -> None:
+        """이메일 본인 인증을 마친 사용자가 새 비밀번호를 설정한다(비밀번호 찾기).
+
+        email+name 으로 계정을 식별하고, 새 비밀번호가 기존과 같으면 거부한다.
+        """
+        if not await self.email_verification.is_verified(email):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이메일 본인 인증이 필요합니다.")
+
+        user = await self.user_repo.get_user_by_email(email)
+        if user is None or user.is_deleted or user.name != name:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="일치하는 계정을 찾을 수 없습니다.")
+
+        if verify_password(new_password, user.hashed_password):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 사용한 번호입니다.")
+
+        user.hashed_password = hash_password(new_password)
+        async with in_transaction():
+            await user.save(update_fields=["hashed_password", "updated_at"])
+        await self.email_verification.consume(email)
+        # 감사 추적: 비밀번호 재설정 — PII 마스킹(이메일)하여 기록.
+        logger.info("비밀번호 재설정 user_id=%s email=%s", user.id, self._mask_email(email))
+
     @staticmethod
     async def _account_stats(user_id: object) -> dict:
         """복구 계정의 요약 통계(챌린지 수·포인트·펫 이름). 순환 import 방지 위해 지연 import."""

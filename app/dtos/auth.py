@@ -46,6 +46,12 @@ class DestroyRequest(BaseModel):
     email: Annotated[EmailStr, Field(max_length=40)]
 
 
+class ResetPasswordRequest(BaseModel):
+    email: Annotated[EmailStr, Field(max_length=40)]
+    name: Annotated[str, Field(min_length=1, max_length=20)]
+    new_password: Annotated[str, Field(min_length=8, max_length=64), AfterValidator(validate_password)]
+
+
 class RestoredAccountResponse(BaseModel):
     """복구 완료 응답. 이메일 인증을 마친 본인이므로 상세 통계 포함."""
 
