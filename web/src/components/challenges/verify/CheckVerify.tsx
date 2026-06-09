@@ -16,13 +16,13 @@ interface CheckVerifyProps {
   loading?: boolean;
 }
 
-/* 카테고리별 질문 문구 */
+/* 카테고리별 질문 문구
+   ※ NO_SMOKING 은 PHOTO 인증 타입이므로 제외 */
 const VERIFY_QUESTIONS: Record<string, string> = {
   NO_ALCOHOL: "오늘 술을 마시지 않으셨나요?",
   SLEEP: "어제 목표 수면 시간을 지키셨나요?",
   MEDITATION: "오늘 명상을 하셨나요?",
   DIET: "오늘 건강한 식사를 하셨나요?",
-  NO_SMOKING: "오늘 담배를 피우지 않으셨나요?",
   DEFAULT: "오늘 챌린지 목표를 달성하셨나요?",
 };
 
