@@ -48,6 +48,11 @@ app = [
     "slowapi>=0.1.9",
     "tortoise-orm[asyncpg]>=0.25.3",
     "uvicorn>=0.40.0",
+    # ML 모델 추론 (KNHANES 만성질환 위험 예측)
+    "lightgbm>=4.0.0",
+    "catboost>=1.2.0",
+    "shap>=0.43.0",
+    "scipy>=1.11.0",
 ]
 dev = [
     "coverage>=7.13.2",
