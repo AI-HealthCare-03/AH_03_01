@@ -39,6 +39,9 @@ from app.services.ml import PredictionInput, RiskPredictor
 
 HOME_BP_CORRECTION = Decimal("5")  # 가정 측정치 보정 (+5/+5)
 
+# input_snapshot override 로 덮어쓸 수 없는 서버측 신뢰 필드 (요청 파라미터·User 에서 도출)
+_SNAPSHOT_OVERRIDE_PROTECTED = frozenset({"disease_type", "age", "gender", "extra"})
+
 
 class HealthProfileService:
     def __init__(self) -> None:
@@ -138,7 +141,6 @@ class HealthStatisticsService:
         "waist": (RecordType.WAIST, None),
         "blood_pressure": (RecordType.BLOOD_PRESSURE, None),
         "blood_glucose": (RecordType.BLOOD_GLUCOSE, None),
-        "hba1c": (RecordType.HBA1C, None),
         "activity": (RecordType.ACTIVITY, None),
     }
 
@@ -183,7 +185,7 @@ class HealthStatisticsService:
     ) -> StatisticsResponse:
         record_type, _ = self.parse_metric(metric)
         sub_type: RecordSubType | None = None
-        if sub_type_q in {RecordSubType.FASTING.value, RecordSubType.POSTMEAL.value}:
+        if sub_type_q == RecordSubType.FASTING.value:
             sub_type = RecordSubType(sub_type_q)
 
         if date_from is None and date_to is None and period:
@@ -239,14 +241,6 @@ class HealthStatisticsService:
     @staticmethod
     def _point(record_type: RecordType, record: HealthRecord) -> StatisticsPoint:
         level = None
-        if record_type == RecordType.HBA1C:
-            value = float(record.primary_value)
-            if value < 5.7:
-                level = "normal"
-            elif value < 6.5:
-                level = "pre_diabetic"
-            else:
-                level = "diabetic"
         return StatisticsPoint(
             measured_at=record.measured_at,
             primary_value=record.primary_value,
@@ -262,17 +256,14 @@ class HealthStatisticsService:
             key = r.measured_at.date()
             if r.sub_type == RecordSubType.FASTING:
                 grouped[key]["fasting"] = r.primary_value
-            elif r.sub_type == RecordSubType.POSTMEAL:
-                grouped[key]["postmeal"] = r.primary_value
         merged: list[StatisticsPoint] = []
         for day, values in sorted(grouped.items()):
-            primary = values.get("fasting") or values.get("postmeal") or Decimal("0")
-            secondary = values.get("postmeal") if "fasting" in values else None
+            primary = values.get("fasting") or Decimal("0")
             merged.append(
                 StatisticsPoint(
                     measured_at=datetime.combine(day, datetime.min.time()),
                     primary_value=primary,
-                    secondary_value=secondary,
+                    secondary_value=None,
                 )
             )
         return merged
@@ -352,13 +343,16 @@ class DiseaseRiskService:
         profile = await self.profile_repo.get_by_user(user.id)
         latest_bp = await self.record_repo.latest_value(user.id, RecordType.BLOOD_PRESSURE)
         latest_fasting = await self.record_repo.latest_value(user.id, RecordType.BLOOD_GLUCOSE, RecordSubType.FASTING)
-        latest_postmeal = await self.record_repo.latest_value(user.id, RecordType.BLOOD_GLUCOSE, RecordSubType.POSTMEAL)
-        latest_hba1c = await self.record_repo.latest_value(user.id, RecordType.HBA1C)
         latest_weight = await self.record_repo.latest_value(user.id, RecordType.WEIGHT)
         latest_waist = await self.record_repo.latest_value(user.id, RecordType.WAIST)
 
         weight = (latest_weight.primary_value if latest_weight else None) or (profile.weight_kg if profile else None)
         waist = (latest_waist.primary_value if latest_waist else None) or (profile.waist_cm if profile else None)
+        systolic = (latest_bp.primary_value if latest_bp else None) or (profile.systolic_bp if profile else None)
+        diastolic = (latest_bp.secondary_value if latest_bp else None) or (profile.diastolic_bp if profile else None)
+        fasting_blood_sugar = (latest_fasting.primary_value if latest_fasting else None) or (
+            profile.fasting_blood_sugar if profile else None
+        )
 
         payload = PredictionInput(
             disease_type=disease_type,
@@ -367,19 +361,36 @@ class DiseaseRiskService:
             height_cm=profile.height_cm if profile else None,
             weight_kg=weight,
             waist_cm=waist,
-            is_smoker=profile.is_smoker if profile else False,
-            alcohol_intake=profile.alcohol_intake.value if profile else None,
-            has_diabetes_family_history=profile.has_diabetes_family_history if profile else False,
-            has_hypertension_family_history=profile.has_hypertension_family_history if profile else False,
-            is_chronic_patient=profile.is_chronic_patient if profile else False,
-            blood_pressure_systolic=latest_bp.primary_value if latest_bp else None,
-            blood_pressure_diastolic=latest_bp.secondary_value if latest_bp else None,
-            fasting_glucose=latest_fasting.primary_value if latest_fasting else None,
-            postmeal_glucose=latest_postmeal.primary_value if latest_postmeal else None,
-            hba1c=latest_hba1c.primary_value if latest_hba1c else None,
+            systolic_bp=systolic,
+            diastolic_bp=diastolic,
+            fasting_blood_sugar=fasting_blood_sugar,
+            sleep_weekday=profile.sleep_weekday if profile else None,
+            sleep_weekend=profile.sleep_weekend if profile else None,
+            moderate_exercise_hour=profile.moderate_exercise_hour if profile else None,
+            mid_act_day=profile.mid_act_day if profile else None,
+            walk_day=profile.walk_day if profile else None,
+            water_count=profile.water_count if profile else None,
+            family_dm=profile.family_dm if profile else None,
+            family_hp=profile.family_hp if profile else None,
+            family_hl=profile.family_hl if profile else None,
+            current_smoker=profile.current_smoker if profile else None,
+            smoking_risk=profile.smoking_risk if profile else None,
+            alcohol_freq_y=profile.alcohol_freq_y if profile else None,
+            alcohol_cup=profile.alcohol_cup if profile else None,
+            fruit_freq=profile.fruit_freq if profile else None,
+            veg_freq_1=profile.veg_freq_1 if profile else None,
+            out_meal_freq=profile.out_meal_freq if profile else None,
+            breakfast_freq=profile.breakfast_freq if profile else None,
+            is_menopause=profile.is_menopause if profile else None,
+            ocp_total_months=profile.ocp_total_months if profile else None,
+            anemia=profile.anemia if profile else None,
         )
         if snapshot_override:
             for key, value in snapshot_override.items():
+                # disease_type/age/gender 는 서버측(요청 파라미터·User)에서 도출한 신뢰값이므로
+                # 클라이언트 input_snapshot 으로 덮어쓰지 못하게 한다. (점수 조작 방지)
+                if key in _SNAPSHOT_OVERRIDE_PROTECTED:
+                    continue
                 if hasattr(payload, key):
                     setattr(payload, key, value)
                 else:

@@ -13,9 +13,10 @@ class TestPredictionsApi(TestCase):
                 "height_cm": 170,
                 "weight_kg": 78,
                 "waist_cm": 92,
-                "is_smoker": True,
-                "alcohol_intake": "MODERATE",
-                "has_hypertension_family_history": True,
+                "current_smoker": 1,
+                "alcohol_freq_y": 2,
+                "family_hp": 1,
+                "family_dm": 1,
             },
         )
         await client.post(
@@ -54,7 +55,7 @@ class TestPredictionsApi(TestCase):
             res = await client.post(
                 "/api/v1/predictions?diseaseType=DIABETES",
                 headers=headers,
-                json={"input_snapshot": {"fasting_glucose": 130, "hba1c": 6.8}},
+                json={"input_snapshot": {"fasting_blood_sugar": 130}},
             )
             assert res.status_code == status.HTTP_201_CREATED
             body = res.json()

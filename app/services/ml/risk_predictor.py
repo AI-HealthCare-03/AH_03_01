@@ -4,6 +4,8 @@
 ai_worker 의 모델 서비스가 준비되면 `RiskPredictor.predict` 의 본문만 HTTP 호출로 교체하면 됩니다.
 호출 측(app) 은 본 모듈의 인터페이스(`PredictionInput`/`PredictionOutput`) 만 의존하므로,
 모델 교체 시 라우터/서비스 코드 변경이 필요 없습니다.
+
+입력 필드는 KNHANES 예측 모델 28입력(v2 스키마, `UserHealthInfo`) 컬럼명과 동일합니다.
 """
 
 from __future__ import annotations
@@ -30,19 +32,38 @@ class PredictionInput:
     disease_type: DiseaseType
     age: int | None = None
     gender: str | None = None
+    # 수치형 (Decimal)
     height_cm: Decimal | None = None
     weight_kg: Decimal | None = None
     waist_cm: Decimal | None = None
-    is_smoker: bool = False
-    alcohol_intake: str | None = None
-    has_diabetes_family_history: bool = False
-    has_hypertension_family_history: bool = False
-    is_chronic_patient: bool = False
-    blood_pressure_systolic: Decimal | None = None
-    blood_pressure_diastolic: Decimal | None = None
-    fasting_glucose: Decimal | None = None
-    postmeal_glucose: Decimal | None = None
-    hba1c: Decimal | None = None
+    systolic_bp: Decimal | None = None
+    diastolic_bp: Decimal | None = None
+    fasting_blood_sugar: Decimal | None = None
+    sleep_weekday: Decimal | None = None
+    sleep_weekend: Decimal | None = None
+    moderate_exercise_hour: Decimal | None = None
+    smoking_risk: Decimal | None = None
+    # 활동/섭취 (int)
+    mid_act_day: int | None = None
+    walk_day: int | None = None
+    water_count: int | None = None
+    # 가족력 (1=있음/0=없음/-1=모름)
+    family_dm: int | None = None
+    family_hp: int | None = None
+    family_hl: int | None = None
+    # 흡연 (현재흡연=1/비흡연=0)
+    current_smoker: int | None = None
+    # 음주/식습관 (KNHANES 코드)
+    alcohol_freq_y: int | None = None
+    alcohol_cup: int | None = None
+    fruit_freq: int | None = None
+    veg_freq_1: int | None = None
+    out_meal_freq: int | None = None
+    breakfast_freq: int | None = None
+    # 폐경/호르몬/기타 (폐경=1/비폐경여성=0/남성·비해당=-1)
+    is_menopause: int | None = None
+    ocp_total_months: int | None = None
+    anemia: int | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     def snapshot(self) -> dict[str, Any]:
@@ -53,16 +74,29 @@ class PredictionInput:
             "height_cm": _as_float(self.height_cm),
             "weight_kg": _as_float(self.weight_kg),
             "waist_cm": _as_float(self.waist_cm),
-            "is_smoker": self.is_smoker,
-            "alcohol_intake": self.alcohol_intake,
-            "has_diabetes_family_history": self.has_diabetes_family_history,
-            "has_hypertension_family_history": self.has_hypertension_family_history,
-            "is_chronic_patient": self.is_chronic_patient,
-            "blood_pressure_systolic": _as_float(self.blood_pressure_systolic),
-            "blood_pressure_diastolic": _as_float(self.blood_pressure_diastolic),
-            "fasting_glucose": _as_float(self.fasting_glucose),
-            "postmeal_glucose": _as_float(self.postmeal_glucose),
-            "hba1c": _as_float(self.hba1c),
+            "systolic_bp": _as_float(self.systolic_bp),
+            "diastolic_bp": _as_float(self.diastolic_bp),
+            "fasting_blood_sugar": _as_float(self.fasting_blood_sugar),
+            "sleep_weekday": _as_float(self.sleep_weekday),
+            "sleep_weekend": _as_float(self.sleep_weekend),
+            "moderate_exercise_hour": _as_float(self.moderate_exercise_hour),
+            "smoking_risk": _as_float(self.smoking_risk),
+            "mid_act_day": self.mid_act_day,
+            "walk_day": self.walk_day,
+            "water_count": self.water_count,
+            "family_dm": self.family_dm,
+            "family_hp": self.family_hp,
+            "family_hl": self.family_hl,
+            "current_smoker": self.current_smoker,
+            "alcohol_freq_y": self.alcohol_freq_y,
+            "alcohol_cup": self.alcohol_cup,
+            "fruit_freq": self.fruit_freq,
+            "veg_freq_1": self.veg_freq_1,
+            "out_meal_freq": self.out_meal_freq,
+            "breakfast_freq": self.breakfast_freq,
+            "is_menopause": self.is_menopause,
+            "ocp_total_months": self.ocp_total_months,
+            "anemia": self.anemia,
             **self.extra,
         }
 
@@ -80,6 +114,17 @@ def _as_float(value: Decimal | None) -> float | None:
     return float(value) if value is not None else None
 
 
+def _is_frequent_drinker(alcohol_freq_y: int | None) -> bool:
+    """KNHANES BD1_11 연간 음주 빈도 코드로 '잦은 음주' 판단.
+
+    코드: 1=거의매일 … 7=전혀안함, -1=모름. 잦음(1~3: 주 1회 이상)이면 위험 가중.
+    None/-1(모름)/0 은 가중 없음(안전 스킵).
+    """
+    if alcohol_freq_y is None or alcohol_freq_y <= 0:
+        return False
+    return 1 <= alcohol_freq_y <= 3
+
+
 # 룰 기반 위험도 계산 (KSH 2022 / KDA 2023 기준값 사용)
 # ai_worker 의 실제 ML 모델이 준비되기 전까지의 폴백 구현이다.
 class RuleBasedRiskCalculator:
@@ -95,8 +140,8 @@ class RuleBasedRiskCalculator:
     def _hypertension(self, p: PredictionInput) -> PredictionOutput:
         bands = [
             _band(
-                "blood_pressure_systolic",
-                _as_float(p.blood_pressure_systolic),
+                "systolic_bp",
+                _as_float(p.systolic_bp),
                 140,
                 40,
                 "수축기 위험",
@@ -105,8 +150,8 @@ class RuleBasedRiskCalculator:
                 "수축기 주의",
             ),
             _band(
-                "blood_pressure_diastolic",
-                _as_float(p.blood_pressure_diastolic),
+                "diastolic_bp",
+                _as_float(p.diastolic_bp),
                 90,
                 30,
                 "이완기 위험",
@@ -120,9 +165,9 @@ class RuleBasedRiskCalculator:
             score,
             factors,
             [
-                (p.has_hypertension_family_history, 10, "family_history", 0.1, "고혈압 가족력 있음"),
-                (p.is_smoker, 7, "smoking", 0.07, "흡연자"),
-                (p.alcohol_intake in {"MODERATE", "HEAVY"}, 5, "alcohol", 0.05, f"음주 빈도 {p.alcohol_intake}"),
+                (p.family_hp == 1, 10, "family_history", 0.1, "고혈압 가족력 있음"),
+                (p.current_smoker == 1, 7, "smoking", 0.07, "현재 흡연"),
+                (_is_frequent_drinker(p.alcohol_freq_y), 5, "alcohol", 0.05, "잦은 음주 빈도"),
                 (p.age is not None and (p.age or 0) >= 50, 5, "age", 0.05, "50세 이상"),
             ],
         )
@@ -131,8 +176,8 @@ class RuleBasedRiskCalculator:
     def _diabetes(self, p: PredictionInput) -> PredictionOutput:
         bands = [
             _band(
-                "fasting_glucose",
-                _as_float(p.fasting_glucose),
+                "fasting_blood_sugar",
+                _as_float(p.fasting_blood_sugar),
                 126,
                 35,
                 "공복혈당 당뇨 의심",
@@ -140,17 +185,6 @@ class RuleBasedRiskCalculator:
                 18,
                 "공복혈당 전당뇨",
             ),
-            _band(
-                "postmeal_glucose",
-                _as_float(p.postmeal_glucose),
-                200,
-                25,
-                "식후혈당 당뇨 의심",
-                140,
-                12,
-                "식후혈당 전당뇨",
-            ),
-            _band("hba1c", _as_float(p.hba1c), 6.5, 30, "HbA1c 당뇨 의심", 5.7, 15, "HbA1c 전당뇨"),
         ]
         score, factors = _collect(bands)
         bmi = _bmi(p.height_cm, p.weight_kg)
@@ -158,7 +192,7 @@ class RuleBasedRiskCalculator:
             score,
             factors,
             [
-                (p.has_diabetes_family_history, 10, "family_history", 0.1, "당뇨 가족력 있음"),
+                (p.family_dm == 1, 10, "family_history", 0.1, "당뇨 가족력 있음"),
                 (bmi is not None and (bmi or 0) >= 25, 8, "bmi", 0.08, f"BMI {bmi:.1f} 비만" if bmi else "BMI 비만"),
             ],
         )
@@ -167,13 +201,13 @@ class RuleBasedRiskCalculator:
     def _cardiovascular(self, p: PredictionInput) -> PredictionOutput:
         score = 0.0
         factors: list[RiskFactor] = []
-        sys_ = _as_float(p.blood_pressure_systolic)
+        sys_ = _as_float(p.systolic_bp)
         if sys_ is not None and sys_ >= 140:
             score += 25
-            factors.append(RiskFactor("blood_pressure_systolic", 0.25, "수축기 혈압 위험 구간"))
-        if p.is_smoker:
+            factors.append(RiskFactor("systolic_bp", 0.25, "수축기 혈압 위험 구간"))
+        if p.current_smoker == 1:
             score += 20
-            factors.append(RiskFactor("smoking", 0.2, "흡연자"))
+            factors.append(RiskFactor("smoking", 0.2, "현재 흡연"))
         bmi = _bmi(p.height_cm, p.weight_kg)
         if bmi is not None and bmi >= 25:
             score += 15
@@ -181,7 +215,7 @@ class RuleBasedRiskCalculator:
         if p.age is not None and p.age >= 50:
             score += 10
             factors.append(RiskFactor("age", 0.1, "50세 이상"))
-        if p.has_hypertension_family_history or p.has_diabetes_family_history:
+        if p.family_hp == 1 or p.family_dm == 1 or p.family_hl == 1:
             score += 8
             factors.append(RiskFactor("family_history", 0.08, "가족력 있음"))
         return PredictionOutput(
@@ -280,6 +314,7 @@ class RiskPredictor:
             return self._ml
         try:
             from app.services.ml.ml_risk_predictor_draft import MLRiskPredictor
+
             self._ml = MLRiskPredictor()
             self._ml._lazy_load()  # 아티팩트 로드 검증
         except Exception:
@@ -288,7 +323,9 @@ class RiskPredictor:
         return self._ml
 
     async def predict(self, payload: PredictionInput) -> PredictionOutput:
-        import logging, traceback
+        import logging
+        import traceback
+
         logger = logging.getLogger(__name__)
         ml = self._get_ml()
         if ml is not None:

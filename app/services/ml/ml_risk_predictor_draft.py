@@ -17,11 +17,11 @@ risk_predictor.py 의 RiskPredictor.predict() 에서 MLRiskPredictor.calculate()
   - risk_level    : 매우낮음/낮음/보통/높음/매우높음
   - top_5_features: SHAP 기반 기여 피처 상위 5개
 """
+
 from __future__ import annotations
 
 import json
 import pickle
-import sys
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -43,43 +43,44 @@ MODEL_ARTIFACT_DIR = Path("/app/models/rb3_a4_cal_cb_ordm_aha_fF80_mM80_0609")
 # ──────────────────────────────────────────────────────────────
 class ResidualEnsemble:
     """LGBM M1 × 0.6 + M2 × 0.4 앙상블"""
+
     def __init__(self, m1, m2, alpha: float = 0.4):
         self.m1 = m1
         self.m2 = m2
         self.alpha = alpha
 
-    def predict_proba(self, X):
-        return (1 - self.alpha) * self.m1.predict_proba(X) + \
-               self.alpha * self.m2.predict_proba(X)
+    def predict_proba(self, X):  # noqa: N803  (X = 학습 design matrix, ML 관례)
+        return (1 - self.alpha) * self.m1.predict_proba(X) + self.alpha * self.m2.predict_proba(X)
 
-    def predict(self, X):
+    def predict(self, X):  # noqa: N803  (X = 학습 design matrix, ML 관례)
         return np.argmax(self.predict_proba(X), axis=1)
 
 
 class TripleEnsemble:
     """ResidualEnsemble × 0.7 + CatBoost × 0.3 앙상블"""
+
     def __init__(self, lgbm_model, cb_model, cb_alpha: float = 0.3):
         self.lgbm_model = lgbm_model
         self.cb_model = cb_model
         self.cb_alpha = cb_alpha
 
-    def predict_proba(self, X):
-        return (1 - self.cb_alpha) * self.lgbm_model.predict_proba(X) + \
-               self.cb_alpha * self.cb_model.predict_proba(X)
+    def predict_proba(self, X):  # noqa: N803  (X = 학습 design matrix, ML 관례)
+        return (1 - self.cb_alpha) * self.lgbm_model.predict_proba(X) + self.cb_alpha * self.cb_model.predict_proba(X)
 
-    def predict(self, X):
+    def predict(self, X):  # noqa: N803  (X = 학습 design matrix, ML 관례)
         return np.argmax(self.predict_proba(X), axis=1)
 
 
 class OrdinalClassifier:
     """남성 Base 모델 전용 — K-1 누적 이진 분류기 (pkl 역직렬화용)"""
+
     def __init__(self, params, n_cls):
         self.params = params
         self.n_cls = n_cls
         self.clfs_ = []
 
-    def predict_proba(self, X):
-        K = self.n_cls - 1
+    def predict_proba(self, X):  # noqa: N803  (X = 학습 design matrix, ML 관례)
+        K = self.n_cls - 1  # noqa: N806  (K = 누적 이진 분류기 개수, ordinal 관례)
         cum = np.stack([c.predict_proba(X)[:, 1] for c in self.clfs_], axis=1)
         for k in range(1, K):
             cum[:, k] = np.minimum(cum[:, k], cum[:, k - 1])
@@ -93,20 +94,22 @@ class OrdinalClassifier:
         probs /= probs.sum(axis=1, keepdims=True)
         return probs
 
-    def predict(self, X):
+    def predict(self, X):  # noqa: N803  (X = 학습 design matrix, ML 관례)
         return np.argmax(self.predict_proba(X), axis=1)
 
 
 class PlattCalibrator:
     """Platt / Temperature Scaling 확률 보정 래퍼"""
+
     def __init__(self, base_model):
         self.base_model = base_model
         self._lr = None
         self._T = 1.0
         self._n_cls = None
 
-    def predict_proba(self, X):
+    def predict_proba(self, X):  # noqa: N803  (X = 학습 design matrix, ML 관례)
         from scipy.special import softmax
+
         raw = self.base_model.predict_proba(X)
         if self._n_cls == 2 and self._lr is not None:
             cal = self._lr.predict_proba(raw[:, 1].reshape(-1, 1))[:, 1]
@@ -114,7 +117,7 @@ class PlattCalibrator:
         logits = np.log(np.clip(raw, 1e-10, 1))
         return softmax(logits / self._T, axis=1)
 
-    def predict(self, X):
+    def predict(self, X):  # noqa: N803  (X = 학습 design matrix, ML 관례)
         return np.argmax(self.predict_proba(X), axis=1)
 
 
@@ -164,7 +167,7 @@ def _load_score_reference(artifact_dir: Path) -> dict:
 def _prob_to_score(
     artifact_dir: Path,
     sex_str: str,
-    model_key: str,   # e.g. "meta_DI2_dg", "direct_HE_HP"
+    model_key: str,  # e.g. "meta_DI2_dg", "direct_HE_HP"
     risk_prob: float,
 ) -> int:
     """확률 → 0-100 위험 점수 (val+test percentile 기반, fallback: 직접 변환)"""
@@ -177,11 +180,16 @@ def _prob_to_score(
 
 
 def _score_to_level(score: int) -> str:
-    if score <= 20:   return "매우 낮음"
-    elif score <= 40: return "낮음"
-    elif score <= 60: return "보통"
-    elif score <= 80: return "높음"
-    else:             return "매우 높음"
+    if score <= 20:
+        return "매우 낮음"
+    elif score <= 40:
+        return "낮음"
+    elif score <= 60:
+        return "보통"
+    elif score <= 80:
+        return "높음"
+    else:
+        return "매우 높음"
 
 
 # ──────────────────────────────────────────────────────────────
@@ -191,14 +199,19 @@ def _score_to_level(score: int) -> str:
 # 피처 한국어 이름 매핑 (54개 전체, 중복 없음)
 FEAT_KOR = {
     # 신체 계측
-    "age": "나이", "height_cm": "키", "weight_kg": "체중",
-    "waist_cm": "허리둘레", "BMI": "체질량지수(BMI)",
-    "WHtR": "허리-키 비율", "WHtR_risk": "허리-키 위험",
+    "age": "나이",
+    "height_cm": "키",
+    "weight_kg": "체중",
+    "waist_cm": "허리둘레",
+    "BMI": "체질량지수(BMI)",
+    "WHtR": "허리-키 비율",
+    "WHtR_risk": "허리-키 위험",
     "bmi_age_index": "BMI-나이 복합 지수",
     "age_male_peak": "남성 최고 위험 연령대",
     "age_whtr_inter": "나이-허리키비율 상호작용",
     # 혈압
-    "systolic_bp": "수축기혈압", "diastolic_bp": "이완기혈압",
+    "systolic_bp": "수축기혈압",
+    "diastolic_bp": "이완기혈압",
     "bp_cat": "혈압 구간",
     # 혈당
     "fasting_blood_sugar": "공복혈당",
@@ -209,37 +222,54 @@ FEAT_KOR = {
     "glucose_adiposity_interaction": "혈당-비만 상호작용",
     "glucose_sodium_interaction": "혈당-나트륨 상호작용",
     # 지질 추정치
-    "TG_proxy_mgdl": "중성지방 추정치", "HDL_proxy_mgdl": "HDL 추정치",
-    "LDL_proxy": "LDL 추정치", "TC_residual_risk": "총콜레스테롤 위험",
+    "TG_proxy_mgdl": "중성지방 추정치",
+    "HDL_proxy_mgdl": "HDL 추정치",
+    "LDL_proxy": "LDL 추정치",
+    "TC_residual_risk": "총콜레스테롤 위험",
     "HDL_LOW_RISK_PROXY": "HDL 저하 위험 추정치",
     "HDL_male_risk": "남성 HDL 위험",
     "TG_male_risk": "남성 중성지방 위험",
     "TG_female_risk": "여성 중성지방 위험",
     # 지질 메타 피처 — TG
-    "prob_tg_cat_0": "중성지방(정상)", "prob_tg_cat_1": "중성지방(경계)",
+    "prob_tg_cat_0": "중성지방(정상)",
+    "prob_tg_cat_1": "중성지방(경계)",
     "prob_tg_cat_2": "중성지방(높음)",
     # 지질 메타 피처 — HDL
-    "prob_hdl_cat_0": "HDL(낮음)", "prob_hdl_cat_1": "HDL(정상)",
-    "prob_hdl_cat_2": "HDL(높음)", "prob_hdl_cat_pos": "HDL 저하 위험",
+    "prob_hdl_cat_0": "HDL(낮음)",
+    "prob_hdl_cat_1": "HDL(정상)",
+    "prob_hdl_cat_2": "HDL(높음)",
+    "prob_hdl_cat_pos": "HDL 저하 위험",
     # 지질 메타 피처 — TC
-    "prob_chol_cat_0": "총콜레스테롤(정상)", "prob_chol_cat_1": "총콜레스테롤(경계)",
-    "prob_chol_cat_2": "총콜레스테롤(높음)", "prob_chol_cat_pos": "총콜레스테롤 위험",
+    "prob_chol_cat_0": "총콜레스테롤(정상)",
+    "prob_chol_cat_1": "총콜레스테롤(경계)",
+    "prob_chol_cat_2": "총콜레스테롤(높음)",
+    "prob_chol_cat_pos": "총콜레스테롤 위험",
     # 지질 메타 피처 — LDL
-    "prob_ldl_cat_0": "LDL(최적)", "prob_ldl_cat_1": "LDL(정상)",
-    "prob_ldl_cat_2": "LDL(경계)", "prob_ldl_cat_3": "LDL(높음)",
-    "prob_ldl_cat_4": "LDL(매우높음)", "prob_ldl_cat_pos": "LDL 위험",
+    "prob_ldl_cat_0": "LDL(최적)",
+    "prob_ldl_cat_1": "LDL(정상)",
+    "prob_ldl_cat_2": "LDL(경계)",
+    "prob_ldl_cat_3": "LDL(높음)",
+    "prob_ldl_cat_4": "LDL(매우높음)",
+    "prob_ldl_cat_pos": "LDL 위험",
     # 복합 지수
-    "metabolic_age": "기능적 연령", "GLYCEMIC_BURDEN_PROXY": "혈당 부담 지수",
-    "lipid_hidden_risk_proxy": "숨은 지질 위험", "body_metabolic_score": "대사 건강 점수",
+    "metabolic_age": "기능적 연령",
+    "GLYCEMIC_BURDEN_PROXY": "혈당 부담 지수",
+    "lipid_hidden_risk_proxy": "숨은 지질 위험",
+    "body_metabolic_score": "대사 건강 점수",
     # 생활습관
-    "FAMILY_HP": "고혈압 가족력", "DRINK_RISK": "음주 위험",
-    "walk_day": "걷기 일수", "SLEEP_AVG": "평균 수면시간",
-    "SLEEP_WEEKDAY": "주중 수면시간", "SLEEP_WEEKEND": "주말 수면시간",
+    "FAMILY_HP": "고혈압 가족력",
+    "DRINK_RISK": "음주 위험",
+    "walk_day": "걷기 일수",
+    "SLEEP_AVG": "평균 수면시간",
+    "SLEEP_WEEKDAY": "주중 수면시간",
+    "SLEEP_WEEKEND": "주말 수면시간",
     "SLEEP_IMBALANCE": "수면 불균형",
     "alcohol_freq_y": "음주 빈도",
-    "breakfast_freq": "아침식사 빈도", "fruit_freq": "과일 섭취 빈도",
+    "breakfast_freq": "아침식사 빈도",
+    "fruit_freq": "과일 섭취 빈도",
     "out_meal_freq": "외식 빈도",
-    "water_count": "하루 물 섭취량", "water_ml_per_kg": "체중 대비 물 섭취량",
+    "water_count": "하루 물 섭취량",
+    "water_ml_per_kg": "체중 대비 물 섭취량",
     "anemia": "빈혈 여부",
     # KDE 백분위
     "tg_proxy_kde_pct": "중성지방 분포 위치",
@@ -269,11 +299,16 @@ def _unwrap_lgbm(model, max_depth: int = 10):
 
 
 def _get_top5_features(
-    model, feature_cols: list[str], X_in, predicted_class: int, n: int = 5
+    model,
+    feature_cols: list[str],
+    X_in,  # noqa: N803  (X_in = 입력 design matrix)
+    predicted_class: int,
+    n: int = 5,
 ) -> list[dict[str, Any]]:
     """SHAP 기반 Top-N 기여 피처 반환 (실패 시 빈 리스트)"""
     try:
         import shap
+
         # OrdinalClassifier는 SHAP 불가 → 빈 리스트
         if isinstance(model, OrdinalClassifier):
             return []
@@ -288,30 +323,32 @@ def _get_top5_features(
         # → positive = 위험 증가↑, negative = 위험 감소↓ 로 일관된 해석
         if isinstance(shap_vals, list):
             risk_cls_idx = len(shap_vals) - 1
-            sv = np.array(shap_vals[risk_cls_idx]).flatten()[:len(feature_cols)]
+            sv = np.array(shap_vals[risk_cls_idx]).flatten()[: len(feature_cols)]
         elif isinstance(shap_vals, np.ndarray) and shap_vals.ndim == 3:
             risk_cls_idx = shap_vals.shape[2] - 1
             sv = shap_vals[0, :, risk_cls_idx]
         else:
-            sv = np.array(shap_vals).flatten()[:len(feature_cols)]
+            sv = np.array(shap_vals).flatten()[: len(feature_cols)]
 
         top_idx = np.argsort(np.abs(sv))[-n:][::-1]
         result = []
         for i in top_idx:
             fname = feature_cols[i] if i < len(feature_cols) else f"feat_{i}"
             contribution = float(sv[i])
-            result.append({
-                "feature":           fname,
-                "name_kor":          FEAT_KOR.get(fname, fname),
-                "shap_contribution": round(contribution, 4),
-                "direction":         "위험 증가↑" if contribution > 0 else "위험 감소↓",
-            })
+            result.append(
+                {
+                    "feature": fname,
+                    "name_kor": FEAT_KOR.get(fname, fname),
+                    "shap_contribution": round(contribution, 4),
+                    "direction": "위험 증가↑" if contribution > 0 else "위험 감소↓",
+                }
+            )
         return result
     except Exception as e:
-        import logging, traceback
-        logging.getLogger(__name__).error(
-            f"[SHAP] 실패: {type(e).__name__}: {e}\n{traceback.format_exc()}"
-        )
+        import logging
+        import traceback
+
+        logging.getLogger(__name__).error(f"[SHAP] 실패: {type(e).__name__}: {e}\n{traceback.format_exc()}")
         return []
 
 
@@ -339,10 +376,10 @@ CLASS_TO_RISK_LEVEL = {
 }
 
 LIPID_BASE_TARGETS = [
-    ("tg_cat",   3),
-    ("hdl_cat",  3),
+    ("tg_cat", 3),
+    ("hdl_cat", 3),
     ("chol_cat", 3),
-    ("ldl_cat",  5),
+    ("ldl_cat", 5),
 ]
 
 
@@ -353,7 +390,10 @@ LIPID_BASE_TARGETS = [
 # ──────────────────────────────────────────────────────────────
 _THIS_MODULE = "app.services.ml.ml_risk_predictor_draft"
 _COLAB_CLASS_NAMES = {
-    "PlattCalibrator", "ResidualEnsemble", "TripleEnsemble", "OrdinalClassifier",
+    "PlattCalibrator",
+    "ResidualEnsemble",
+    "TripleEnsemble",
+    "OrdinalClassifier",
 }
 
 
@@ -373,16 +413,14 @@ def _pkl_load(path: Path):
 # ──────────────────────────────────────────────────────────────
 # 모델 로더
 # ──────────────────────────────────────────────────────────────
-def _load_model(
-    artifact_dir: Path, sex: str, layer: str, target: str
-) -> tuple:
+def _load_model(artifact_dir: Path, sex: str, layer: str, target: str) -> tuple:
     """pkl 로드 → (model, feature_cols, threshold) 반환"""
     d = artifact_dir / sex / f"{layer}_{target}"
     with open(d / "lgbm_model.pkl", "rb") as f:
         data = _ColabUnpickler(f).load()
     feat = json.loads((d / "feature_columns.json").read_text(encoding="utf-8"))
     cols = [x["name"] for x in sorted(feat["features"], key=lambda x: x["order_index"])]
-    thr  = json.loads((d / "threshold_config.json").read_text(encoding="utf-8"))["threshold"]
+    thr = json.loads((d / "threshold_config.json").read_text(encoding="utf-8"))["threshold"]
     return data["model"], cols, thr
 
 
@@ -425,12 +463,12 @@ def predict_disease(
     """
     import pandas as pd
 
-    sex_str  = _get_sex_str(raw_input.get("sex") or raw_input.get("gender"))
+    sex_str = _get_sex_str(raw_input.get("sex") or raw_input.get("gender"))
     sex_code = 2 if sex_str == "female" else 1
 
     # ── 1. 전처리 ──────────────────────────────────────────────
     df_input = pd.DataFrame([raw_input])
-    df_feat  = preprocess_module.preprocess(df_input, preprocess_config, kde_reference)
+    df_feat = preprocess_module.preprocess(df_input, preprocess_config, kde_reference)
     df_feat["sex"] = sex_code
 
     # ── 2. 지질 Base 모델 (DI2_dg 전용) ───────────────────────
@@ -438,7 +476,7 @@ def predict_disease(
     if target == "DI2_dg":
         for bt, n_cls in LIPID_BASE_TARGETS:
             bmodel, bcols, _ = _load_model(artifact_dir, sex_str, "base", bt)
-            X_b   = df_feat.reindex(columns=bcols, fill_value=0).values
+            X_b = df_feat.reindex(columns=bcols, fill_value=0).values  # noqa: N806  (design matrix)
             bprob = bmodel.predict_proba(X_b)
             if n_cls == 2:
                 meta_features[f"prob_{bt}_pos"] = float(bprob[0, 1])
@@ -449,13 +487,13 @@ def predict_disease(
     # ── 3. 대상 모델 추론 ──────────────────────────────────────
     if target == "DI2_dg":
         layer = "meta"
-        X_in  = pd.DataFrame([meta_features])
+        X_in = pd.DataFrame([meta_features])  # noqa: N806  (design matrix)
     else:
         layer = "direct"
-        X_in  = df_feat
+        X_in = df_feat  # noqa: N806  (design matrix)
 
     model, feat_cols, threshold = _load_model(artifact_dir, sex_str, layer, target)
-    X_arr = X_in.reindex(columns=feat_cols, fill_value=0).values
+    X_arr = X_in.reindex(columns=feat_cols, fill_value=0).values  # noqa: N806  (design matrix)
     proba = model.predict_proba(X_arr)[0]
     n_cls = len(proba)
 
@@ -466,34 +504,34 @@ def predict_disease(
         pred_class = int(np.argmax(proba))
 
     # ── 5. Risk Score (0-100, percentile 기반) ─────────────────
-    model_key  = f"{layer}_{target}"
-    risk_prob  = _risk_prob_for_score(proba, n_cls)
+    model_key = f"{layer}_{target}"
+    risk_prob = _risk_prob_for_score(proba, n_cls)
     risk_score = _prob_to_score(artifact_dir, sex_str, model_key, risk_prob)
-    level_str  = _score_to_level(risk_score)
+    level_str = _score_to_level(risk_score)
 
     # ── 6. SHAP Top5 기여 피처 ─────────────────────────────────
     top5 = _get_top5_features(model, feat_cols, X_arr, pred_class)
 
     # ── 7. 출력 구성 ───────────────────────────────────────────
     label_keys = {
-        "HE_HP":        ["normal", "elevated", "stage1", "stage2"],
-        "HE_DM_HbA1c":  ["normal", "prediabetes", "diabetes"],
-        "DI2_dg":        ["normal", "dyslipidemia"],
+        "HE_HP": ["normal", "elevated", "stage1", "stage2"],
+        "HE_DM_HbA1c": ["normal", "prediabetes", "diabetes"],
+        "DI2_dg": ["normal", "dyslipidemia"],
     }
-    keys       = label_keys.get(target, [str(i) for i in range(n_cls)])
-    class_probs = {k: round(float(p), 4) for k, p in zip(keys, proba)}
+    keys = label_keys.get(target, [str(i) for i in range(n_cls)])
+    class_probs = {k: round(float(p), 4) for k, p in zip(keys, proba, strict=False)}
     risk_signal = round(float(1.0 - proba[0]), 4)
-    risk_level  = CLASS_TO_RISK_LEVEL[target].get(pred_class, RiskLevel.NORMAL)
+    risk_level = CLASS_TO_RISK_LEVEL[target].get(pred_class, RiskLevel.NORMAL)
 
     return {
-        "class_probabilities":   class_probs,
+        "class_probabilities": class_probs,
         "risk_signal_probability": risk_signal,
-        "risk_score":            risk_score,
-        "risk_level":            level_str,
-        "risk_level_enum":       risk_level,
-        "predicted_class":       pred_class,
-        "threshold":             threshold,
-        "top_5_features":        top5,
+        "risk_score": risk_score,
+        "risk_level": level_str,
+        "risk_level_enum": risk_level,
+        "predicted_class": pred_class,
+        "threshold": threshold,
+        "top_5_features": top5,
     }
 
 
@@ -510,10 +548,10 @@ class MLRiskPredictor:
 
     def __init__(self, artifact_dir: Path = MODEL_ARTIFACT_DIR) -> None:
         self.artifact_dir = artifact_dir
-        self._preprocess  = None
-        self._cfg         = None
-        self._kde         = None
-        self._loaded      = False
+        self._preprocess = None
+        self._cfg = None
+        self._kde = None
+        self._loaded = False
 
     def _lazy_load(self) -> None:
         """최초 호출 시 preprocess 모듈 + 설정 로드.
@@ -530,36 +568,60 @@ class MLRiskPredictor:
         spec = importlib.util.spec_from_file_location("preprocess", preprocess_py)
         self._preprocess = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self._preprocess)
-        self._cfg = json.loads(
-            (self.artifact_dir / "preprocess_config.json").read_text(encoding="utf-8")
-        )
+        self._cfg = json.loads((self.artifact_dir / "preprocess_config.json").read_text(encoding="utf-8"))
         with open(self.artifact_dir / "kde_reference.pkl", "rb") as f:
             self._kde = pickle.load(f)
         self._loaded = True
 
     def calculate(self, payload: Any) -> Any:
         """PredictionInput → PredictionOutput (기존 인터페이스 호환)"""
-        from app.services.ml.risk_predictor import PredictionOutput, RiskFactor
         from app.models.health import DiseaseType
+        from app.services.ml.risk_predictor import PredictionOutput, RiskFactor
 
         self._lazy_load()
 
-        TARGET_MAP = {
-            DiseaseType.HYPERTENSION:   "HE_HP",
-            DiseaseType.DIABETES:       "HE_DM_HbA1c",
+        target_map = {
+            DiseaseType.HYPERTENSION: "HE_HP",
+            DiseaseType.DIABETES: "HE_DM_HbA1c",
             DiseaseType.CARDIOVASCULAR: "DI2_dg",
         }
-        target = TARGET_MAP[payload.disease_type]
+        target = target_map[payload.disease_type]
+
+        # preprocess.CORE_INPUT_VARS(28) 직접 제공 계약에 맞춰 v2 PredictionInput 을 매핑.
+        # 측정/시간형(Decimal)은 float 변환, 설문 코드형(int, 0·-1 유효)은 그대로 — 0 이 None 으로
+        # 죽지 않도록 `is not None` 으로 판정. 결측은 preprocess 가 KNHANES 규약대로 보정한다.
+        def _num(v: Any) -> float | None:
+            return float(v) if v is not None else None
 
         raw = {
-            "age":                 payload.age,
-            "sex":                 2 if (payload.gender or "").lower() in ("female", "f", "여") else 1,
-            "height_cm":           float(payload.height_cm)              if payload.height_cm else None,
-            "weight_kg":           float(payload.weight_kg)              if payload.weight_kg else None,
-            "waist_cm":            float(payload.waist_cm)               if payload.waist_cm else None,
-            "systolic_bp":         float(payload.blood_pressure_systolic) if payload.blood_pressure_systolic else None,
-            "diastolic_bp":        float(payload.blood_pressure_diastolic) if payload.blood_pressure_diastolic else None,
-            "fasting_blood_sugar": float(payload.fasting_glucose)         if payload.fasting_glucose else None,
+            "age": payload.age,
+            "sex": 2 if (payload.gender or "").lower() in ("female", "f", "여") else 1,
+            "height_cm": _num(payload.height_cm),
+            "weight_kg": _num(payload.weight_kg),
+            "waist_cm": _num(payload.waist_cm),
+            "systolic_bp": _num(payload.systolic_bp),
+            "diastolic_bp": _num(payload.diastolic_bp),
+            "fasting_blood_sugar": _num(payload.fasting_blood_sugar),
+            "FAMILY_DM": payload.family_dm,
+            "FAMILY_HP": payload.family_hp,
+            "FAMILY_HL": payload.family_hl,
+            "CURRENT_SMOKER": payload.current_smoker,
+            "smoking_risk": _num(payload.smoking_risk),
+            "alcohol_freq_y": payload.alcohol_freq_y,
+            "alcohol_cup": payload.alcohol_cup,
+            "SLEEP_WEEKDAY": _num(payload.sleep_weekday),
+            "SLEEP_WEEKEND": _num(payload.sleep_weekend),
+            "mid_act_day": payload.mid_act_day,
+            "MODERATE_EXERCISE_HOUR": _num(payload.moderate_exercise_hour),
+            "walk_day": payload.walk_day,
+            "fruit_freq": payload.fruit_freq,
+            "veg_freq_1": payload.veg_freq_1,
+            "out_meal_freq": payload.out_meal_freq,
+            "breakfast_freq": payload.breakfast_freq,
+            "water_count": payload.water_count,
+            "is_menopause": payload.is_menopause,
+            "ocp_total_months": payload.ocp_total_months,
+            "anemia": payload.anemia,
             **payload.extra,
         }
 

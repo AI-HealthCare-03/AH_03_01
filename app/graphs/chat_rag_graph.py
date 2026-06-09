@@ -170,11 +170,11 @@ _HOSPITAL_KEYWORD_PATTERN = re.compile(
 # 패턴: 의료 수치 단위 또는 위험도 점수 형태 (소수점 포함)
 # 예: "공복혈당 145", "HbA1c 7.8%", "위험도 0.12", "혈압 142/91", "LDL 95 mg/dL"
 _INLINE_NUMERIC_PATTERN = re.compile(
-    r"\d+\.?\d*\s*%"                        # 퍼센트 수치 (HbA1c 7.8%, 위험도 12%)
-    r"|\d+\.?\d*\s*(mg/dL|mmHg|kg|cm|kcal)" # 단위 포함 수치
-    r"|위험도\s*\d+\.?\d*"                  # 위험도 점수 (0.12, 0.35 등)
-    r"|혈압\s*\d+/\d+"                      # 혈압 수치 (130/85)
-    r"|(공복혈당|혈당|LDL|HDL|중성지방|HbA1c|당화혈색소|콜레스테롤)\s*\d+", # 검사 항목 + 수치
+    r"\d+\.?\d*\s*%"  # 퍼센트 수치 (HbA1c 7.8%, 위험도 12%)
+    r"|\d+\.?\d*\s*(mg/dL|mmHg|kg|cm|kcal)"  # 단위 포함 수치
+    r"|위험도\s*\d+\.?\d*"  # 위험도 점수 (0.12, 0.35 등)
+    r"|혈압\s*\d+/\d+"  # 혈압 수치 (130/85)
+    r"|(공복혈당|혈당|LDL|HDL|중성지방|HbA1c|당화혈색소|콜레스테롤)\s*\d+",  # 검사 항목 + 수치
 )
 
 
@@ -194,7 +194,10 @@ _SERVICE_PREFILTER_PATTERN = re.compile(
 # N4 가드 패턴: 약물 일반 정보 질문 (부작용·효능·작용기전·복약법 등)
 # 본인 수치·데이터 없이 답할 수 있는 질문 → needs_health_data 강제 False
 _DRUG_GENERAL_INFO_PATTERN = re.compile(
-    r"부작용|이상반응|근육통|근육통증|횡문근융해|두통|어지럼"    r"|약\s*(끊|중단|바꿔|바꾸|그냥\s*먹|먹어도\s*되)"    r"|효과|효능|작용|기전|원리"    r"|언제\s*먹|어떻게\s*먹|같이\s*먹|함께\s*먹",
+    r"부작용|이상반응|근육통|근육통증|횡문근융해|두통|어지럼"
+    r"|약\s*(끊|중단|바꿔|바꾸|그냥\s*먹|먹어도\s*되)"
+    r"|효과|효능|작용|기전|원리"
+    r"|언제\s*먹|어떻게\s*먹|같이\s*먹|함께\s*먹",
     re.IGNORECASE,
 )
 
@@ -248,7 +251,7 @@ class ChatState(TypedDict, total=False):
     # diseases — multi-disease 라우팅 지원. 1개면 단일 질환, 2개면 OR 매치.
     # 예: "당뇨병 환자의 이상지질혈증" → ["diabetes", "dyslipidemia"]
     diseases: list[DiseaseLiteral]
-    topics: list[str]    # classify_intent 가 추출한 topic 목록 (retrieve 필터용)
+    topics: list[str]  # classify_intent 가 추출한 topic 목록 (retrieve 필터용)
     needs_health_data: bool
     needs_challenge_catalog: bool  # 챌린지 카탈로그를 함께 검색 (medical+service 혼합)
     missing_fields: list[str]
@@ -592,7 +595,16 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:  # noqa: C901
     diseases = [str(d) for d in raw_diseases if d in ("diabetes", "hypertension", "dyslipidemia")][:3]
 
     # topics 파싱 — 허용 값만 필터링
-    _valid_topics = {"diagnosis", "medication", "lifestyle", "complication", "risk", "monitoring", "service", "challenge"}
+    _valid_topics = {
+        "diagnosis",
+        "medication",
+        "lifestyle",
+        "complication",
+        "risk",
+        "monitoring",
+        "service",
+        "challenge",
+    }
     raw_topics = data.get("topics") or []
     if not isinstance(raw_topics, list):
         raw_topics = []
@@ -740,14 +752,16 @@ async def _fetch_user_health_snapshot(user_id: Any) -> dict[str, Any] | None:
                 "height_cm": float(profile.height_cm) if profile and profile.height_cm is not None else None,
                 "weight_kg": float(profile.weight_kg) if profile and profile.weight_kg is not None else None,
                 "waist_cm": float(profile.waist_cm) if profile and profile.waist_cm is not None else None,
-                "is_smoker": bool(profile.is_smoker) if profile else False,
-                "alcohol_intake": str(profile.alcohol_intake) if profile else None,
-                "has_diabetes_family_history": bool(profile.has_diabetes_family_history) if profile else False,
-                "has_hypertension_family_history": (
-                    bool(profile.has_hypertension_family_history) if profile else False
+                "current_smoker": (
+                    int(profile.current_smoker) if profile and profile.current_smoker is not None else None
                 ),
-                "is_chronic_patient": bool(profile.is_chronic_patient) if profile else False,
-                "diseases": list(profile.diseases) if profile else [],
+                "alcohol_freq_y": (
+                    int(profile.alcohol_freq_y) if profile and profile.alcohol_freq_y is not None else None
+                ),
+                "family_dm": int(profile.family_dm) if profile and profile.family_dm is not None else None,
+                "family_hp": int(profile.family_hp) if profile and profile.family_hp is not None else None,
+                "family_hl": int(profile.family_hl) if profile and profile.family_hl is not None else None,
+                "chronic_diseases": list(profile.chronic_diseases) if profile else [],
                 "medications": list(profile.medications) if profile else [],
             }
             if profile is not None
@@ -866,13 +880,11 @@ async def _decompose_query(question: str, query_type: str = "drug_food") -> list
     try:
         response = await _get_client().chat.completions.create(
             model=config.OPENAI_CHAT_MODEL,
-            messages=[{"role": "user", "content": _DECOMPOSE_PROMPT.format(
-                question=question, query_type=query_type
-            )}],
+            messages=[{"role": "user", "content": _DECOMPOSE_PROMPT.format(question=question, query_type=query_type)}],
             temperature=0,
             max_tokens=100,
         )
-        text = response.choices[0].message.content.strip()
+        text = (response.choices[0].message.content or "").strip()
         # LLM이 코드펜스나 앞뒤 텍스트를 붙여도 JSON 배열 부분만 추출
         text = re.sub(r"```json|```", "", text).strip()
         match = re.search(r"\[.*?\]", text, re.DOTALL)
@@ -935,12 +947,12 @@ async def retrieve_node(state: ChatState) -> dict[str, Any]:
             result = await retrieve(
                 query=query,
                 source_type=source_type,
-                disease=state.get("diseases"),
+                disease=diseases if diseases else None,
                 topics=state.get("topics") or None,
                 include_pediatric=is_pediatric,
             )
             # RRF 후 동일 section_id 중복 제거: 점수 높은 첫 번째 청크만 유지
-            seen_ids: set[str] = set()
+            seen_ids = set()
             deduped_chunks: list[Any] = []
             for chunk in result.chunks:
                 chunk_id = chunk.metadata.get("section_id") or str(chunk.document_id)
@@ -966,8 +978,7 @@ def _load_prompt(filename: str) -> str:
     prompt_path = Path(__file__).parent / "prompts" / filename
     if not prompt_path.exists():
         raise FileNotFoundError(
-            f"프롬프트 파일을 찾을 수 없습니다: {prompt_path}\n"
-            f"app/graphs/prompts/{filename} 파일이 있는지 확인하세요."
+            f"프롬프트 파일을 찾을 수 없습니다: {prompt_path}\napp/graphs/prompts/{filename} 파일이 있는지 확인하세요."
         )
     return prompt_path.read_text(encoding="utf-8").strip()
 
@@ -993,23 +1004,27 @@ def _format_profile_block(profile: dict[str, Any]) -> list[str]:  # noqa: C901 �
         lines.append(f"- 몸무게 {w}kg")
     if profile.get("waist_cm"):
         lines.append(f"- 허리둘레 {profile['waist_cm']}cm")
-    if profile.get("is_smoker"):
+    if profile.get("current_smoker") == 1:
         lines.append("- 흡연자")
-    alcohol = profile.get("alcohol_intake")
-    if alcohol and alcohol != "NONE":
-        lines.append(f"- 음주: {alcohol}")
+    alcohol_freq = profile.get("alcohol_freq_y")
+    # BD1_11: 1=거의매일 … 7=전혀안함, -1=모름 → 사람이 읽을 표현으로 변환(raw 코드 노출 금지)
+    if alcohol_freq is not None and alcohol_freq not in (7, -1):
+        if 1 <= alcohol_freq <= 3:
+            lines.append("- 음주: 잦음(주 1회 이상)")
+        else:
+            lines.append("- 음주: 가끔")
     fam: list[str] = []
-    if profile.get("has_diabetes_family_history"):
+    if profile.get("family_dm") == 1:
         fam.append("당뇨")
-    if profile.get("has_hypertension_family_history"):
+    if profile.get("family_hp") == 1:
         fam.append("고혈압")
+    if profile.get("family_hl") == 1:
+        fam.append("고지혈증")
     if fam:
         lines.append(f"- 가족력: {', '.join(fam)}")
-    if profile.get("is_chronic_patient"):
-        lines.append("- 만성질환 환자")
-    diseases = profile.get("diseases") or []
+    diseases = profile.get("chronic_diseases") or []
     if diseases:
-        lines.append(f"- 진단받은 질환: {', '.join(str(d) for d in diseases)}")
+        lines.append(f"- 진단받은 만성질환: {', '.join(str(d) for d in diseases)}")
     medications = profile.get("medications") or []
     if medications:
         lines.append(f"- 복용 약물: {', '.join(str(m) for m in medications)}")

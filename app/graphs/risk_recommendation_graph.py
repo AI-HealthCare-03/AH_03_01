@@ -259,12 +259,34 @@ async def validate_input(state: RiskState) -> dict[str, Any]:
         "height_cm": float(profile.height_cm) if profile.height_cm is not None else None,
         "weight_kg": float(profile.weight_kg) if profile.weight_kg is not None else None,
         "waist_cm": float(profile.waist_cm) if profile.waist_cm is not None else None,
-        "is_smoker": bool(profile.is_smoker),
-        "alcohol_intake": str(profile.alcohol_intake) if profile.alcohol_intake else None,
-        "has_diabetes_family_history": bool(profile.has_diabetes_family_history),
-        "has_hypertension_family_history": bool(profile.has_hypertension_family_history),
-        "is_chronic_patient": bool(profile.is_chronic_patient),
-        "diseases": list(profile.diseases) if profile.diseases else [],
+        "systolic_bp": float(profile.systolic_bp) if profile.systolic_bp is not None else None,
+        "diastolic_bp": float(profile.diastolic_bp) if profile.diastolic_bp is not None else None,
+        "fasting_blood_sugar": (
+            float(profile.fasting_blood_sugar) if profile.fasting_blood_sugar is not None else None
+        ),
+        "sleep_weekday": float(profile.sleep_weekday) if profile.sleep_weekday is not None else None,
+        "sleep_weekend": float(profile.sleep_weekend) if profile.sleep_weekend is not None else None,
+        "moderate_exercise_hour": (
+            float(profile.moderate_exercise_hour) if profile.moderate_exercise_hour is not None else None
+        ),
+        "smoking_risk": float(profile.smoking_risk) if profile.smoking_risk is not None else None,
+        "mid_act_day": profile.mid_act_day,
+        "walk_day": profile.walk_day,
+        "water_count": profile.water_count,
+        "family_dm": profile.family_dm,
+        "family_hp": profile.family_hp,
+        "family_hl": profile.family_hl,
+        "current_smoker": profile.current_smoker,
+        "alcohol_freq_y": profile.alcohol_freq_y,
+        "alcohol_cup": profile.alcohol_cup,
+        "fruit_freq": profile.fruit_freq,
+        "veg_freq_1": profile.veg_freq_1,
+        "out_meal_freq": profile.out_meal_freq,
+        "breakfast_freq": profile.breakfast_freq,
+        "is_menopause": profile.is_menopause,
+        "ocp_total_months": profile.ocp_total_months,
+        "anemia": profile.anemia,
+        "chronic_diseases": list(profile.chronic_diseases) if profile.chronic_diseases else [],
         "medications": list(profile.medications) if profile.medications else [],
     }
     return {
@@ -297,29 +319,69 @@ def _to_dec(v: float | None) -> Decimal | None:
     return Decimal(str(v)) if v is not None else None
 
 
+def _is_frequent_alcohol_freq(alcohol_freq_y: int | None) -> bool:
+    """KNHANES BD1_11 코드(1=거의매일…7=전혀안함, -1=모름)로 잦은 음주(주 1회 이상) 여부."""
+    if alcohol_freq_y is None or alcohol_freq_y <= 0:
+        return False
+    return 1 <= alcohol_freq_y <= 3
+
+
+def _family_history_labels(profile: dict[str, Any]) -> list[str]:
+    """가족력 코드(1=있음)를 표시용 라벨 목록으로. (-1=모름/0=없음 은 제외)"""
+    labels: list[str] = []
+    if profile.get("family_dm") == 1:
+        labels.append("당뇨")
+    if profile.get("family_hp") == 1:
+        labels.append("고혈압")
+    if profile.get("family_hl") == 1:
+        labels.append("고지혈증")
+    return labels
+
+
 async def preprocess(state: RiskState) -> dict[str, Any]:
     """프로필 + 최근 측정값을 PredictionInput 호환 dict 로 정리."""
     profile = state.get("profile") or {}
     recent = state.get("recent_records") or {}
-    # 혈압: BLOOD_PRESSURE 의 primary=수축기, secondary=이완기 (인덱싱 시 약속)
+    # 혈압: BLOOD_PRESSURE 의 primary=수축기, secondary=이완기 (인덱싱 시 약속).
+    # 프로필(UserHealthInfo)에 값이 없으면 최근 측정값(HealthRecord)으로 보완.
     bp = recent.get("BLOOD_PRESSURE", {})
     glu = recent.get("BLOOD_GLUCOSE", {})
-    hba = recent.get("HBA1C", {})
 
     snapshot = {
         "height_cm": profile.get("height_cm"),
         "weight_kg": profile.get("weight_kg"),
         "waist_cm": profile.get("waist_cm"),
-        "is_smoker": profile.get("is_smoker", False),
-        "alcohol_intake": profile.get("alcohol_intake"),
-        "has_diabetes_family_history": profile.get("has_diabetes_family_history", False),
-        "has_hypertension_family_history": profile.get("has_hypertension_family_history", False),
-        "is_chronic_patient": profile.get("is_chronic_patient", False),
-        "blood_pressure_systolic": bp.get("primary_value"),
-        "blood_pressure_diastolic": bp.get("secondary_value"),
-        "fasting_glucose": (glu.get("primary_value") if glu.get("sub_type") in (None, "FASTING") else None),
-        "postmeal_glucose": (glu.get("primary_value") if glu.get("sub_type") == "POSTMEAL" else None),
-        "hba1c": hba.get("primary_value"),
+        "systolic_bp": profile.get("systolic_bp")
+        if profile.get("systolic_bp") is not None
+        else bp.get("primary_value"),
+        "diastolic_bp": (
+            profile.get("diastolic_bp") if profile.get("diastolic_bp") is not None else bp.get("secondary_value")
+        ),
+        "fasting_blood_sugar": (
+            profile.get("fasting_blood_sugar")
+            if profile.get("fasting_blood_sugar") is not None
+            else (glu.get("primary_value") if glu.get("sub_type") in (None, "FASTING") else None)
+        ),
+        "sleep_weekday": profile.get("sleep_weekday"),
+        "sleep_weekend": profile.get("sleep_weekend"),
+        "moderate_exercise_hour": profile.get("moderate_exercise_hour"),
+        "smoking_risk": profile.get("smoking_risk"),
+        "mid_act_day": profile.get("mid_act_day"),
+        "walk_day": profile.get("walk_day"),
+        "water_count": profile.get("water_count"),
+        "family_dm": profile.get("family_dm"),
+        "family_hp": profile.get("family_hp"),
+        "family_hl": profile.get("family_hl"),
+        "current_smoker": profile.get("current_smoker"),
+        "alcohol_freq_y": profile.get("alcohol_freq_y"),
+        "alcohol_cup": profile.get("alcohol_cup"),
+        "fruit_freq": profile.get("fruit_freq"),
+        "veg_freq_1": profile.get("veg_freq_1"),
+        "out_meal_freq": profile.get("out_meal_freq"),
+        "breakfast_freq": profile.get("breakfast_freq"),
+        "is_menopause": profile.get("is_menopause"),
+        "ocp_total_months": profile.get("ocp_total_months"),
+        "anemia": profile.get("anemia"),
     }
     return {"feature_snapshot": snapshot}
 
@@ -336,16 +398,29 @@ def _build_prediction_input(disease_type: DiseaseType, snapshot: dict[str, Any])
         height_cm=_to_dec(snapshot.get("height_cm")),
         weight_kg=_to_dec(snapshot.get("weight_kg")),
         waist_cm=_to_dec(snapshot.get("waist_cm")),
-        is_smoker=bool(snapshot.get("is_smoker", False)),
-        alcohol_intake=snapshot.get("alcohol_intake"),
-        has_diabetes_family_history=bool(snapshot.get("has_diabetes_family_history", False)),
-        has_hypertension_family_history=bool(snapshot.get("has_hypertension_family_history", False)),
-        is_chronic_patient=bool(snapshot.get("is_chronic_patient", False)),
-        blood_pressure_systolic=_to_dec(snapshot.get("blood_pressure_systolic")),
-        blood_pressure_diastolic=_to_dec(snapshot.get("blood_pressure_diastolic")),
-        fasting_glucose=_to_dec(snapshot.get("fasting_glucose")),
-        postmeal_glucose=_to_dec(snapshot.get("postmeal_glucose")),
-        hba1c=_to_dec(snapshot.get("hba1c")),
+        systolic_bp=_to_dec(snapshot.get("systolic_bp")),
+        diastolic_bp=_to_dec(snapshot.get("diastolic_bp")),
+        fasting_blood_sugar=_to_dec(snapshot.get("fasting_blood_sugar")),
+        sleep_weekday=_to_dec(snapshot.get("sleep_weekday")),
+        sleep_weekend=_to_dec(snapshot.get("sleep_weekend")),
+        moderate_exercise_hour=_to_dec(snapshot.get("moderate_exercise_hour")),
+        smoking_risk=_to_dec(snapshot.get("smoking_risk")),
+        mid_act_day=snapshot.get("mid_act_day"),
+        walk_day=snapshot.get("walk_day"),
+        water_count=snapshot.get("water_count"),
+        family_dm=snapshot.get("family_dm"),
+        family_hp=snapshot.get("family_hp"),
+        family_hl=snapshot.get("family_hl"),
+        current_smoker=snapshot.get("current_smoker"),
+        alcohol_freq_y=snapshot.get("alcohol_freq_y"),
+        alcohol_cup=snapshot.get("alcohol_cup"),
+        fruit_freq=snapshot.get("fruit_freq"),
+        veg_freq_1=snapshot.get("veg_freq_1"),
+        out_meal_freq=snapshot.get("out_meal_freq"),
+        breakfast_freq=snapshot.get("breakfast_freq"),
+        is_menopause=snapshot.get("is_menopause"),
+        ocp_total_months=snapshot.get("ocp_total_months"),
+        anemia=snapshot.get("anemia"),
     )
 
 
@@ -563,16 +638,11 @@ def _format_user_profile_block(state: RiskState) -> str:
         lines.append(f"- 키 {h}cm, 몸무게 {w}kg, BMI {bmi:.1f}")
     if profile.get("waist_cm"):
         lines.append(f"- 허리둘레 {profile['waist_cm']}cm")
-    if profile.get("is_smoker"):
-        lines.append("- 흡연자")
-    alcohol = profile.get("alcohol_intake")
-    if alcohol and alcohol != "NONE":
-        lines.append(f"- 음주: {alcohol}")
-    fam = []
-    if profile.get("has_diabetes_family_history"):
-        fam.append("당뇨")
-    if profile.get("has_hypertension_family_history"):
-        fam.append("고혈압")
+    if profile.get("current_smoker") == 1:
+        lines.append("- 현재 흡연")
+    if _is_frequent_alcohol_freq(profile.get("alcohol_freq_y")):
+        lines.append("- 잦은 음주 빈도")
+    fam = _family_history_labels(profile)
     if fam:
         lines.append(f"- 가족력: {', '.join(fam)}")
     for rt, rec in recent.items():
