@@ -121,16 +121,16 @@ export async function checkEmailVerified(email: string): Promise<boolean> {
 }
 
 /**
- * 비밀번호 재설정 메일 발송
- * TODO(backend): /api/v1/auth/reset-password 엔드포인트 추가 필요
+ * 비밀번호 재설정 (비밀번호 찾기)
+ * POST /api/v1/auth/reset-password — 이메일 본인 인증 + email/name 일치 필수.
+ * 새 비밀번호가 기존과 같으면 "이미 사용한 번호입니다"(400).
  */
-export async function requestPasswordReset(
-  _email: string,
-  _phone_number: string
+export async function resetPassword(
+  email: string,
+  name: string,
+  new_password: string
 ): Promise<void> {
-  throw new Error(
-    "TODO(backend): /api/v1/auth/reset-password 엔드포인트 추가 필요"
-  );
+  await apiClient.post("/api/v1/auth/reset-password", { email, name, new_password });
 }
 
 /**
