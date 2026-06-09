@@ -13,6 +13,7 @@ from app.dtos.auth import (
     LoginRequest,
     LoginResponse,
     PreviousAccountResponse,
+    ResetPasswordRequest,
     RestoredAccountResponse,
     RestoreRequest,
     SendVerificationRequest,
@@ -108,6 +109,18 @@ async def destroy_previous_account(
     """탈퇴 계정 즉시 영구 파기('새로 시작하기'). 이메일 본인 인증 필수. 미인증 400 / 미존재 404 / 정지 403."""
     await auth_service.destroy_previous_account(str(payload.email))
     return Response(content={"detail": "이전 계정이 파기되었습니다."}, status_code=status.HTTP_200_OK)
+
+
+@auth_router.post("/reset-password", status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
+async def reset_password(
+    request: Request,
+    payload: ResetPasswordRequest,
+    auth_service: Annotated[AuthService, Depends(AuthService)],
+) -> Response:
+    """비밀번호 재설정(비밀번호 찾기). 이메일 본인 인증 + email/name 일치 필수. 기존과 동일한 비번 거부."""
+    await auth_service.reset_password(str(payload.email), payload.name, payload.new_password)
+    return Response(content={"detail": "비밀번호가 변경되었습니다."}, status_code=status.HTTP_200_OK)
 
 
 @auth_router.post("/email/send-verification", status_code=status.HTTP_202_ACCEPTED)
