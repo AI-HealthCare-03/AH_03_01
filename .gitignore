@@ -7,6 +7,7 @@ docs/
 /RAG/
 prediction model/
 test_imgs/
+design/
 ai_worker/rag/chroma_db/
 ai_worker/rag/output/chunks.json
 ai_worker/rag/output/ragas_result.json
@@ -30,6 +31,7 @@ __pycache__/
 *.pyd
 
 # Environment
+.ssh/
 .env
 .env.*
 *.env
