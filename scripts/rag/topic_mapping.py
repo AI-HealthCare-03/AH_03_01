@@ -5,14 +5,27 @@ MD 파일이 추가/변경되면 이 파일만 수정
 index_documents.py 는 이 파일을 import해서 사용
 
 topic 값:
-    diagnosis   — 진단 기준·선별검사·분류
-    medication  — 약물치료·처방·부작용
-    lifestyle   — 식사·운동·금연·절주·체중관리
+    diagnosis    — 진단 기준·선별검사·분류
+    medication   — 약물치료·처방·부작용
+    lifestyle    — 복합 생활습관 (자기관리·수면·스트레스·환자중심치료 등 단일 서브토픽으로 분류 불가한 경우)
+    exercise     — 운동요법 (유산소·근력·신체활동 권고)
+    diet         — 식사요법·영양 (저염·저지방·저당·식이패턴 포함)
+    weight       — 체중/비만 관리
+    smoking      — 금연
+    alcohol      — 절주
     complication — 합병증·동반질환
-    risk        — 위험도 평가·위험인자
-    monitoring  — 혈압/혈당 측정·추적관리·모니터링
-    service     — 서비스 이용안내·기능설명·FAQ
-    challenge   — 챌린지 참여·인증·보상·추천
+    risk         — 위험도 평가·위험인자
+    monitoring   — 혈압/혈당 측정·추적관리·모니터링
+    service      — 서비스 이용안내·기능설명·FAQ
+    challenge    — 챌린지 참여·인증·보상·추천
+
+lifestyle 서브토픽 분류 기준:
+    exercise  → 운동/신체활동 방법·효과·처방이 섹션의 핵심일 때
+    diet      → 식품 선택·영양소·식사패턴·염분 제한이 핵심일 때
+    weight    → 체중 감량·비만도 측정·BMI 기준이 핵심일 때
+    smoking   → 흡연 영향·금연 방법이 핵심일 때
+    alcohol   → 음주 영향·절주 방법이 핵심일 때
+    lifestyle → 위 5개에 명확히 속하지 않거나 2개 이상 복합인 경우
 """
 
 from __future__ import annotations
@@ -34,8 +47,8 @@ _DM2025: dict[str, list[str]] = {
     "DM2025_SEC_0013": ["monitoring"],                         # 4-2. 연속혈당측정
     "DM2025_SEC_0015": ["lifestyle"],                          # 5-1. 당뇨병 자기관리
     "DM2025_SEC_0016": ["lifestyle", "medication"],            # 5-2. 저혈당관리
-    "DM2025_SEC_0017": ["lifestyle"],                          # 5-3. 의학영양요법
-    "DM2025_SEC_0018": ["lifestyle"],                          # 5-4. 운동요법
+    "DM2025_SEC_0017": ["diet"],                               # 5-3. 의학영양요법
+    "DM2025_SEC_0018": ["exercise"],                           # 5-4. 운동요법
     "DM2025_SEC_0019": ["medication"],                         # Chapter 6. 당뇨병 약물치료
     "DM2025_SEC_0020": ["medication"],                         # 6-1. 1형당뇨병의 약물치료
     "DM2025_SEC_0021": ["medication"],                         # 6-2. 2형당뇨병의 약물치료
@@ -49,7 +62,7 @@ _DM2025: dict[str, list[str]] = {
     "DM2025_SEC_0029": ["complication"],                       # 8-3. 당뇨병망막병증
     "DM2025_SEC_0030": ["complication", "medication"],         # 8-4. 당뇨병케토산증
     "DM2025_SEC_0031": ["complication", "lifestyle"],          # Chapter 9. 동반 대사질환관리
-    "DM2025_SEC_0032": ["lifestyle", "complication"],          # 9-1. 비만 관리
+    "DM2025_SEC_0032": ["weight", "complication"],             # 9-1. 비만 관리
     "DM2025_SEC_0033": ["complication"],                       # 9-2. 대사이상지방간질환
     "DM2025_SEC_0034": ["diagnosis", "medication"],            # Chapter 10. 소아청소년 당뇨병
     "DM2025_SEC_0035": ["medication", "lifestyle"],            # Chapter 11. 노인 당뇨병관리
@@ -65,7 +78,7 @@ _DM2025: dict[str, list[str]] = {
     "DM2025_FIG_001": ["diagnosis"],
     "DM2025_FIG_002": ["diagnosis"],
     "DM2025_FIG_003": ["diagnosis"],
-    "DM2025_FIG_004": ["lifestyle", "monitoring"],
+    "DM2025_FIG_004": ["monitoring", "medication"],           # AGP 보고서 예시 / 저혈당 대처법 Rule of 15
     "DM2025_FIG_006": ["medication"],
     "DM2025_FIG_007": ["medication"],
     "DM2025_FIG_008": ["medication"],
@@ -92,8 +105,8 @@ _KSH2026: dict[str, list[str]] = {
     "KSH2026_SEC_0007": ["risk"],                              # 2. 고혈압의 중요성
     "KSH2026_SEC_0008": ["risk"],                              # 3. 고혈압의 유병률
     "KSH2026_SEC_0009": ["monitoring"],                        # 4. 고혈압의 관리 현황
-    "KSH2026_SEC_0010": ["lifestyle"],                         # 5. 소금 섭취와 고혈압
-    "KSH2026_SEC_0011": ["risk", "lifestyle"],                 # 6. 대사증후군, 비만과 고혈압
+    "KSH2026_SEC_0010": ["diet"],                              # 5. 소금 섭취와 고혈압
+    "KSH2026_SEC_0011": ["risk", "weight"],                   # 6. 대사증후군, 비만과 고혈압
     "KSH2026_SEC_0012": ["risk"],                              # 7. 심혈관질환 위험 점수
     "KSH2026_SEC_0013": ["diagnosis", "monitoring"],           # 8. 고혈압의 진단과 혈압 측정
     "KSH2026_SEC_0014": ["diagnosis"],                         # 8.1. 선별 검사와 진단
@@ -144,13 +157,13 @@ _KSH2026: dict[str, list[str]] = {
     "KSH2026_SEC_0059": ["medication", "complication"],        # 10.3.4. 만성콩팥병 동반 고혈압
     "KSH2026_SEC_0060": ["medication"],                        # 10.3.5. 치료 혈압 하한치
     "KSH2026_SEC_0061": ["medication", "monitoring"],          # 10.3.6. 측정 방식별 목표혈압
-    "KSH2026_SEC_0062": ["lifestyle"],                         # 11. 비약물치료 및 생활요법
-    "KSH2026_SEC_0063": ["lifestyle"],                         # 11.1. 체중 조절
-    "KSH2026_SEC_0064": ["lifestyle"],                         # 11.2. 소금 섭취 제한
-    "KSH2026_SEC_0065": ["lifestyle"],                         # 11.3. 절주
-    "KSH2026_SEC_0066": ["lifestyle"],                         # 11.4. 운동
-    "KSH2026_SEC_0067": ["lifestyle"],                         # 11.5. 금연
-    "KSH2026_SEC_0068": ["lifestyle"],                         # 11.6. 건강한 식사요법
+    "KSH2026_SEC_0062": ["lifestyle"],                         # 11. 비약물치료 및 생활요법 (총론)
+    "KSH2026_SEC_0063": ["weight"],                            # 11.1. 체중 조절
+    "KSH2026_SEC_0064": ["diet"],                              # 11.2. 소금 섭취 제한
+    "KSH2026_SEC_0065": ["alcohol"],                           # 11.3. 절주
+    "KSH2026_SEC_0066": ["exercise"],                          # 11.4. 운동
+    "KSH2026_SEC_0067": ["smoking"],                           # 11.5. 금연
+    "KSH2026_SEC_0068": ["diet"],                              # 11.6. 건강한 식사요법
     "KSH2026_SEC_0069": ["lifestyle"],                         # 11.7. 마음 요법
     "KSH2026_SEC_0070": ["medication"],                        # 12. 약물 치료
     "KSH2026_SEC_0071": ["medication"],                        # 12.1. 고혈압약 처방 원칙
@@ -181,7 +194,7 @@ _KSH2026: dict[str, list[str]] = {
     "KSH2026_SEC_0096": ["diagnosis", "medication"],           # 13.1.3. 가면고혈압
     "KSH2026_SEC_0097": ["monitoring", "medication"],          # 13.2. 야간고혈압/아침고혈압
     "KSH2026_SEC_0098": ["risk", "medication"],                # 13.3. 대사증후군과 고혈압
-    "KSH2026_SEC_0099": ["lifestyle", "medication"],           # 13.4. 비만과 고혈압
+    "KSH2026_SEC_0099": ["weight", "medication"],              # 13.4. 비만과 고혈압
     "KSH2026_SEC_0100": ["medication", "complication"],        # 13.5. 당뇨병과 고혈압
     "KSH2026_SEC_0101": ["medication"],                        # 13.6. 노인 고혈압
     "KSH2026_SEC_0102": ["medication"],                        # 13.7. 젊은 연령 고혈압
@@ -241,7 +254,7 @@ _KSH2026: dict[str, list[str]] = {
     "KSH2026_FIG_012": ["diagnosis"],                          # 일차성 알도스테론증 진단 알고리즘
     "KSH2026_FIG_013": ["medication"],                         # 고혈압 치료계획 알고리즘
     "KSH2026_FIG_014": ["medication", "monitoring"],           # 목표혈압 도달 임상 알고리즘
-    "KSH2026_FIG_015": ["lifestyle"],                          # 비약물치료 및 생활요법
+    "KSH2026_FIG_015": ["lifestyle"],                          # 비약물치료 및 생활요법 (복합)
     "KSH2026_FIG_016": ["medication", "risk"],                 # 위험도별 단일/병용약 선택
     "KSH2026_FIG_017": ["medication"],                         # 권장 병용요법
     "KSH2026_FIG_018": ["medication", "diagnosis"],            # 난치성 고혈압 진단 및 치료 알고리즘
@@ -262,29 +275,29 @@ _KSOLA2022: dict[str, list[str]] = {
     "KSOLA2022_SEC_0051": ["risk"],
     "KSOLA2022_SEC_0060_A": ["monitoring"],
     "KSOLA2022_SEC_0060_B": ["medication", "monitoring"],
-    "KSOLA2022_SEC_0070": ["lifestyle"],
-    "KSOLA2022_SEC_0071_A": ["lifestyle"],
-    "KSOLA2022_SEC_0071_B": ["lifestyle"],
-    "KSOLA2022_SEC_0071_C": ["lifestyle"],
-    "KSOLA2022_SEC_0071_D": ["lifestyle"],
-    "KSOLA2022_SEC_0071_E": ["lifestyle"],
-    "KSOLA2022_SEC_0071_F": ["lifestyle"],
-    "KSOLA2022_SEC_0073_A": ["lifestyle"],
-    "KSOLA2022_SEC_0073_B": ["lifestyle"],
-    "KSOLA2022_SEC_0073_C": ["lifestyle", "medication"],
-    "KSOLA2022_SEC_0073_D": ["lifestyle"],
-    "KSOLA2022_SEC_0074": ["lifestyle"],
-    "KSOLA2022_SEC_0075_A": ["lifestyle"],
-    "KSOLA2022_SEC_0076": ["lifestyle"],
+    "KSOLA2022_SEC_0070": ["diet"],                            # 1. 식사요법
+    "KSOLA2022_SEC_0071_A": ["diet"],                          # 1) 고콜레스테롤혈증 식사요법
+    "KSOLA2022_SEC_0071_B": ["diet"],                          # ② 포화지방산
+    "KSOLA2022_SEC_0071_C": ["diet"],                          # (4) 탄수화물 및 식이섬유
+    "KSOLA2022_SEC_0071_D": ["diet"],                          # ③ 불포화지방산
+    "KSOLA2022_SEC_0071_E": ["diet"],                          # 3) 저HDL콜레스테롤혈증
+    "KSOLA2022_SEC_0071_F": ["diet"],                          # 5) 우리나라 식사패턴의 특징 및 식사가이드
+    "KSOLA2022_SEC_0073_A": ["exercise"],                      # 2. 운동요법
+    "KSOLA2022_SEC_0073_B": ["exercise"],                      # (4) 운동의 혈중지질개선 효과 기전
+    "KSOLA2022_SEC_0073_C": ["exercise", "medication"],        # (3) 고려사항 — 운동+약물 복합
+    "KSOLA2022_SEC_0073_D": ["exercise"],                      # ② 운동을 증가시키기 위한 조언들
+    "KSOLA2022_SEC_0074": ["exercise"],                        # 표 3-3. 이상지질혈증 운동 처방 요약
+    "KSOLA2022_SEC_0075_A": ["smoking"],                       # 3. 금연
+    "KSOLA2022_SEC_0076": ["alcohol"],                         # 4. 절주
     "KSOLA2022_SEC_0084_F": ["medication"],
     "KSOLA2022_SEC_0105_A": ["complication", "medication"],
     "KSOLA2022_SEC_0105_B": ["medication"],
     "KSOLA2022_SEC_0105_C": ["medication"],
     "KSOLA2022_SEC_0105_D": ["medication"],
-    "KSOLA2022_SEC_0107_A": ["diagnosis", "lifestyle"],
+    "KSOLA2022_SEC_0107_A": ["diagnosis", "lifestyle"],        # 6. 소아청소년의 이상지질혈증 (총론)
     "KSOLA2022_SEC_0107_B": ["diagnosis"],
-    "KSOLA2022_SEC_0107_C": ["medication", "lifestyle"],
-    "KSOLA2022_SEC_0107_D": ["lifestyle"],
+    "KSOLA2022_SEC_0107_C": ["diet", "medication"],            # 3) 소아청소년의 치료 — 식사+약물
+    "KSOLA2022_SEC_0107_D": ["exercise"],                      # (2) 생활습관 — 신체활동
     "KSOLA2022_SEC_0108": ["diagnosis"],
     "KSOLA2022_SEC_0109": ["diagnosis"],
     "KSOLA2022_SEC_0110": ["risk"],
@@ -297,7 +310,7 @@ _KSOLA2022: dict[str, list[str]] = {
     "DYS_FIG_002": ["medication", "risk"],
     "DYS_FIG_003": ["medication", "risk"],
     "DYS_FIG_004": ["risk"],
-    "DYS_FIG_005": ["lifestyle"],
+    "DYS_FIG_005": ["diet"],                                   # 그림 5. 식사요법
     "DYS_FIG_005A": ["diagnosis", "medication"],
     "DYS_FIG_005B": ["diagnosis", "medication"],
     "DYS_FIG_007": ["diagnosis"],
@@ -349,18 +362,18 @@ _CHALLENGE_CATALOG: dict[str, list[str]] = {
     "CHALL_SEC_0001": ["challenge", "service"],                # 챌린지 시스템 개요 및 참여 방식
     "CHALL_SEC_0002": ["challenge", "service"],                # 챌린지 보상 체계
     "CHALL_SEC_0003": ["challenge", "service"],                # 챌린지 인증 방식 개요
-    "CHALL_SEC_0004": ["challenge", "lifestyle"],              # 걷기 챌린지
-    "CHALL_SEC_0005": ["challenge", "lifestyle"],              # 러닝 챌린지
-    "CHALL_SEC_0006": ["challenge", "lifestyle"],              # 자전거 챌린지
-    "CHALL_SEC_0007": ["challenge", "lifestyle"],              # 근력 운동 챌린지
-    "CHALL_SEC_0008": ["challenge", "lifestyle"],              # 수영 챌린지
-    "CHALL_SEC_0009": ["challenge", "lifestyle"],              # 기타 운동 챌린지
-    "CHALL_SEC_0010": ["challenge", "lifestyle"],              # 물 마시기 챌린지
+    "CHALL_SEC_0004": ["challenge", "exercise"],               # 걷기 챌린지
+    "CHALL_SEC_0005": ["challenge", "exercise"],               # 러닝 챌린지
+    "CHALL_SEC_0006": ["challenge", "exercise"],               # 자전거 챌린지
+    "CHALL_SEC_0007": ["challenge", "exercise"],               # 근력 운동 챌린지
+    "CHALL_SEC_0008": ["challenge", "exercise"],               # 수영 챌린지
+    "CHALL_SEC_0009": ["challenge", "exercise"],               # 기타 운동 챌린지
+    "CHALL_SEC_0010": ["challenge", "diet"],                   # 물 마시기 챌린지
     "CHALL_SEC_0011": ["challenge", "lifestyle"],              # 수면 챌린지
-    "CHALL_SEC_0012": ["challenge", "lifestyle"],              # 식단 챌린지
-    "CHALL_SEC_0013": ["challenge", "lifestyle"],              # 체중 관리 챌린지
-    "CHALL_SEC_0014": ["challenge", "lifestyle"],              # 금연 챌린지
-    "CHALL_SEC_0015": ["challenge", "lifestyle"],              # 금주 챌린지
+    "CHALL_SEC_0012": ["challenge", "diet"],                   # 식단 챌린지
+    "CHALL_SEC_0013": ["challenge", "weight"],                 # 체중 관리 챌린지
+    "CHALL_SEC_0014": ["challenge", "smoking"],                # 금연 챌린지
+    "CHALL_SEC_0015": ["challenge", "alcohol"],                # 금주 챌린지
     "CHALL_SEC_0016": ["challenge", "lifestyle"],              # 명상 챌린지
     "CHALL_SEC_0017": ["challenge", "lifestyle", "complication"],  # 질환 관리 챌린지 — 당뇨발
     "CHALL_SEC_0018": ["challenge", "service"],                # 그룹 챌린지 운영 규칙
