@@ -51,3 +51,12 @@ export interface CommentCreateRequest {
   content: string;
   parent_id?: number;
 }
+
+export type ReportTargetType = "POST" | "COMMENT" | "VERIFICATION";
+export type ReportReason = "ABUSE" | "MISINFORMATION" | "PRIVACY" | "AD" | "FRAUD" | "ETC";
+
+export interface ReportCreateRequest {
+  target_type: ReportTargetType;
+  target_id: number;
+  reason: ReportReason;
+}

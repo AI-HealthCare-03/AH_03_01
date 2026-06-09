@@ -8,6 +8,7 @@ import { createReply } from "@/lib/api/challenge";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
+import ReportModal from "@/components/community/ReportModal";
 import { format, parseISO } from "@/lib/dateUtils";
 import type { VerificationFeedItem, ReactionWithReplies } from "@/types/challenge";
 
@@ -30,9 +31,7 @@ function CommentItem({
   const [submitting, setSubmitting] = useState(false);
   const { showToast } = useToast();
 
-  const handleReport = () => {
-    showToast("신고가 접수되었어요.", "info");
-  };
+  const handleReport = (id: number) => setReportId(id);
 
   const handleReply = async () => {
     if (!replyText.trim()) return;
@@ -78,7 +77,7 @@ function CommentItem({
             </button>
             <button
               type="button"
-              onClick={handleReport}
+              onClick={() => handleReport(comment.id)}
               className="text-xs text-text-tertiary hover:text-status-danger"
             >
               신고
@@ -109,7 +108,7 @@ function CommentItem({
                 </p>
                 <button
                   type="button"
-                  onClick={handleReport}
+                  onClick={() => handleReport(reply.id)}
                   className="text-xs text-text-tertiary hover:text-status-danger mt-0.5"
                 >
                   신고
@@ -154,6 +153,7 @@ export default function CommentSheet({ post, onClose }: CommentSheetProps) {
   const [commentText, setCommentText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
+  const [reportId, setReportId] = useState<number | null>(null);
 
   useEffect(() => {
     if (post) {
@@ -187,6 +187,10 @@ export default function CommentSheet({ post, onClose }: CommentSheetProps) {
 
   return (
     <>
+      {reportId !== null && (
+        <ReportModal targetType="COMMENT" targetId={reportId} onClose={() => setReportId(null)} />
+      )}
+
       {/* 딤 배경 */}
       <div
         className="fixed inset-0 bg-black/40 z-40"

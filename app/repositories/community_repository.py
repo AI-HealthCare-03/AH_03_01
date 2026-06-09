@@ -4,7 +4,7 @@ from uuid import UUID
 
 from tortoise.functions import Count
 
-from app.models.community import Comment, Post, PostCategory
+from app.models.community import Comment, Post, PostCategory, Report, ReportReason, ReportTargetType
 
 
 class PostRepository:
@@ -71,3 +71,18 @@ class CommentRepository:
 
     async def delete_comment(self, comment: Comment) -> None:
         await comment.delete()
+
+
+class ReportRepository:
+    async def create_report(
+        self, reporter_id: UUID, target_type: ReportTargetType, target_id: int, reason: ReportReason
+    ) -> Report:
+        report, created = await Report.get_or_create(
+            reporter_id=reporter_id,
+            target_type=target_type,
+            target_id=target_id,
+            defaults={"reason": reason},
+        )
+        if not created:
+            raise ValueError("already_reported")
+        return report

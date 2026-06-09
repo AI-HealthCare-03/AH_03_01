@@ -13,12 +13,13 @@ from app.dtos.community import (
     PostCreateRequest,
     PostDetailResponse,
     PostListItem,
+    ReportCreateRequest,
     PostListResponse,
     PostUpdateRequest,
 )
 from app.models.community import Comment, Post, PostCategory
 from app.models.users import User
-from app.repositories.community_repository import CommentRepository, PostRepository
+from app.repositories.community_repository import CommentRepository, PostRepository, ReportRepository
 
 posts_router = APIRouter(prefix="/posts", tags=["community"])
 
@@ -163,3 +164,24 @@ async def delete_comment(
     if comment.author_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="삭제 권한이 없습니다.")
     await repo.delete_comment(comment)
+
+
+# ── 신고 ─────────────────────────────────────────────────────────────────────
+
+reports_router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+@reports_router.post("", status_code=status.HTTP_201_CREATED)
+async def create_report(
+    body: ReportCreateRequest, current_user: User = Depends(get_request_user)  # noqa: B008
+) -> dict[str, str]:
+    try:
+        await ReportRepository().create_report(
+            reporter_id=current_user.id,
+            target_type=body.target_type,
+            target_id=body.target_id,
+            reason=body.reason,
+        )
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 신고한 대상입니다.")
+    return {"message": "신고가 접수되었습니다."}

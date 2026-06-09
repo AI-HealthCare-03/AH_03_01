@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
 import { format, parseISO } from "@/lib/dateUtils";
 import { useMe } from "@/hooks/queries/useMe";
+import ReportModal from "@/components/community/ReportModal";
 import type { VerificationFeedItem, ReactionWithReplies, VerificationReaction } from "@/types/challenge";
 
 /* =========================================
@@ -61,11 +62,13 @@ function CommentItem({
   verificationId,
   myUserId,
   onSuccess,
+  onReport,
 }: {
   comment: ReactionWithReplies;
   verificationId: number;
   myUserId: string | undefined;
   onSuccess: () => void;
+  onReport: (id: number) => void;
 }) {
   const [showReply, setShowReply] = useState(false);
   const [replyText, setReplyText] = useState("");
@@ -151,7 +154,7 @@ function CommentItem({
             ) : (
               <button
                 type="button"
-                onClick={() => showToast("신고가 접수되었어요.", "info")}
+                onClick={() => onReport(comment.id)}
                 className="text-xs text-text-tertiary hover:text-status-danger"
               >
                 신고
@@ -190,7 +193,7 @@ function CommentItem({
                 ) : (
                   <button
                     type="button"
-                    onClick={() => showToast("신고가 접수되었어요.", "info")}
+                    onClick={() => onReport(reply.id)}
                     className="text-xs text-text-tertiary hover:text-status-danger mt-1"
                   >
                     신고
@@ -243,6 +246,8 @@ export default function FeedDetailPage({ params }: PageProps) {
   const router = useRouter();
   const qc = useQueryClient();
   const { showToast } = useToast();
+
+  const [reportTarget, setReportTarget] = useState<{ type: "VERIFICATION" | "COMMENT"; id: number } | null>(null);
 
   const { data: feedData } = useChallengeFeed(challengeId);
   const { data: reactionsData, isLoading: commentsLoading } = useVerificationComments(verificationIdNum);
@@ -308,6 +313,13 @@ export default function FeedDetailPage({ params }: PageProps) {
 
   return (
     <div className="max-w-2xl mx-auto px-5 py-6">
+      {reportTarget !== null && (
+        <ReportModal
+          targetType={reportTarget.type}
+          targetId={reportTarget.id}
+          onClose={() => setReportTarget(null)}
+        />
+      )}
       {/* 뒤로가기 */}
       <button
         type="button"
@@ -354,8 +366,8 @@ export default function FeedDetailPage({ params }: PageProps) {
             </p>
           )}
 
-          {/* 좋아요 */}
-          <div className="flex items-center gap-1 pt-3 border-t border-border">
+          {/* 좋아요 + 신고 */}
+          <div className="flex items-center justify-between pt-3 border-t border-border">
             <button
               type="button"
               onClick={handleLike}
@@ -368,6 +380,15 @@ export default function FeedDetailPage({ params }: PageProps) {
               <span className="text-base">{liked ? "❤️" : "🤍"}</span>
               {likeCount > 0 && <span className="text-xs font-medium">{likeCount}</span>}
             </button>
+            {me && me.id !== post.user_id && (
+              <button
+                type="button"
+                onClick={() => setReportTarget({ type: "VERIFICATION", id: verificationIdNum })}
+                className="text-xs text-text-tertiary hover:text-status-danger"
+              >
+                신고
+              </button>
+            )}
           </div>
         </div>
       ) : (
@@ -398,6 +419,7 @@ export default function FeedDetailPage({ params }: PageProps) {
                 onSuccess={() =>
                   qc.invalidateQueries({ queryKey: [COMMENTS_KEY, verificationIdNum] })
                 }
+                onReport={(id) => setReportTarget({ type: "COMMENT", id })}
               />
             ))}
           </div>

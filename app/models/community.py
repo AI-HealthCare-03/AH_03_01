@@ -7,6 +7,21 @@ if TYPE_CHECKING:
     from app.models.users import User
 
 
+class ReportTargetType(StrEnum):
+    POST = "POST"
+    COMMENT = "COMMENT"
+    VERIFICATION = "VERIFICATION"
+
+
+class ReportReason(StrEnum):
+    ABUSE = "ABUSE"
+    MISINFORMATION = "MISINFORMATION"
+    PRIVACY = "PRIVACY"
+    AD = "AD"
+    FRAUD = "FRAUD"
+    ETC = "ETC"
+
+
 class PostCategory(StrEnum):
     NOTICE = "NOTICE"
     INFO = "INFO"
@@ -49,3 +64,18 @@ class Comment(models.Model):
     class Meta:
         table = "community_comments"
         ordering = ["created_at"]
+
+
+class Report(models.Model):
+    id = fields.BigIntField(primary_key=True)
+    target_type = fields.CharEnumField(ReportTargetType, max_length=20)
+    target_id = fields.BigIntField()
+    reason = fields.CharEnumField(ReportReason, max_length=20)
+    reporter: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(
+        "models.User", related_name="reports", on_delete=fields.CASCADE
+    )
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "community_reports"
+        unique_together = (("reporter", "target_type", "target_id"),)
