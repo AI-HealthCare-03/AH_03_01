@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useLatestPredictions } from "@/hooks/queries/useLatestPredictions";
 import { usePredictionsList } from "@/hooks/queries/usePredictionsList";
 import { useChallengeRecommendations } from "@/hooks/queries/useChallengeRecommendations";
+import { useRiskRecommendation } from "@/hooks/queries/useRiskRecommendation";
 import RiskDonut from "@/components/home/RiskDonut";
-import type { RiskGrade, DiseaseType } from "@/types/api";
+import { CATEGORY_CONFIG } from "@/components/challenges/common/ChallengeCategoryIcon";
+import type { RiskGrade, DiseaseType, ChallengeCategory } from "@/types/api";
 import type { PredictionDetail } from "@/types/health";
 
 /* ── 상수 ──────────────────────────── */
@@ -53,33 +55,246 @@ function ContributingBars({ factors }: ContributingBarsProps) {
     );
   }
 
+  const maxWeight = Math.max(...factors.map((f) => Math.abs(f.weight)), 1);
+
   return (
     <div className="space-y-3">
       {factors.map((f) => {
-        const pct = Math.min(Math.round(f.weight * 100), 100);
+        const pct = Math.min(Math.round((Math.abs(f.weight) / maxWeight) * 100), 100);
+        const label = f.description
+          ? f.description.replace(/\s*(위험\s*(증가|감소)[↑↓]?)?\s*$/, "").trim()
+          : f.factor;
+        const isRisk = f.weight > 0;
+        const direction = isRisk ? "위험 증가↑" : "위험 감소↓";
+        // 위험 증가 → 빨간 막대 / 위험 감소 → 파란 막대
+        const barColor = isRisk ? "bg-status-danger" : "bg-blue-400";
+
         return (
           <div key={f.factor}>
             <div className="flex justify-between mb-1">
-              <span className="text-sm text-text-primary font-medium">{f.factor}</span>
+              <span className="text-sm text-text-primary font-medium">{label}</span>
               <span className="text-xs font-bold text-text-secondary">{pct}점</span>
             </div>
             <div className="h-2 bg-surface rounded-full overflow-hidden">
               <div
-                className="h-full bg-brand-black rounded-full transition-all duration-500"
+                className={`h-full ${barColor} rounded-full transition-all duration-500`}
                 style={{ width: `${pct}%` }}
                 role="progressbar"
                 aria-valuenow={pct}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-label={`${f.factor} 기여도`}
+                aria-label={`${label} 기여도`}
               />
             </div>
-            {f.description && (
-              <p className="text-xs text-text-tertiary mt-0.5">{f.description}</p>
-            )}
+            <p className="text-xs text-text-tertiary mt-0.5">{direction}</p>
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/* ── 한눈에 보는 요약 카드 ─────────── */
+
+interface SummaryCardsProps {
+  highestDiseaseLabel: string;
+  highestGrade: RiskGrade;
+  topFactor: string | null;
+  challengeGoal: string | null;
+}
+
+const GRADE_COLOR: Record<RiskGrade, string> = {
+  NORMAL: "text-status-success",
+  CAUTION: "text-status-warning",
+  RISK: "text-status-danger",
+  DANGER: "text-status-danger",
+  HIGH_RISK: "text-status-danger",
+  HIGH_DANGER: "text-status-danger",
+};
+
+const GRADE_LABEL: Record<RiskGrade, string> = {
+  NORMAL: "정상", CAUTION: "주의", RISK: "위험",
+  DANGER: "위험", HIGH_RISK: "고위험", HIGH_DANGER: "고위험",
+};
+
+function SummaryCards({ highestDiseaseLabel, highestGrade, topFactor, challengeGoal }: SummaryCardsProps) {
+  const cards = [
+    {
+      icon: "🎯",
+      title: "가장 우선 관리",
+      value: highestDiseaseLabel || "—",
+      sub: GRADE_LABEL[highestGrade],
+      subColor: GRADE_COLOR[highestGrade],
+    },
+    {
+      icon: "⚠️",
+      title: "가장 큰 영향 요인",
+      value: topFactor || "—",
+      sub: topFactor ? "위험 기여 1위" : "데이터 입력 필요",
+      subColor: "text-text-tertiary",
+    },
+    {
+      icon: "🏃",
+      title: "이번 주 추천 목표",
+      value: challengeGoal || "챌린지 참여하기",
+      sub: "건강 개선 시작",
+      subColor: "text-text-tertiary",
+    },
+    {
+      icon: "📊",
+      title: "정확도 향상",
+      value: "추가 데이터 입력",
+      sub: "허리둘레·수면 등 입력 시 향상",
+      subColor: "text-text-tertiary",
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {cards.map((card) => (
+        <div
+          key={card.title}
+          className="bg-white rounded-[14px] p-4 shadow-[0_1px_4px_rgba(0,0,0,0.08)]"
+        >
+          <p className="text-xl mb-2">{card.icon}</p>
+          <p className="text-[11px] text-text-tertiary font-medium mb-1">{card.title}</p>
+          <p className="text-sm font-bold text-text-primary leading-snug">{card.value}</p>
+          <p className={`text-[11px] mt-0.5 font-medium ${card.subColor}`}>{card.sub}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── AI 맞춤 제안 ───────────────────── */
+
+function AiSuggestions({ predictionId }: { predictionId: number | undefined }) {
+  const { data: recData, isLoading: recLoading } = useRiskRecommendation(predictionId);
+  const { data: challengeData, isLoading: challengeLoading } = useChallengeRecommendations(predictionId, 3);
+
+  const recommendations = recData?.recommendations ?? [];
+  const challenges = challengeData?.items ?? [];
+
+  /* 카테고리별 권고사항 분류 */
+  const exerciseRec = recommendations.find((r) => r.category === "EXERCISE");
+  const dietRec = recommendations.find((r) => r.category === "DIET");
+  const generalRecs = recommendations.filter(
+    (r) => r.category !== "EXERCISE" && r.category !== "DIET"
+  ).slice(0, 3);
+  const displayRecs = generalRecs.length > 0 ? generalRecs : recommendations.slice(0, 3);
+
+  /* 식단 추천 — DIET 권고사항 or 기본 문구 */
+  const dietItems = dietRec
+    ? [dietRec.content]
+    : ["채소·통곡물 위주 식단을 권장합니다.", "나트륨 섭취를 줄여보세요.", "규칙적인 식사 시간을 유지하세요."];
+
+  if (!predictionId) return null;
+
+  return (
+    <div className="bg-white rounded-[16px] p-5 shadow-[0_1px_4px_rgba(0,0,0,0.08)] space-y-5">
+      <div className="flex items-center gap-2">
+        <span className="text-lg">✨</span>
+        <h3 className="font-bold text-text-primary">AI 맞춤 제안</h3>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-4">
+        {/* 권고사항 */}
+        <div className="space-y-2">
+          <p className="text-xs font-bold text-text-primary flex items-center gap-1">
+            <span>💡</span> 권고사항
+          </p>
+          {recLoading ? (
+            <div className="animate-pulse space-y-2">
+              {[1, 2, 3].map((i) => <div key={i} className="h-8 bg-surface rounded-[8px]" />)}
+            </div>
+          ) : displayRecs.length > 0 ? (
+            <ul className="space-y-2">
+              {displayRecs.map((rec, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-text-secondary">
+                  <span className="text-status-success mt-0.5 shrink-0">✓</span>
+                  <span>{rec.content}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Link
+              href={`/predictions/${predictionId}/recommendations`}
+              className="block text-xs text-brand-black font-semibold underline"
+            >
+              자세히 보기 →
+            </Link>
+          )}
+          {displayRecs.length > 0 && (
+            <Link
+              href={`/predictions/${predictionId}/recommendations`}
+              className="text-xs text-text-tertiary hover:text-text-primary transition-colors"
+            >
+              자세히 보기 →
+            </Link>
+          )}
+        </div>
+
+        {/* 추천 챌린지 */}
+        <div className="space-y-2">
+          <p className="text-xs font-bold text-text-primary flex items-center gap-1">
+            <span>🏆</span> 추천 챌린지
+          </p>
+          {challengeLoading ? (
+            <div className="animate-pulse space-y-2">
+              {[1, 2, 3].map((i) => <div key={i} className="h-8 bg-surface rounded-[8px]" />)}
+            </div>
+          ) : challenges.length > 0 ? (
+            <ul className="space-y-2">
+              {challenges.map((item, idx) => (
+                <li
+                  key={item.template_id ?? item.challenge_id ?? idx}
+                  className="flex items-center gap-2 p-2 bg-surface rounded-[8px]"
+                >
+                  <span className="text-base shrink-0">
+                    {CATEGORY_CONFIG[item.category as ChallengeCategory]?.emoji ?? "💪"}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-text-primary truncate">
+                      {item.title && item.title !== item.category
+                        ? item.title
+                        : (CATEGORY_CONFIG[item.category as ChallengeCategory]?.label ?? item.category)}
+                    </p>
+                    <p className="text-[10px] text-brand-black font-bold">+{item.reward_points ?? 200}P</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-text-tertiary">추천 챌린지가 없습니다.</p>
+          )}
+        </div>
+
+        {/* 식단 추천 */}
+        <div className="space-y-2">
+          <p className="text-xs font-bold text-text-primary flex items-center gap-1">
+            <span>🥗</span> 식단 추천
+          </p>
+          {exerciseRec && (
+            <div className="p-2 bg-surface rounded-[8px] mb-2">
+              <p className="text-[11px] text-text-secondary">{exerciseRec.content}</p>
+            </div>
+          )}
+          <ul className="space-y-2">
+            {dietItems.map((item, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-text-secondary">
+                <span className="text-brand-black mt-0.5 shrink-0">•</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      {/* 면책 */}
+      <p className="text-[10px] text-text-tertiary border-t border-border pt-3">
+        본 권고사항은 입력하신 건강 데이터를 바탕으로 제공되는 일반적인 건강 정보로,
+        의료적 진단이나 처방을 대체하지 않습니다. 정확한 진단과 치료는 반드시 의료 전문가에게 문의하세요.
+      </p>
     </div>
   );
 }
@@ -106,8 +321,19 @@ function RecommendedChallengesSide({ predictionId }: { predictionId: number | un
                 key={item.template_id ?? item.challenge_id ?? item.id ?? idx}
                 className="flex flex-col gap-0.5 p-3 bg-surface rounded-[10px]"
               >
-                <p className="text-xs font-semibold text-text-primary">{item.title}</p>
-                <p className="text-[11px] text-text-tertiary">{item.reason}</p>
+                <div className="flex items-center gap-1 mb-0.5">
+                  <span className="text-sm">
+                    {CATEGORY_CONFIG[item.category as ChallengeCategory]?.emoji ?? "💪"}
+                  </span>
+                  <p className="text-xs font-semibold text-text-primary">
+                    {item.title && item.title !== item.category
+                      ? item.title
+                      : (CATEGORY_CONFIG[item.category as ChallengeCategory]?.label ?? item.category)}
+                  </p>
+                </div>
+                {item.reason && !item.reason.includes("위험도") && (
+                  <p className="text-[11px] text-text-tertiary">{item.reason}</p>
+                )}
                 <p className="text-[11px] text-brand-black font-bold">
                   +{item.reward_points ?? 200}P
                 </p>
@@ -152,7 +378,6 @@ export default function RiskTab() {
   const isLoading = l1 || l2;
 
   const latestItems = latestPredictions?.items ?? [];
-  /* detailPredictions 응답이 PredictionDetailResponse 형식이면 items 배열 */
   const detailItems = (detailPredictions as { items?: PredictionDetail[] } | null)?.items ?? [];
 
   /* 도넛 데이터 */
@@ -167,10 +392,10 @@ export default function RiskTab() {
     const detail = detailItems.find((p) => p.disease_type === id);
     return {
       disease: id,
-      score: lite?.risk_score ?? 0,
+      score: Math.round(Number(lite?.risk_score ?? detail?.risk_score ?? 0)),
       grade: riskLevelToGrade(detail?.risk_level) ?? (lite?.risk_grade ?? "NORMAL"),
-      factorCount: lite?.risk_factors_count ?? 0,
-      predId: lite?.id,
+      factorCount: detail?.contributing_factors?.length ?? 0,
+      predId: lite?.id ?? detail?.id,
     };
   });
 
@@ -181,18 +406,14 @@ export default function RiskTab() {
 
   /* 종합 등급 헤드라인 — 가장 높은 위험 */
   const gradeOrder: RiskGrade[] = ["HIGH_RISK", "HIGH_DANGER", "RISK", "DANGER", "CAUTION", "NORMAL"];
-  const gradeLabel: Record<RiskGrade, string> = {
-    HIGH_RISK: "고위험",
-    HIGH_DANGER: "고위험",
-    RISK: "위험",
-    DANGER: "위험",
-    CAUTION: "주의",
-    NORMAL: "정상",
-  };
   const highestGrade =
     donutData
       .map((d) => d.grade)
       .sort((a, b) => gradeOrder.indexOf(a) - gradeOrder.indexOf(b))[0] ?? "NORMAL";
+
+  const highestDiseaseData = donutData
+    .filter((d) => d.grade === highestGrade)
+    .sort((a, b) => b.score - a.score)[0];
 
   const highestDiseaseLabel =
     donutData
@@ -200,6 +421,23 @@ export default function RiskTab() {
       .map((d) => DISEASE_LABELS[d.disease])
       .join(", ");
 
+  /* 가장 큰 영향 요인 — 최고 위험 질환의 top1 기여 인자 */
+  const highestDetail = detailItems.find(
+    (p) => p.disease_type === highestDiseaseData?.disease
+  );
+  const topFactor = highestDetail?.contributing_factors?.[0]
+    ? (() => {
+        const f = highestDetail.contributing_factors[0];
+        return f.description
+          ? f.description.replace(/\s*(위험\s*(증가|감소)[↑↓]?)?\s*$/, "").trim()
+          : f.factor;
+      })()
+    : null;
+
+  /* AI 맞춤 제안용 — 최고 위험 질환 예측 ID */
+  const highestPredId = highestDiseaseData?.predId;
+
+  /* 추천 챌린지 첫 번째 — 요약 카드용 */
   const latestUpdated =
     latestItems[0]?.created_at
       ? new Date(latestItems[0].created_at).toLocaleDateString("ko-KR")
@@ -214,7 +452,6 @@ export default function RiskTab() {
     );
   }
 
-  /* 빈 상태 */
   if (latestItems.length === 0) {
     return (
       <div className="text-center py-16 space-y-3">
@@ -241,7 +478,8 @@ export default function RiskTab() {
           <div>
             <p className="text-xs text-text-tertiary">종합 등급</p>
             <p className="text-xl font-black text-text-primary mt-1">
-              {highestDiseaseLabel} <span className="text-status-danger">{gradeLabel[highestGrade]}</span>
+              {highestDiseaseLabel}{" "}
+              <span className="text-status-danger">{GRADE_LABEL[highestGrade]}</span>
             </p>
           </div>
           {latestUpdated && (
@@ -265,6 +503,14 @@ export default function RiskTab() {
           ))}
         </div>
       </div>
+
+      {/* 한눈에 보는 요약 카드 */}
+      <SummaryCards
+        highestDiseaseLabel={highestDiseaseLabel}
+        highestGrade={highestGrade}
+        topFactor={topFactor}
+        challengeGoal={null}
+      />
 
       {/* 카테고리 탭 + 기여 인자 */}
       <div className="flex gap-4">
@@ -304,6 +550,9 @@ export default function RiskTab() {
         {/* 데스크탑 사이드: 맞춤 챌린지 */}
         <RecommendedChallengesSide predictionId={selectedPredId} />
       </div>
+
+      {/* AI 맞춤 제안 */}
+      <AiSuggestions predictionId={highestPredId} />
 
       {/* 면책 */}
       <Disclaimer />

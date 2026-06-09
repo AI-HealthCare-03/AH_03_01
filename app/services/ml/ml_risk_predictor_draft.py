@@ -190,35 +190,66 @@ def _score_to_level(score: int) -> str:
 
 # 피처 한국어 이름 매핑
 FEAT_KOR = {
+    # 신체 계측
     "age": "나이", "height_cm": "키", "weight_kg": "체중",
     "waist_cm": "허리둘레", "BMI": "체질량지수(BMI)",
-    "systolic_bp": "수축기혈압", "diastolic_bp": "이완기혈압",
-    "fasting_blood_sugar": "공복혈당",
-    "TG_proxy_mgdl": "중성지방 추정치", "HDL_proxy_mgdl": "HDL 추정치",
-    "LDL_proxy": "LDL 추정치",
-    "prob_tg_cat_2": "중성지방(높음)", "prob_tg_cat_1": "중성지방(경계)",
-    "prob_hdl_cat_pos": "HDL 저하 확률", "prob_hdl_cat_0": "HDL(낮음)",
-    "prob_chol_cat_pos": "총콜레스테롤 위험",
-    "prob_ldl_cat_pos": "LDL 위험 확률",
-    "metabolic_age": "기능적 연령", "GLYCEMIC_BURDEN_PROXY": "혈당 부담 지수",
-    "fpg_risk_continuous": "공복혈당 위험",
     "WHtR": "허리-키 비율", "WHtR_risk": "허리-키 위험",
+    "bmi_age_index": "BMI-나이 복합 지수",
+    # 혈압
+    "systolic_bp": "수축기혈압", "diastolic_bp": "이완기혈압",
+    "bp_cat": "혈압 구간",
+    # 혈당
+    "fasting_blood_sugar": "공복혈당",
+    "fpg_risk_continuous": "공복혈당 위험",
+    "HbA1c_proxy_home": "당화혈색소 추정치",
+    "HbA1c_proxy_home_v2": "당화혈색소 추정치(v2)",
+    # 지질 추정치
+    "TG_proxy_mgdl": "중성지방 추정치", "HDL_proxy_mgdl": "HDL 추정치",
+    "LDL_proxy": "LDL 추정치", "TC_residual_risk": "총콜레스테롤 위험",
+    # 지질 메타 피처 — TG
+    "prob_tg_cat_0": "중성지방(정상)", "prob_tg_cat_1": "중성지방(경계)",
+    "prob_tg_cat_2": "중성지방(높음)",
+    # 지질 메타 피처 — HDL
+    "prob_hdl_cat_0": "HDL(낮음)", "prob_hdl_cat_1": "HDL(정상)",
+    "prob_hdl_cat_2": "HDL(높음)", "prob_hdl_cat_pos": "HDL 저하 위험",
+    # 지질 메타 피처 — TC
+    "prob_chol_cat_0": "총콜레스테롤(정상)", "prob_chol_cat_1": "총콜레스테롤(경계)",
+    "prob_chol_cat_2": "총콜레스테롤(높음)", "prob_chol_cat_pos": "총콜레스테롤 위험",
+    # 지질 메타 피처 — LDL
+    "prob_ldl_cat_0": "LDL(최적)", "prob_ldl_cat_1": "LDL(정상)",
+    "prob_ldl_cat_2": "LDL(경계)", "prob_ldl_cat_3": "LDL(높음)",
+    "prob_ldl_cat_4": "LDL(매우높음)", "prob_ldl_cat_pos": "LDL 위험",
+    # 복합 지수
+    "metabolic_age": "기능적 연령", "GLYCEMIC_BURDEN_PROXY": "혈당 부담 지수",
+    "lipid_hidden_risk_proxy": "숨은 지질 위험", "body_metabolic_score": "대사 건강 점수",
+    # 생활습관
     "FAMILY_HP": "고혈압 가족력", "DRINK_RISK": "음주 위험",
+    "walk_day": "걷기 일수", "SLEEP_AVG": "평균 수면시간",
+    "alcohol_freq_y": "음주 빈도",
+    # KDE 백분위
+    "tg_proxy_kde_pct": "중성지방 분포 위치",
+    "hdl_proxy_kde_pct": "HDL 분포 위치",
+    "tc_proxy_kde_pct": "총콜레스테롤 분포 위치",
+    "ldl_proxy_kde_pct": "LDL 분포 위치",
+    "gbp_kde_pct": "혈당 부담 분포 위치",
+    "whtr_kde_pct_v2": "허리-키 비율 분포 위치",
+    "meta_age_kde_pct": "기능적 연령 분포 위치",
+    "wt_bmi_idx_pct": "체중-BMI 분포 위치",
 }
 
 
-def _unwrap_lgbm(model):
-    """래퍼 클래스(PlattCalibrator → TripleEnsemble → ResidualEnsemble)를 벗겨
-    SHAP 이 지원하는 LGBMClassifier 를 반환한다."""
-    # PlattCalibrator
-    if isinstance(model, PlattCalibrator):
-        model = model.base_model
-    # TripleEnsemble → LGBM 쪽만 사용
-    if isinstance(model, TripleEnsemble):
-        model = model.lgbm_model
-    # ResidualEnsemble → M1 사용
-    if isinstance(model, ResidualEnsemble):
-        model = model.m1
+def _unwrap_lgbm(model, max_depth: int = 10):
+    """래퍼 클래스를 재귀적으로 벗겨 SHAP 이 지원하는 LGBMClassifier 를 반환한다.
+    PlattCalibrator 이중 래핑(PlattCalibrator → PlattCalibrator → ...)도 처리."""
+    for _ in range(max_depth):
+        if isinstance(model, PlattCalibrator):
+            model = model.base_model
+        elif isinstance(model, TripleEnsemble):
+            model = model.lgbm_model
+        elif isinstance(model, ResidualEnsemble):
+            model = model.m1
+        else:
+            break
     return model
 
 
@@ -233,14 +264,19 @@ def _get_top5_features(
             return []
         # 래퍼 클래스 언래핑 → 실제 LGBMClassifier
         lgbm_model = _unwrap_lgbm(model)
+        # 언래핑 후에도 OrdinalClassifier면 SHAP 불가
+        if isinstance(lgbm_model, OrdinalClassifier):
+            return []
         explainer = shap.TreeExplainer(lgbm_model)
         shap_vals = explainer.shap_values(X_in)
+        # 항상 위험 클래스(마지막) 기준으로 SHAP 계산
+        # → positive = 위험 증가↑, negative = 위험 감소↓ 로 일관된 해석
         if isinstance(shap_vals, list):
-            cls_idx = min(predicted_class, len(shap_vals) - 1)
-            sv = np.array(shap_vals[cls_idx]).flatten()[:len(feature_cols)]
+            risk_cls_idx = len(shap_vals) - 1
+            sv = np.array(shap_vals[risk_cls_idx]).flatten()[:len(feature_cols)]
         elif isinstance(shap_vals, np.ndarray) and shap_vals.ndim == 3:
-            cls_idx = min(predicted_class, shap_vals.shape[2] - 1)
-            sv = shap_vals[0, :, cls_idx]
+            risk_cls_idx = shap_vals.shape[2] - 1
+            sv = shap_vals[0, :, risk_cls_idx]
         else:
             sv = np.array(shap_vals).flatten()[:len(feature_cols)]
 
@@ -522,10 +558,12 @@ class MLRiskPredictor:
         )
 
         # SHAP top5 → RiskFactor 변환
+        # weight: 부호 유지 (양수=위험 증가↑, 음수=위험 감소↓)
+        # UI에서 weight > 0 → 빨간 막대, weight < 0 → 파란 막대
         contributing = [
             RiskFactor(
                 factor=f["feature"],
-                weight=abs(f["shap_contribution"]),
+                weight=f["shap_contribution"],  # 부호 그대로 저장
                 description=f"{f['name_kor']}  {f['direction']}",
             )
             for f in result["top_5_features"]
