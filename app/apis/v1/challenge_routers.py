@@ -38,12 +38,17 @@ from app.dtos.challenge import (
 )
 from app.models.challenge import (
     ChallengeCategory,
+    ChallengeReaction,
     ChallengeScope,
     ChallengeStatus,
+    ChallengeVerification,
+    ReactionType,
     VerificationMethod,
     VerificationStatus,
 )
+from app.models.notifications import NotificationType
 from app.models.users import User
+from app.repositories.notification_repository import NotificationRepository
 from app.services.challenge import (
     ChallengeRecommendationService,
     ChallengeService,
@@ -603,6 +608,17 @@ async def toggle_like(
     service: Annotated[ReactionService, Depends(ReactionService)],
 ) -> Response:
     liked, like_count = await service.toggle_like(user, verification_id)
+    if liked:
+        verification = await ChallengeVerification.get_or_none(id=verification_id)
+        if verification and verification.user_id != user.id:
+            await NotificationRepository().create(
+                recipient_id=verification.user_id,
+                actor_id=user.id,
+                notification_type=NotificationType.LIKE,
+                target_type="VERIFICATION",
+                target_id=verification_id,
+                message=f"{user.nickname or '누군가'}님이 내 인증에 좋아요를 눌렀어요.",
+            )
     return Response({"liked": liked, "like_count": like_count}, status_code=status.HTTP_200_OK)
 
 
@@ -618,6 +634,16 @@ async def create_reply(
     service: Annotated[ReactionService, Depends(ReactionService)],
 ) -> Response:
     reply = await service.create_reply(user, verification_id, reaction_id, body.content or "")
+    parent = await ChallengeReaction.get_or_none(id=reaction_id)
+    if parent and parent.user_id != user.id:
+        await NotificationRepository().create(
+            recipient_id=parent.user_id,
+            actor_id=user.id,
+            notification_type=NotificationType.REPLY,
+            target_type="COMMENT",
+            target_id=reaction_id,
+            message=f"{user.nickname or '누군가'}님이 내 댓글에 답글을 남겼어요.",
+        )
     return Response(
         ReactionResponse.model_validate(reply).model_dump(),
         status_code=status.HTTP_201_CREATED,
@@ -636,6 +662,17 @@ async def create_reaction(
     service: Annotated[ReactionService, Depends(ReactionService)],
 ) -> Response:
     reaction = await service.create(user, verification_id, body)
+    if body.type == ReactionType.COMMENT:
+        verification = await ChallengeVerification.get_or_none(id=verification_id)
+        if verification and verification.user_id != user.id:
+            await NotificationRepository().create(
+                recipient_id=verification.user_id,
+                actor_id=user.id,
+                notification_type=NotificationType.COMMENT,
+                target_type="VERIFICATION",
+                target_id=verification_id,
+                message=f"{user.nickname or '누군가'}님이 내 인증에 댓글을 남겼어요.",
+            )
     return Response(
         ReactionResponse.model_validate(reaction).model_dump(),
         status_code=status.HTTP_201_CREATED,

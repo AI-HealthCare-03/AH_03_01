@@ -18,8 +18,10 @@ from app.dtos.community import (
     PostUpdateRequest,
 )
 from app.models.community import Comment, Post, PostCategory
+from app.models.notifications import NotificationType
 from app.models.users import User
 from app.repositories.community_repository import CommentRepository, PostRepository, ReportRepository
+from app.repositories.notification_repository import NotificationRepository
 
 posts_router = APIRouter(prefix="/posts", tags=["community"])
 
@@ -136,6 +138,34 @@ async def create_comment(
     post_id: int, body: CommentCreateRequest, current_user: User = Depends(get_request_user)  # noqa: B008
 ) -> CommentResponse:
     comment = await CommentRepository().create_comment(post_id, current_user.id, body.content, body.parent_id)
+
+    actor_name = current_user.nickname or "누군가"
+    notif_repo = NotificationRepository()
+    if body.parent_id is None:
+        # 게시글에 새 댓글 → 게시글 작성자에게 알림
+        post = await Post.get_or_none(id=post_id)
+        if post and post.author_id != current_user.id:
+            await notif_repo.create(
+                recipient_id=post.author_id,
+                actor_id=current_user.id,
+                notification_type=NotificationType.COMMENT,
+                target_type="POST",
+                target_id=post_id,
+                message=f"{actor_name}님이 내 게시글에 댓글을 남겼어요.",
+            )
+    else:
+        # 댓글에 답글 → 원댓글 작성자에게 알림
+        parent = await Comment.get_or_none(id=body.parent_id)
+        if parent and parent.author_id != current_user.id:
+            await notif_repo.create(
+                recipient_id=parent.author_id,
+                actor_id=current_user.id,
+                notification_type=NotificationType.REPLY,
+                target_type="COMMENT",
+                target_id=body.parent_id,
+                message=f"{actor_name}님이 내 댓글에 답글을 남겼어요.",
+            )
+
     return _build_comment(comment)
 
 
