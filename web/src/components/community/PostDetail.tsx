@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getPost, deletePost } from "@/lib/api/community";
+import CommentSection from "@/components/community/CommentSection";
 import { renderMarkdown } from "@/components/community/MarkdownEditor";
 import { useMe } from "@/hooks/queries/useMe";
 import { useToast } from "@/components/ui/Toast";
@@ -80,6 +81,10 @@ export default function PostDetail({ postId }: { postId: number }) {
         className="text-sm text-text-primary leading-relaxed"
         dangerouslySetInnerHTML={{ __html: renderMarkdown(post.content) }}
       />
+
+      <hr className="border-border mt-6 mb-4" />
+
+      <CommentSection postId={postId} />
 
       <hr className="border-border mt-6 mb-4" />
 
