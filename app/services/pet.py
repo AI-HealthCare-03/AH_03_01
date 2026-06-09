@@ -26,6 +26,7 @@ from app.models.pet import (
     PointSource,
     PointTransaction,
 )
+from app.models.challenge import Challenge
 from app.models.users import User
 from app.repositories.pet_repository import (
     AttendanceRepository,
@@ -570,6 +571,10 @@ class RewardClaimService:
         data: RewardClaimRequest,
     ) -> dict[str, Any]:
         async with in_transaction():
+            # 챌린지 제목 조회 (포인트 내역 설명에 ID 대신 제목 표시)
+            challenge = await Challenge.get_or_none(id=data.challenge_id)
+            challenge_title = challenge.title if challenge else None
+
             if reward_type == "daily":
                 if data.verification_id is None:
                     raise HTTPException(
@@ -580,10 +585,13 @@ class RewardClaimService:
                     user_id=user.id,
                     challenge_id=data.challenge_id,
                     verification_id=data.verification_id,
+                    challenge_title=challenge_title,
                 )
             elif reward_type == "period":
                 result = await self.reward_service.grant_period_completion(
-                    user_id=user.id, challenge_id=data.challenge_id
+                    user_id=user.id,
+                    challenge_id=data.challenge_id,
+                    challenge_title=challenge_title,
                 )
             elif reward_type == "group":
                 if not data.difficulty_level:
@@ -595,6 +603,7 @@ class RewardClaimService:
                     user_id=user.id,
                     challenge_id=data.challenge_id,
                     difficulty_level=data.difficulty_level,
+                    challenge_title=challenge_title,
                 )
             else:
                 raise HTTPException(
