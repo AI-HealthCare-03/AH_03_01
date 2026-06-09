@@ -3,7 +3,8 @@
 import { useEffect, useRef } from "react";
 import { MEDICATION_STORAGE_KEY, type Medication } from "@/components/health/MedicationManager";
 import { pushNotification } from "@/components/layout/NotificationDropdown";
-import { notifLastSeenKey, notifSettingsKey } from "@/lib/notifKeys";
+import { notifLastSeenKey, notifSettingsKey, notifSocialPollKey } from "@/lib/notifKeys";
+import { listNotifications } from "@/lib/api/notifications";
 import { useAuthStore } from "@/stores/auth";
 
 /** @deprecated notifLastSeenKey() 를 사용하세요 */
@@ -61,12 +62,16 @@ interface Settings {
   medication: boolean;
   challengeRemind: boolean;
   challengeTime: string;
+  challengeInteraction: boolean;
+  community: boolean;
 }
 
 const DEFAULT_SETTINGS: Settings = {
   medication: true,
   challengeRemind: true,
   challengeTime: "20:00",
+  challengeInteraction: false,
+  community: false,
 };
 
 /** 현재 시각 기준으로 특정 HH:MM까지 남은 ms */
@@ -103,6 +108,7 @@ async function sendBrowserNotification(title: string, body: string, tag?: string
 export function useNotificationScheduler() {
   const firstRunRef = useRef(true);
   const scheduleAllRef = useRef<(() => void) | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   useEffect(() => {
@@ -157,6 +163,40 @@ export function useNotificationScheduler() {
         } catch { /* 무시 */ }
       }
 
+      // ── 소셜 알림 폴링 (챌린지 소통 / 커뮤니티) ──
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      if (settings.challengeInteraction || settings.community) {
+        const poll = async () => {
+          try {
+            const lastPoll = localStorage.getItem(notifSocialPollKey())
+              ?? new Date(Date.now() - 60_000).toISOString();
+            const now = new Date().toISOString();
+            const notifs = await listNotifications(lastPoll);
+            localStorage.setItem(notifSocialPollKey(), now);
+
+            for (const n of notifs) {
+              const isChallenge = n.target_type === "VERIFICATION";
+              const isCommunity = n.target_type === "POST" || n.target_type === "COMMENT";
+              if (isChallenge && !settings.challengeInteraction) continue;
+              if (isCommunity && !settings.community) continue;
+
+              const category = isChallenge ? "챌린지" : "커뮤니티";
+              const title = n.notification_type === "LIKE"
+                ? "❤️ 좋아요"
+                : n.notification_type === "REPLY"
+                ? "💬 새 답글"
+                : "💬 새 댓글";
+              pushNotification({ category, title, body: n.message });
+              await sendBrowserNotification(title, n.message);
+            }
+          } catch { /* 무시 */ }
+        };
+        pollIntervalRef.current = setInterval(poll, 30_000);
+      }
+
       // ── 챌린지 리마인드 ──────────────────────────
       if (settings.challengeRemind) {
         const id = setTimeout(async () => {
@@ -189,6 +229,7 @@ export function useNotificationScheduler() {
     return () => {
       localStorage.setItem(notifLastSeenKey(), Date.now().toString());
       timers.forEach(clearTimeout);
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
       window.removeEventListener("notif-reschedule", handleReschedule);
       window.removeEventListener("storage", handleStorage);
     };

@@ -17,6 +17,7 @@ interface NotificationSettings {
   medication: boolean;
   challengeRemind: boolean;
   challengeTime: string;
+  challengeInteraction: boolean;
   community: boolean;
   riskChange: boolean;
 }
@@ -25,6 +26,7 @@ const DEFAULT: NotificationSettings = {
   medication: true,
   challengeRemind: true,
   challengeTime: "20:00",
+  challengeInteraction: false,
   community: false,
   riskChange: true,
 };
@@ -246,7 +248,7 @@ export default function NotificationSettingsPage() {
 
   const update = async <K extends keyof NotificationSettings>(key: K, value: NotificationSettings[K]) => {
     // 알림 관련 토글 ON 시 권한 요청
-    if ((key === "medication" || key === "challengeRemind") && value === true) {
+    if ((key === "medication" || key === "challengeRemind" || key === "challengeInteraction" || key === "community") && value === true) {
       const granted = await requestPermission();
       if (!granted) {
         setPermissionDenied(true);
@@ -315,6 +317,12 @@ export default function NotificationSettingsPage() {
             <TimePicker value={settings.challengeTime} onChange={(v) => update("challengeTime", v)} />
           </div>
         </NotificationRow>
+        <NotificationRow
+          label="챌린지 소통"
+          description="내 인증에 댓글·좋아요가 달리거나 내 댓글에 답글이 달릴 때"
+          checked={settings.challengeInteraction}
+          onChange={(v) => update("challengeInteraction", v)}
+        />
       </section>
 
       {/* 기타 알림 */}
