@@ -37,6 +37,74 @@ function riskLevelToGrade(level?: string): RiskGrade {
   }
 }
 
+/* ── 파생변수 툴팁 설명 ──────────────── */
+
+const FACTOR_TOOLTIP: Record<string, string> = {
+  // 혈압
+  bp_cat:                  "혈압을 4단계로 구분한 지표입니다. 정상 → 주의혈압 → 고혈압1기 → 고혈압2기 순으로 위험도가 높아집니다.",
+  // 복합 지수
+  bmi_age_index:           "나이가 많을수록 BMI의 건강 위험이 커진다는 점을 반영한 지표입니다.",
+  metabolic_age:           "혈당·비만·운동·수면 상태를 종합해 계산한 몸의 실제 나이입니다. 실제 나이보다 높을수록 건강 관리가 필요합니다.",
+  GLYCEMIC_BURDEN_PROXY:   "혈당 관련 15개 지표를 종합한 혈당 부담 점수입니다. 높을수록 당뇨 위험이 큽니다.",
+  lipid_hidden_risk_proxy: "혈액검사 없이 생활습관(체형·음주·운동·호르몬)으로 추정한 숨은 지질 위험 점수입니다.",
+  body_metabolic_score:    "허리-키 비율·BMI·나이를 종합한 대사 건강 점수입니다. 높을수록 관리가 필요합니다.",
+  // 혈당
+  fpg_risk_continuous:     "공복혈당이 90mg/dL을 초과할수록 높아지는 위험 점수입니다.",
+  // 체형
+  WHtR:                    "허리둘레를 키로 나눈 값입니다. 0.5 이상이면 복부비만 위험 구간입니다.",
+  WHtR_risk:               "허리-키 비율을 기준으로 복부비만 위험을 0~1 점수로 나타낸 지표입니다.",
+  // 지질 메타 피처 (이상지질혈증 예측 중간 단계)
+  prob_tg_cat_0:           "AI가 예측한 '중성지방이 정상(<150mg/dL)일 가능성'입니다.",
+  prob_tg_cat_1:           "AI가 예측한 '중성지방이 경계(150~199mg/dL)일 가능성'입니다.",
+  prob_tg_cat_2:           "AI가 예측한 '중성지방이 높음(≥200mg/dL)일 가능성'입니다.",
+  prob_hdl_cat_0:          "AI가 예측한 'HDL이 낮을 가능성(남성 40 미만/여성 50 미만)'입니다.",
+  prob_hdl_cat_1:          "AI가 예측한 'HDL이 정상일 가능성'입니다.",
+  prob_hdl_cat_2:          "AI가 예측한 'HDL이 높음(≥60mg/dL)일 가능성'입니다.",
+  prob_chol_cat_0:         "AI가 예측한 '총콜레스테롤이 정상(<200mg/dL)일 가능성'입니다.",
+  prob_chol_cat_1:         "AI가 예측한 '총콜레스테롤이 경계(200~239mg/dL)일 가능성'입니다.",
+  prob_chol_cat_2:         "AI가 예측한 '총콜레스테롤이 높음(≥240mg/dL)일 가능성'입니다.",
+  prob_ldl_cat_0:          "AI가 예측한 'LDL이 최적(<100mg/dL)일 가능성'입니다.",
+  prob_ldl_cat_1:          "AI가 예측한 'LDL이 정상(100~129mg/dL)일 가능성'입니다.",
+  prob_ldl_cat_2:          "AI가 예측한 'LDL이 경계(130~159mg/dL)일 가능성'입니다.",
+  prob_ldl_cat_3:          "AI가 예측한 'LDL이 높음(160~189mg/dL)일 가능성'입니다.",
+  prob_ldl_cat_4:          "AI가 예측한 'LDL이 매우높음(≥190mg/dL)일 가능성'입니다.",
+  // 지질 추정치
+  TG_proxy_mgdl:           "혈액검사 없이 체형·생활습관으로 추정한 중성지방 수치입니다.",
+  HDL_proxy_mgdl:          "혈액검사 없이 체형·운동·음주·나이로 추정한 HDL 수치입니다.",
+  LDL_proxy:               "총콜레스테롤·HDL·중성지방 추정값으로 계산한 LDL 수치입니다.",
+  TC_residual_risk:        "폐경·비만·가족력 등을 반영한 총콜레스테롤 추가 위험 점수입니다.",
+  HDL_LOW_RISK_PROXY:      "음주·복부비만·운동 부족으로 HDL이 낮아질 위험을 나타낸 지표입니다.",
+  HDL_male_risk:           "남성 전용 — 흡연·복부비만·운동 부족·음주로 인한 HDL 저하 위험입니다.",
+  TG_male_risk:            "남성 전용 — 음주·복부비만·혈당·BMI·나이를 종합한 중성지방 위험입니다.",
+  TG_female_risk:          "여성 전용 — 폐경·비만·혈당·나이를 종합한 중성지방 위험입니다.",
+  // 혈당 추정
+  HbA1c_proxy_home:        "혈당 데이터로 추정한 당화혈색소 수치입니다. 실제 검사 결과와 다를 수 있습니다.",
+  HbA1c_proxy_home_v2:     "당화혈색소 추정 개선 버전입니다. 혈당부담 지수와 공복혈당을 함께 반영합니다.",
+  // 혈당 상호작용
+  glucose_age_interaction: "혈당이 높고 나이가 많을수록 함께 위험이 커지는 패턴을 반영한 지표입니다.",
+  glucose_adiposity_interaction: "혈당이 높고 비만할수록 함께 위험이 커지는 패턴을 반영한 지표입니다.",
+  glucose_sodium_interaction:    "혈당이 높고 나트륨을 많이 섭취할수록 위험이 커지는 패턴을 반영한 지표입니다.",
+  // 나이 관련
+  age_male_peak:           "50대 초반 남성에서 심혈관 위험이 높아지는 연령 패턴을 반영한 지표입니다.",
+  age_whtr_inter:          "나이와 복부비만이 동시에 높을 때 위험이 커지는 패턴을 반영한 지표입니다.",
+  // 수면
+  SLEEP_AVG:               "주중 5일과 주말 2일 수면시간을 가중 평균한 일평균 수면시간입니다.",
+  SLEEP_WEEKDAY:           "월~금 평균 수면시간입니다 (취침 시각과 기상 시각으로 계산).",
+  SLEEP_WEEKEND:           "토·일 평균 수면시간입니다 (취침 시각과 기상 시각으로 계산).",
+  SLEEP_IMBALANCE:         "주중과 주말 수면시간의 차이입니다. 클수록 수면 패턴이 불규칙합니다.",
+  // 수분
+  water_ml_per_kg:         "체중 1kg당 하루 물 섭취량입니다. 수분 섭취가 충분한지 나타냅니다.",
+  // KDE 백분위 (동일 연령대 비교)
+  tg_proxy_kde_pct:        "같은 나이대와 비교했을 때 중성지방 수준이 어느 위치인지 나타냅니다.",
+  hdl_proxy_kde_pct:       "같은 나이대와 비교했을 때 HDL 수준이 어느 위치인지 나타냅니다.",
+  ldl_proxy_kde_pct:       "같은 나이대와 비교했을 때 LDL 수준이 어느 위치인지 나타냅니다.",
+  tc_proxy_kde_pct:        "같은 나이대와 비교했을 때 총콜레스테롤 수준이 어느 위치인지 나타냅니다.",
+  gbp_kde_pct:             "같은 나이대와 비교했을 때 혈당 부담이 어느 위치인지 나타냅니다.",
+  meta_age_kde_pct:        "같은 나이대와 비교했을 때 기능적 연령이 어느 위치인지 나타냅니다.",
+  wt_bmi_idx_pct:          "같은 나이대와 비교했을 때 체중-BMI 수준이 어느 위치인지 나타냅니다.",
+  whtr_kde_pct_v2:         "같은 나이대와 비교했을 때 허리-키 비율이 어느 위치인지 나타냅니다.",
+};
+
 /* ── 기여 인자 바 ───────────────────── */
 
 interface ContributingBarsProps {
@@ -66,13 +134,25 @@ function ContributingBars({ factors }: ContributingBarsProps) {
           : f.factor;
         const isRisk = f.weight > 0;
         const direction = isRisk ? "위험 증가↑" : "위험 감소↓";
-        // 위험 증가 → 빨간 막대 / 위험 감소 → 파란 막대
         const barColor = isRisk ? "bg-status-danger" : "bg-blue-400";
+        const tooltip = FACTOR_TOOLTIP[f.factor];
 
         return (
           <div key={f.factor}>
             <div className="flex justify-between mb-1">
-              <span className="text-sm text-text-primary font-medium">{label}</span>
+              <span className="text-sm text-text-primary font-medium flex items-center gap-1">
+                {label}
+                {tooltip && (
+                  <span className="relative group inline-flex">
+                    <span className="text-[10px] text-text-tertiary border border-border rounded-full w-4 h-4 flex items-center justify-center cursor-help leading-none select-none">
+                      ?
+                    </span>
+                    <span className="absolute left-0 bottom-5 z-10 hidden group-hover:block w-60 bg-gray-800 text-white text-[11px] rounded-[8px] px-3 py-2 shadow-lg leading-relaxed pointer-events-none">
+                      {tooltip}
+                    </span>
+                  </span>
+                )}
+              </span>
               <span className="text-xs font-bold text-text-secondary">{pct}점</span>
             </div>
             <div className="h-2 bg-surface rounded-full overflow-hidden">
