@@ -351,7 +351,9 @@ async def preprocess(state: RiskState) -> dict[str, Any]:
         "height_cm": profile.get("height_cm"),
         "weight_kg": profile.get("weight_kg"),
         "waist_cm": profile.get("waist_cm"),
-        "systolic_bp": profile.get("systolic_bp") if profile.get("systolic_bp") is not None else bp.get("primary_value"),
+        "systolic_bp": profile.get("systolic_bp")
+        if profile.get("systolic_bp") is not None
+        else bp.get("primary_value"),
         "diastolic_bp": (
             profile.get("diastolic_bp") if profile.get("diastolic_bp") is not None else bp.get("secondary_value")
         ),

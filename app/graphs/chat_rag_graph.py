@@ -170,11 +170,11 @@ _HOSPITAL_KEYWORD_PATTERN = re.compile(
 # 패턴: 의료 수치 단위 또는 위험도 점수 형태 (소수점 포함)
 # 예: "공복혈당 145", "HbA1c 7.8%", "위험도 0.12", "혈압 142/91", "LDL 95 mg/dL"
 _INLINE_NUMERIC_PATTERN = re.compile(
-    r"\d+\.?\d*\s*%"                        # 퍼센트 수치 (HbA1c 7.8%, 위험도 12%)
-    r"|\d+\.?\d*\s*(mg/dL|mmHg|kg|cm|kcal)" # 단위 포함 수치
-    r"|위험도\s*\d+\.?\d*"                  # 위험도 점수 (0.12, 0.35 등)
-    r"|혈압\s*\d+/\d+"                      # 혈압 수치 (130/85)
-    r"|(공복혈당|혈당|LDL|HDL|중성지방|HbA1c|당화혈색소|콜레스테롤)\s*\d+", # 검사 항목 + 수치
+    r"\d+\.?\d*\s*%"  # 퍼센트 수치 (HbA1c 7.8%, 위험도 12%)
+    r"|\d+\.?\d*\s*(mg/dL|mmHg|kg|cm|kcal)"  # 단위 포함 수치
+    r"|위험도\s*\d+\.?\d*"  # 위험도 점수 (0.12, 0.35 등)
+    r"|혈압\s*\d+/\d+"  # 혈압 수치 (130/85)
+    r"|(공복혈당|혈당|LDL|HDL|중성지방|HbA1c|당화혈색소|콜레스테롤)\s*\d+",  # 검사 항목 + 수치
 )
 
 
@@ -194,7 +194,10 @@ _SERVICE_PREFILTER_PATTERN = re.compile(
 # N4 가드 패턴: 약물 일반 정보 질문 (부작용·효능·작용기전·복약법 등)
 # 본인 수치·데이터 없이 답할 수 있는 질문 → needs_health_data 강제 False
 _DRUG_GENERAL_INFO_PATTERN = re.compile(
-    r"부작용|이상반응|근육통|근육통증|횡문근융해|두통|어지럼"    r"|약\s*(끊|중단|바꿔|바꾸|그냥\s*먹|먹어도\s*되)"    r"|효과|효능|작용|기전|원리"    r"|언제\s*먹|어떻게\s*먹|같이\s*먹|함께\s*먹",
+    r"부작용|이상반응|근육통|근육통증|횡문근융해|두통|어지럼"
+    r"|약\s*(끊|중단|바꿔|바꾸|그냥\s*먹|먹어도\s*되)"
+    r"|효과|효능|작용|기전|원리"
+    r"|언제\s*먹|어떻게\s*먹|같이\s*먹|함께\s*먹",
     re.IGNORECASE,
 )
 
@@ -248,7 +251,7 @@ class ChatState(TypedDict, total=False):
     # diseases — multi-disease 라우팅 지원. 1개면 단일 질환, 2개면 OR 매치.
     # 예: "당뇨병 환자의 이상지질혈증" → ["diabetes", "dyslipidemia"]
     diseases: list[DiseaseLiteral]
-    topics: list[str]    # classify_intent 가 추출한 topic 목록 (retrieve 필터용)
+    topics: list[str]  # classify_intent 가 추출한 topic 목록 (retrieve 필터용)
     needs_health_data: bool
     needs_challenge_catalog: bool  # 챌린지 카탈로그를 함께 검색 (medical+service 혼합)
     missing_fields: list[str]
@@ -592,7 +595,16 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:  # noqa: C901
     diseases = [str(d) for d in raw_diseases if d in ("diabetes", "hypertension", "dyslipidemia")][:3]
 
     # topics 파싱 — 허용 값만 필터링
-    _valid_topics = {"diagnosis", "medication", "lifestyle", "complication", "risk", "monitoring", "service", "challenge"}
+    _valid_topics = {
+        "diagnosis",
+        "medication",
+        "lifestyle",
+        "complication",
+        "risk",
+        "monitoring",
+        "service",
+        "challenge",
+    }
     raw_topics = data.get("topics") or []
     if not isinstance(raw_topics, list):
         raw_topics = []
@@ -868,9 +880,7 @@ async def _decompose_query(question: str, query_type: str = "drug_food") -> list
     try:
         response = await _get_client().chat.completions.create(
             model=config.OPENAI_CHAT_MODEL,
-            messages=[{"role": "user", "content": _DECOMPOSE_PROMPT.format(
-                question=question, query_type=query_type
-            )}],
+            messages=[{"role": "user", "content": _DECOMPOSE_PROMPT.format(question=question, query_type=query_type)}],
             temperature=0,
             max_tokens=100,
         )
@@ -968,8 +978,7 @@ def _load_prompt(filename: str) -> str:
     prompt_path = Path(__file__).parent / "prompts" / filename
     if not prompt_path.exists():
         raise FileNotFoundError(
-            f"프롬프트 파일을 찾을 수 없습니다: {prompt_path}\n"
-            f"app/graphs/prompts/{filename} 파일이 있는지 확인하세요."
+            f"프롬프트 파일을 찾을 수 없습니다: {prompt_path}\napp/graphs/prompts/{filename} 파일이 있는지 확인하세요."
         )
     return prompt_path.read_text(encoding="utf-8").strip()
 

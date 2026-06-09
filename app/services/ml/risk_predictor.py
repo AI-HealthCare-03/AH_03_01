@@ -314,6 +314,7 @@ class RiskPredictor:
             return self._ml
         try:
             from app.services.ml.ml_risk_predictor_draft import MLRiskPredictor
+
             self._ml = MLRiskPredictor()
             self._ml._lazy_load()  # 아티팩트 로드 검증
         except Exception:
