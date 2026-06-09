@@ -15,6 +15,7 @@ from app.dtos.pet import (
     PurchaseRequest,
     RewardClaimRequest,
 )
+from app.models.challenge import Challenge
 from app.models.pet import (
     AttendanceCheck,
     GrowthEventSource,
@@ -26,7 +27,6 @@ from app.models.pet import (
     PointSource,
     PointTransaction,
 )
-from app.models.challenge import Challenge
 from app.models.users import User
 from app.repositories.pet_repository import (
     AttendanceRepository,

@@ -4,7 +4,6 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
 from app.core import config
-
 from app.dependencies.security import get_request_user
 from app.dtos.community import (
     CommentCreateRequest,
@@ -13,9 +12,9 @@ from app.dtos.community import (
     PostCreateRequest,
     PostDetailResponse,
     PostListItem,
-    ReportCreateRequest,
     PostListResponse,
     PostUpdateRequest,
+    ReportCreateRequest,
 )
 from app.models.community import Comment, Post, PostCategory
 from app.models.notifications import NotificationType
@@ -28,9 +27,15 @@ posts_router = APIRouter(prefix="/posts", tags=["community"])
 
 def _to_item(p: Post) -> PostListItem:
     return PostListItem(
-        id=p.id, title=p.title, category=p.category, is_pinned=p.is_pinned,
-        view_count=p.view_count, comment_count=getattr(p, "comment_count", 0),
-        author_id=p.author_id, author_nickname=p.author.nickname, created_at=p.created_at,
+        id=p.id,
+        title=p.title,
+        category=p.category,
+        is_pinned=p.is_pinned,
+        view_count=p.view_count,
+        comment_count=getattr(p, "comment_count", 0),
+        author_id=p.author_id,
+        author_nickname=p.author.nickname,
+        created_at=p.created_at,
     )
 
 
@@ -85,7 +90,9 @@ async def create_post(body: PostCreateRequest, current_user: User = Depends(get_
 
 @posts_router.patch("/{post_id}", response_model=PostDetailResponse)
 async def update_post(
-    post_id: int, body: PostUpdateRequest, current_user: User = Depends(get_request_user)  # noqa: B008
+    post_id: int,
+    body: PostUpdateRequest,
+    current_user: User = Depends(get_request_user),  # noqa: B008
 ) -> PostDetailResponse:
     repo = PostRepository()
     post = await repo.get_post(post_id)
@@ -115,9 +122,13 @@ comments_router = APIRouter(prefix="/posts/{post_id}/comments", tags=["comments"
 
 def _build_comment(c: Comment, replies: list[Comment] | None = None) -> CommentResponse:
     return CommentResponse(
-        id=c.id, content=c.content, author_id=c.author_id,
-        author_nickname=c.author.nickname, parent_id=c.parent_id,
-        created_at=c.created_at, updated_at=c.updated_at,
+        id=c.id,
+        content=c.content,
+        author_id=c.author_id,
+        author_nickname=c.author.nickname,
+        parent_id=c.parent_id,
+        created_at=c.created_at,
+        updated_at=c.updated_at,
         replies=[_build_comment(r) for r in (replies or [])],
     )
 
@@ -135,7 +146,9 @@ async def list_comments(post_id: int, _: User = Depends(get_request_user)) -> li
 
 @comments_router.post("", response_model=CommentResponse, status_code=status.HTTP_201_CREATED)
 async def create_comment(
-    post_id: int, body: CommentCreateRequest, current_user: User = Depends(get_request_user)  # noqa: B008
+    post_id: int,
+    body: CommentCreateRequest,
+    current_user: User = Depends(get_request_user),  # noqa: B008
 ) -> CommentResponse:
     comment = await CommentRepository().create_comment(post_id, current_user.id, body.content, body.parent_id)
 
@@ -171,7 +184,10 @@ async def create_comment(
 
 @comments_router.patch("/{comment_id}", response_model=CommentResponse)
 async def update_comment(
-    post_id: int, comment_id: int, body: CommentUpdateRequest, current_user: User = Depends(get_request_user)  # noqa: B008
+    post_id: int,
+    comment_id: int,
+    body: CommentUpdateRequest,
+    current_user: User = Depends(get_request_user),  # noqa: B008
 ) -> CommentResponse:
     repo = CommentRepository()
     comment = await repo.get_comment(comment_id)
@@ -185,7 +201,9 @@ async def update_comment(
 
 @comments_router.delete("/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_comment(
-    post_id: int, comment_id: int, current_user: User = Depends(get_request_user)  # noqa: B008
+    post_id: int,
+    comment_id: int,
+    current_user: User = Depends(get_request_user),  # noqa: B008
 ) -> None:
     repo = CommentRepository()
     comment = await repo.get_comment(comment_id)
@@ -203,7 +221,8 @@ reports_router = APIRouter(prefix="/reports", tags=["reports"])
 
 @reports_router.post("", status_code=status.HTTP_201_CREATED)
 async def create_report(
-    body: ReportCreateRequest, current_user: User = Depends(get_request_user)  # noqa: B008
+    body: ReportCreateRequest,
+    current_user: User = Depends(get_request_user),  # noqa: B008
 ) -> dict[str, str]:
     try:
         await ReportRepository().create_report(
@@ -212,6 +231,6 @@ async def create_report(
             target_id=body.target_id,
             reason=body.reason,
         )
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 신고한 대상입니다.")
+    except ValueError as err:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 신고한 대상입니다.") from err
     return {"message": "신고가 접수되었습니다."}

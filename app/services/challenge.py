@@ -649,7 +649,9 @@ class ReactionService:
         self.verification_repo = ChallengeVerificationRepository()
         self.participant_repo = ChallengeParticipantRepository()
 
-    async def list(self, user: User, verification_id: int) -> tuple[ChallengeVerification, list[ChallengeReaction], bool]:
+    async def list(
+        self, user: User, verification_id: int
+    ) -> tuple[ChallengeVerification, list[ChallengeReaction], bool]:
         verification = await self._access(user, verification_id)
         comments = await self.repo.list_comments_with_replies(verification_id)
         my_like = await self.repo.get_user_like(verification_id, user.id) is not None

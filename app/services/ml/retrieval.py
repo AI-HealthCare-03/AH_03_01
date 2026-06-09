@@ -92,7 +92,7 @@ class _BM25Index:
     document_types: list[str]
     sources: list[str]
     diseases: list[str | None]  # metadata.disease ("diabetes" | "hypertension" | "dyslipidemia" | "general" | None)
-    topics: list[list[str]]     # metadata.topics (["diagnosis", "medication", ...] | [])
+    topics: list[list[str]]  # metadata.topics (["diagnosis", "medication", ...] | [])
     use_restrictions: list[str | None]  # metadata.use_restriction ("included_for_rag" | "pediatric_only" | None)
 
 
@@ -267,11 +267,9 @@ async def _dense_search(
     # pediatric 제외 절 추가 (include_pediatric=False일 때)
     if ped_clause:
         # ped_args의 바인드 인덱스를 기존 args 뒤로 조정
-        adjusted_ped_clause = ped_clause.replace(
-            "$2", f"${len(filter_args) + 2}"
-        )
+        adjusted_ped_clause = ped_clause.replace("$2", f"${len(filter_args) + 2}")
         filter_sql += adjusted_ped_clause
-        filter_args += (ped_args or [])
+        filter_args += ped_args or []
     # asyncpg 는 vector 컬럼 코덱 등록되어 있어 list[float] 그대로 전달 가능 (databases.py 의 init).
     sql = f"""
         SELECT "id", 1 - ("embedding" <=> $1) AS similarity
@@ -453,10 +451,12 @@ async def retrieve(
     else:
         ped_clause, ped_args = "", []
 
-    dense = await _dense_search(query_emb, candidate_k, source_type, diseases, effective_topics,
-                                 ped_clause=ped_clause, ped_args=ped_args)
-    sparse = _sparse_search(bm, query, candidate_k, source_type, diseases, effective_topics,
-                             ped_clause=ped_clause, ped_args=ped_args)
+    dense = await _dense_search(
+        query_emb, candidate_k, source_type, diseases, effective_topics, ped_clause=ped_clause, ped_args=ped_args
+    )
+    sparse = _sparse_search(
+        bm, query, candidate_k, source_type, diseases, effective_topics, ped_clause=ped_clause, ped_args=ped_args
+    )
 
     debug.dense_hits = len(dense)
     debug.sparse_hits = len(sparse)
