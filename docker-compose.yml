@@ -66,6 +66,7 @@ services:
       - ./app:/app/app  # 로컬의 app 디렉토리를 컨테이너의 /app/app에 마운트(수정사항 즉시 반영)
       - static_volume:/app/templates
       - media_data:/app/media  # 업로드된 사진 등 미디어 영속화. ai-worker 와 공유
+      - ./models:/app/models  # ML 모델 아티팩트 (preprocess.py + lgbm_model.pkl 포함)
     restart: always
     ports:
       - "8000:8000"

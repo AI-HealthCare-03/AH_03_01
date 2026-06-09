@@ -263,16 +263,35 @@ def _score_to_level(score: float) -> RiskLevel:
 
 
 class RiskPredictor:
-    """ai_worker 모델 호출의 단일 진입점.
+    """ML 모델 기반 위험도 예측 진입점.
 
-    현재 구현: 룰 기반 폴백.
-    향후: ai_worker HTTP 엔드포인트 호출로 대체. 실패 시 자동으로 룰 기반 결과 반환.
+    ML 모델 로드 실패 시 룰 기반 폴백으로 자동 전환.
+    호출 측은 PredictionInput / PredictionOutput 인터페이스만 의존.
     """
 
     def __init__(self) -> None:
         self._fallback = RuleBasedRiskCalculator()
+        self._ml: Any | None = None
+        self._ml_loaded = False
+
+    def _get_ml(self) -> Any | None:
+        """MLRiskPredictor 지연 로드 (최초 호출 시 1회)"""
+        if self._ml_loaded:
+            return self._ml
+        try:
+            from app.services.ml.ml_risk_predictor_draft import MLRiskPredictor
+            self._ml = MLRiskPredictor()
+            self._ml._lazy_load()  # 아티팩트 로드 검증
+        except Exception:
+            self._ml = None
+        self._ml_loaded = True
+        return self._ml
 
     async def predict(self, payload: PredictionInput) -> PredictionOutput:
-        # TODO(ai_worker): 모델 서비스가 준비되면 여기서 HTTP/RPC 호출 후
-        # 실패/타임아웃 시 self._fallback.calculate(payload) 로 폴백.
+        ml = self._get_ml()
+        if ml is not None:
+            try:
+                return ml.calculate(payload)
+            except Exception:
+                pass  # ML 실패 시 룰 기반 폴백
         return self._fallback.calculate(payload)
