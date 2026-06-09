@@ -40,3 +40,26 @@ class PostUpdateRequest(BaseModel):
     title: str | None = None
     content: str | None = None
     category: PostCategory | None = None
+
+
+class CommentResponse(BaseSerializerModel):
+    id: int
+    content: str
+    author_id: UUID
+    author_nickname: str | None
+    parent_id: int | None
+    created_at: datetime
+    updated_at: datetime
+    replies: list["CommentResponse"] = []
+
+
+CommentResponse.model_rebuild()
+
+
+class CommentCreateRequest(BaseModel):
+    content: str
+    parent_id: int | None = None
+
+
+class CommentUpdateRequest(BaseModel):
+    content: str
