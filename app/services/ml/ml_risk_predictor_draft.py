@@ -551,15 +551,41 @@ class MLRiskPredictor:
         }
         target = TARGET_MAP[payload.disease_type]
 
+        # preprocess.CORE_INPUT_VARS(28) 직접 제공 계약에 맞춰 v2 PredictionInput 을 매핑.
+        # 측정/시간형(Decimal)은 float 변환, 설문 코드형(int, 0·-1 유효)은 그대로 — 0 이 None 으로
+        # 죽지 않도록 `is not None` 으로 판정. 결측은 preprocess 가 KNHANES 규약대로 보정한다.
+        def _num(v: Any) -> float | None:
+            return float(v) if v is not None else None
+
         raw = {
-            "age":                 payload.age,
-            "sex":                 2 if (payload.gender or "").lower() in ("female", "f", "여") else 1,
-            "height_cm":           float(payload.height_cm)              if payload.height_cm else None,
-            "weight_kg":           float(payload.weight_kg)              if payload.weight_kg else None,
-            "waist_cm":            float(payload.waist_cm)               if payload.waist_cm else None,
-            "systolic_bp":         float(payload.blood_pressure_systolic) if payload.blood_pressure_systolic else None,
-            "diastolic_bp":        float(payload.blood_pressure_diastolic) if payload.blood_pressure_diastolic else None,
-            "fasting_blood_sugar": float(payload.fasting_glucose)         if payload.fasting_glucose else None,
+            "age":                    payload.age,
+            "sex":                    2 if (payload.gender or "").lower() in ("female", "f", "여") else 1,
+            "height_cm":              _num(payload.height_cm),
+            "weight_kg":              _num(payload.weight_kg),
+            "waist_cm":               _num(payload.waist_cm),
+            "systolic_bp":            _num(payload.systolic_bp),
+            "diastolic_bp":           _num(payload.diastolic_bp),
+            "fasting_blood_sugar":    _num(payload.fasting_blood_sugar),
+            "FAMILY_DM":              payload.family_dm,
+            "FAMILY_HP":              payload.family_hp,
+            "FAMILY_HL":              payload.family_hl,
+            "CURRENT_SMOKER":         payload.current_smoker,
+            "smoking_risk":           _num(payload.smoking_risk),
+            "alcohol_freq_y":         payload.alcohol_freq_y,
+            "alcohol_cup":            payload.alcohol_cup,
+            "SLEEP_WEEKDAY":          _num(payload.sleep_weekday),
+            "SLEEP_WEEKEND":          _num(payload.sleep_weekend),
+            "mid_act_day":            payload.mid_act_day,
+            "MODERATE_EXERCISE_HOUR": _num(payload.moderate_exercise_hour),
+            "walk_day":               payload.walk_day,
+            "fruit_freq":             payload.fruit_freq,
+            "veg_freq_1":             payload.veg_freq_1,
+            "out_meal_freq":          payload.out_meal_freq,
+            "breakfast_freq":         payload.breakfast_freq,
+            "water_count":            payload.water_count,
+            "is_menopause":           payload.is_menopause,
+            "ocp_total_months":       payload.ocp_total_months,
+            "anemia":                 payload.anemia,
             **payload.extra,
         }
 

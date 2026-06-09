@@ -322,7 +322,9 @@ class RiskPredictor:
         return self._ml
 
     async def predict(self, payload: PredictionInput) -> PredictionOutput:
-        import logging, traceback
+        import logging
+        import traceback
+
         logger = logging.getLogger(__name__)
         ml = self._get_ml()
         if ml is not None:
