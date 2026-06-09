@@ -188,13 +188,15 @@ def _score_to_level(score: int) -> str:
 # SHAP Top-5 기여 피처
 # ──────────────────────────────────────────────────────────────
 
-# 피처 한국어 이름 매핑
+# 피처 한국어 이름 매핑 (54개 전체, 중복 없음)
 FEAT_KOR = {
     # 신체 계측
     "age": "나이", "height_cm": "키", "weight_kg": "체중",
     "waist_cm": "허리둘레", "BMI": "체질량지수(BMI)",
     "WHtR": "허리-키 비율", "WHtR_risk": "허리-키 위험",
     "bmi_age_index": "BMI-나이 복합 지수",
+    "age_male_peak": "남성 최고 위험 연령대",
+    "age_whtr_inter": "나이-허리키비율 상호작용",
     # 혈압
     "systolic_bp": "수축기혈압", "diastolic_bp": "이완기혈압",
     "bp_cat": "혈압 구간",
@@ -203,9 +205,16 @@ FEAT_KOR = {
     "fpg_risk_continuous": "공복혈당 위험",
     "HbA1c_proxy_home": "당화혈색소 추정치",
     "HbA1c_proxy_home_v2": "당화혈색소 추정치(v2)",
+    "glucose_age_interaction": "혈당-나이 상호작용",
+    "glucose_adiposity_interaction": "혈당-비만 상호작용",
+    "glucose_sodium_interaction": "혈당-나트륨 상호작용",
     # 지질 추정치
     "TG_proxy_mgdl": "중성지방 추정치", "HDL_proxy_mgdl": "HDL 추정치",
     "LDL_proxy": "LDL 추정치", "TC_residual_risk": "총콜레스테롤 위험",
+    "HDL_LOW_RISK_PROXY": "HDL 저하 위험 추정치",
+    "HDL_male_risk": "남성 HDL 위험",
+    "TG_male_risk": "남성 중성지방 위험",
+    "TG_female_risk": "여성 중성지방 위험",
     # 지질 메타 피처 — TG
     "prob_tg_cat_0": "중성지방(정상)", "prob_tg_cat_1": "중성지방(경계)",
     "prob_tg_cat_2": "중성지방(높음)",
@@ -225,7 +234,13 @@ FEAT_KOR = {
     # 생활습관
     "FAMILY_HP": "고혈압 가족력", "DRINK_RISK": "음주 위험",
     "walk_day": "걷기 일수", "SLEEP_AVG": "평균 수면시간",
+    "SLEEP_WEEKDAY": "주중 수면시간", "SLEEP_WEEKEND": "주말 수면시간",
+    "SLEEP_IMBALANCE": "수면 불균형",
     "alcohol_freq_y": "음주 빈도",
+    "breakfast_freq": "아침식사 빈도", "fruit_freq": "과일 섭취 빈도",
+    "out_meal_freq": "외식 빈도",
+    "water_count": "하루 물 섭취량", "water_ml_per_kg": "체중 대비 물 섭취량",
+    "anemia": "빈혈 여부",
     # KDE 백분위
     "tg_proxy_kde_pct": "중성지방 분포 위치",
     "hdl_proxy_kde_pct": "HDL 분포 위치",
