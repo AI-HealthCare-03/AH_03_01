@@ -34,8 +34,8 @@ class TestChallengeRecommendationsApi(TestCase):
             json={
                 "height_cm": 170,
                 "weight_kg": 78,
-                "is_smoker": True,
-                "has_hypertension_family_history": True,
+                "current_smoker": 1,
+                "family_hp": 1,
             },
         )
         await client.post(

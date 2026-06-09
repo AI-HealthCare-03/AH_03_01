@@ -17,15 +17,15 @@ class TestHealthRecordsApi(TestCase):
                     "height_cm": 175,
                     "weight_kg": 70,
                     "waist_cm": 82,
-                    "is_smoker": False,
-                    "alcohol_intake": "LIGHT",
-                    "has_diabetes_family_history": True,
-                    "has_hypertension_family_history": False,
+                    "current_smoker": 0,
+                    "alcohol_freq_y": 4,
+                    "family_dm": 1,
+                    "family_hp": 0,
                 },
             )
             assert res.status_code == status.HTTP_201_CREATED
             assert res.json()["height_cm"] == "175.0"
-            assert res.json()["has_diabetes_family_history"] is True
+            assert res.json()["family_dm"] == 1
 
             res2 = await client.get("/api/v1/health-records?recordType=profile", headers=headers)
             assert res2.status_code == status.HTTP_200_OK
