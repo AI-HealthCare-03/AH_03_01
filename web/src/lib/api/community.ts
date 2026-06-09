@@ -8,6 +8,7 @@ import type {
   PostCategory,
   Comment,
   CommentCreateRequest,
+  ReportCreateRequest,
 } from "@/types/community";
 
 export async function listPosts(params?: {
@@ -55,6 +56,11 @@ export async function updateComment(postId: number, commentId: number, data: { c
 
 export async function deleteComment(postId: number, commentId: number): Promise<void> {
   await apiClient.delete(`/api/v1/posts/${postId}/comments/${commentId}`);
+}
+
+export async function createReport(data: ReportCreateRequest): Promise<{ message: string }> {
+  const res = await apiClient.post<{ message: string }>("/api/v1/reports", data);
+  return res.data;
 }
 
 export async function uploadImage(file: File): Promise<string> {

@@ -6,6 +6,7 @@ import { listComments, createComment, updateComment, deleteComment } from "@/lib
 import { useMe } from "@/hooks/queries/useMe";
 import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
+import ReportModal from "@/components/community/ReportModal";
 import type { Comment } from "@/types/community";
 
 interface CommentItemProps {
@@ -13,9 +14,10 @@ interface CommentItemProps {
   myId: string | undefined;
   postId: number;
   onMutated: () => void;
+  onReport: (id: number) => void;
 }
 
-function CommentItem({ comment, myId, postId, onMutated }: CommentItemProps) {
+function CommentItem({ comment, myId, postId, onMutated, onReport }: CommentItemProps) {
   const { showToast } = useToast();
   const isAuthor = myId === comment.author_id;
   const [editing, setEditing] = useState(false);
@@ -54,7 +56,7 @@ function CommentItem({ comment, myId, postId, onMutated }: CommentItemProps) {
               <button type="button" onClick={() => remove()} disabled={removing} className="text-xs text-red-500 hover:text-red-700 disabled:opacity-40">삭제</button>
             </>
           ) : myId ? (
-            <button type="button" onClick={() => showToast("신고가 접수되었습니다.", "success")} className="text-xs text-text-tertiary hover:text-text-secondary">신고</button>
+            <button type="button" onClick={() => onReport(comment.id)} className="text-xs text-text-tertiary hover:text-text-secondary">신고</button>
           ) : null}
           {comment.parent_id === null && myId && (
             <button type="button" onClick={() => setReplyOpen((v) => !v)} className="text-xs text-text-secondary hover:text-text-primary">
@@ -122,6 +124,7 @@ export default function CommentSection({ postId }: { postId: number }) {
   const { data: me } = useMe();
   const { showToast } = useToast();
   const [text, setText] = useState("");
+  const [reportId, setReportId] = useState<number | null>(null);
 
   const { data: comments = [] } = useQuery({
     queryKey: ["comments", postId],
@@ -145,10 +148,14 @@ export default function CommentSection({ postId }: { postId: number }) {
           <p className="py-4 text-sm text-text-tertiary text-center">첫 댓글을 남겨보세요.</p>
         ) : (
           comments.map((c) => (
-            <CommentItem key={c.id} comment={c} myId={me?.id} postId={postId} onMutated={onMutated} />
+            <CommentItem key={c.id} comment={c} myId={me?.id} postId={postId} onMutated={onMutated} onReport={setReportId} />
           ))
         )}
       </div>
+
+      {reportId !== null && (
+        <ReportModal targetType="COMMENT" targetId={reportId} onClose={() => setReportId(null)} />
+      )}
 
       {me && (
         <div className="mt-4 flex gap-2">

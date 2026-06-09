@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getPost, deletePost } from "@/lib/api/community";
 import CommentSection from "@/components/community/CommentSection";
+import ReportModal from "@/components/community/ReportModal";
 import { renderMarkdown } from "@/components/community/MarkdownEditor";
 import { useMe } from "@/hooks/queries/useMe";
 import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
+import { useState } from "react";
 import type { PostCategory } from "@/types/community";
 
 const BACK_PATH: Record<PostCategory, string> = {
@@ -28,6 +30,8 @@ export default function PostDetail({ postId }: { postId: number }) {
     queryFn: () => getPost(postId),
   });
 
+  const [showReport, setShowReport] = useState(false);
+
   const { mutate: remove, isPending } = useMutation({
     mutationFn: () => deletePost(postId),
     onSuccess: () => {
@@ -45,6 +49,7 @@ export default function PostDetail({ postId }: { postId: number }) {
 
   return (
     <div className="bg-white border border-border rounded-[16px] p-6">
+      {showReport && <ReportModal targetType="POST" targetId={postId} onClose={() => setShowReport(false)} />}
       {/* 헤더 */}
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
@@ -54,24 +59,34 @@ export default function PostDetail({ postId }: { postId: number }) {
           </p>
           <h1 className="text-lg font-bold text-text-primary">{post.title}</h1>
         </div>
-        {isAuthor && (
-          <div className="flex gap-2 shrink-0">
-            <Link
-              href={`${backPath}/${postId}/edit`}
-              className="px-3 py-1.5 text-xs font-semibold border border-border rounded-[8px] hover:bg-surface transition-colors"
-            >
-              수정
-            </Link>
+        <div className="flex gap-2 shrink-0">
+          {isAuthor ? (
+            <>
+              <Link
+                href={`${backPath}/${postId}/edit`}
+                className="px-3 py-1.5 text-xs font-semibold border border-border rounded-[8px] hover:bg-surface transition-colors"
+              >
+                수정
+              </Link>
+              <button
+                type="button"
+                onClick={() => remove()}
+                disabled={isPending}
+                className="px-3 py-1.5 text-xs font-semibold bg-red-50 text-red-600 border border-red-200 rounded-[8px] hover:bg-red-100 transition-colors disabled:opacity-50"
+              >
+                삭제
+              </button>
+            </>
+          ) : me && (
             <button
               type="button"
-              onClick={() => remove()}
-              disabled={isPending}
-              className="px-3 py-1.5 text-xs font-semibold bg-red-50 text-red-600 border border-red-200 rounded-[8px] hover:bg-red-100 transition-colors disabled:opacity-50"
+              onClick={() => setShowReport(true)}
+              className="px-3 py-1.5 text-xs font-semibold border border-border rounded-[8px] hover:bg-surface transition-colors"
             >
-              삭제
+              신고
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <hr className="border-border mb-4" />
