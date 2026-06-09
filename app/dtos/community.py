@@ -13,6 +13,7 @@ class PostListItem(BaseSerializerModel):
     category: PostCategory
     is_pinned: bool
     view_count: int
+    comment_count: int
     author_id: UUID
     author_nickname: str | None
     created_at: datetime

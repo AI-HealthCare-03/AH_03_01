@@ -14,8 +14,9 @@ export default function PostCard({ post, basePath = "/community/board" }: { post
         <p className="text-sm font-semibold text-text-primary truncate">{post.title}</p>
       </div>
       <p className="text-xs text-text-tertiary">
-        {post.author_nickname ?? "익명"} · 조회 {post.view_count} ·{" "}
-        {new Date(post.created_at).toLocaleDateString("ko-KR")}
+        {post.author_nickname ?? "익명"} · 조회 {post.view_count}
+        {post.comment_count > 0 && <span> · 💬 {post.comment_count}</span>}
+        {" · "}{new Date(post.created_at).toLocaleDateString("ko-KR")}
       </p>
     </Link>
   );
