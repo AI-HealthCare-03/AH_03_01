@@ -7,12 +7,11 @@ import {
   type Medication,
 } from "@/components/health/MedicationManager";
 import { pushNotification } from "@/components/layout/NotificationDropdown";
+import { notifSettingsKey } from "@/lib/notifKeys";
 
 /* ─────────────────────────────────────────────────────
    알림 설정 페이지 — localStorage 저장 + 웹 알림
 ───────────────────────────────────────────────────── */
-
-const STORAGE_KEY = "notification-settings";
 
 interface NotificationSettings {
   medication: boolean;
@@ -232,13 +231,13 @@ export default function NotificationSettingsPage() {
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(notifSettingsKey());
       if (raw) setSettings({ ...DEFAULT, ...JSON.parse(raw) });
     } catch { /* 무시 */ }
 
     // 페이지 로드 시 저장된 설정에 따라 알림 재스케줄
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(notifSettingsKey());
       const s: NotificationSettings = raw ? { ...DEFAULT, ...JSON.parse(raw) } : DEFAULT;
       if (s.medication && Notification.permission === "granted") scheduleMedicationNotifications();
       if (s.challengeRemind && Notification.permission === "granted") scheduleChallengeNotification(s.challengeTime);
@@ -259,7 +258,7 @@ export default function NotificationSettingsPage() {
     setSettings((prev) => {
       const next = { ...prev, [key]: value };
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        localStorage.setItem(notifSettingsKey(), JSON.stringify(next));
         // 같은 탭에서 변경 시 스케줄러에 재실행 신호 전송
         window.dispatchEvent(new CustomEvent("notif-reschedule"));
       } catch { /* 무시 */ }

@@ -28,7 +28,6 @@ import {
 } from "@/lib/api/auth";
 import { extractErrorMessage } from "@/lib/api/client";
 import { ROUTES } from "@/constants";
-import { LAST_SEEN_KEY } from "@/hooks/useNotificationScheduler";
 
 type DuplStatus = "idle" | "checking" | "available" | "taken";
 
@@ -186,7 +185,6 @@ export default function SignupPage() {
         birth_date: data.birth_date,
         phone_number: data.phone_number.replace(/-/g, ""),
       });
-      localStorage.setItem(LAST_SEEN_KEY, Date.now().toString());
       showToast("가입이 완료되었습니다. 로그인해 주세요.", "success");
       router.push(ROUTES.LOGIN);
     } catch (err) {

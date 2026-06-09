@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { MEDICATION_STORAGE_KEY, type Medication } from "@/components/health/MedicationManager";
 import { pushNotification } from "@/components/layout/NotificationDropdown";
+import { notifLastSeenKey, notifSettingsKey } from "@/lib/notifKeys";
+import { useAuthStore } from "@/stores/auth";
 
-const NOTIF_SETTINGS_KEY = "notification-settings";
+/** @deprecated notifLastSeenKey() 를 사용하세요 */
 export const LAST_SEEN_KEY = "notif-last-seen";
 const MAX_REPLAY_MS = 7 * 86_400_000; // 최대 7일 소급
 
 /** 마지막 접속 이후 놓친 알림을 소급 생성 */
 function replayMissed(settings: Settings) {
-  const raw = localStorage.getItem(LAST_SEEN_KEY);
+  const raw = localStorage.getItem(notifLastSeenKey());
   if (!raw) return;
   const lastSeen = parseInt(raw);
   const now = Date.now();
@@ -99,11 +101,14 @@ async function sendBrowserNotification(title: string, body: string, tag?: string
  * Providers에 마운트되어 페이지 이동과 무관하게 유지.
  */
 export function useNotificationScheduler() {
+  const firstRunRef = useRef(true);
+  const scheduleAllRef = useRef<(() => void) | null>(null);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const timers: ReturnType<typeof setTimeout>[] = [];
-    let firstRun = true;
 
     function scheduleAll() {
       // 기존 타이머 전부 제거
@@ -112,16 +117,16 @@ export function useNotificationScheduler() {
 
       let settings: Settings = DEFAULT_SETTINGS;
       try {
-        const raw = localStorage.getItem(NOTIF_SETTINGS_KEY);
+        const raw = localStorage.getItem(notifSettingsKey());
         if (raw) settings = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
       } catch { /* 무시 */ }
 
-      // 최초 1회: 놓친 알림 소급 생성 후 last_seen 갱신
-      if (firstRun) {
+      // 최초 1회(또는 로그인 직후): 놓친 알림 소급 생성 후 last_seen 갱신
+      if (firstRunRef.current) {
         replayMissed(settings);
-        firstRun = false;
+        firstRunRef.current = false;
       }
-      localStorage.setItem(LAST_SEEN_KEY, Date.now().toString());
+      localStorage.setItem(notifLastSeenKey(), Date.now().toString());
 
       // ── 복약 알림 ────────────────────────────────
       // pushNotification(내역 저장)은 권한 무관, 브라우저 알림만 권한 필요
@@ -166,6 +171,7 @@ export function useNotificationScheduler() {
       }
     }
 
+    scheduleAllRef.current = scheduleAll;
     scheduleAll();
 
     // 같은 탭 내 변경 감지 — 커스텀 이벤트 (storage 이벤트는 타 탭에서만 발생)
@@ -174,17 +180,25 @@ export function useNotificationScheduler() {
 
     // 다른 탭에서의 변경 감지
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === NOTIF_SETTINGS_KEY || e.key === MEDICATION_STORAGE_KEY) {
+      if (e.key === notifSettingsKey() || e.key === MEDICATION_STORAGE_KEY) {
         scheduleAll();
       }
     };
     window.addEventListener("storage", handleStorage);
 
     return () => {
-      localStorage.setItem(LAST_SEEN_KEY, Date.now().toString());
+      localStorage.setItem(notifLastSeenKey(), Date.now().toString());
       timers.forEach(clearTimeout);
       window.removeEventListener("notif-reschedule", handleReschedule);
       window.removeEventListener("storage", handleStorage);
     };
   }, []);
+
+  // isAuthenticated 가 true 로 바뀔 때(로그인 / 페이지 새로고침) 소급 복구 + 재스케줄
+  // (신규 가입자는 notif-last-seen:{userId} 가 없어 replayMissed 가 자동 스킵됨)
+  useEffect(() => {
+    if (!isAuthenticated || !scheduleAllRef.current) return;
+    firstRunRef.current = true;
+    scheduleAllRef.current();
+  }, [isAuthenticated]);
 }
