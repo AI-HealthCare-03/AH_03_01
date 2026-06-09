@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.dtos.base import BaseSerializerModel
-from app.models.community import PostCategory
+from app.models.community import PostCategory, ReportReason, ReportTargetType
 
 
 class PostListItem(BaseSerializerModel):
@@ -64,3 +64,9 @@ class CommentCreateRequest(BaseModel):
 
 class CommentUpdateRequest(BaseModel):
     content: str
+
+
+class ReportCreateRequest(BaseModel):
+    target_type: ReportTargetType
+    target_id: int
+    reason: ReportReason
