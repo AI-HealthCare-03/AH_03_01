@@ -21,6 +21,7 @@ TORTOISE_APP_MODELS = [
     "app.models.experience",
     "app.models.ml_inference",
     "app.models.community",
+    "app.models.notifications",
 ]
 
 
