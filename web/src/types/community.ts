@@ -34,3 +34,19 @@ export interface PostUpdateRequest {
   content?: string;
   category?: PostCategory;
 }
+
+export interface Comment {
+  id: number;
+  content: string;
+  author_id: string;
+  author_nickname: string | null;
+  parent_id: number | null;
+  created_at: string;
+  updated_at: string;
+  replies: Comment[];
+}
+
+export interface CommentCreateRequest {
+  content: string;
+  parent_id?: number;
+}
