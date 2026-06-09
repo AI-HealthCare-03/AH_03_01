@@ -288,10 +288,13 @@ class RiskPredictor:
         return self._ml
 
     async def predict(self, payload: PredictionInput) -> PredictionOutput:
+        import logging, traceback
+        logger = logging.getLogger(__name__)
         ml = self._get_ml()
         if ml is not None:
             try:
                 return ml.calculate(payload)
-            except Exception:
-                pass  # ML 실패 시 룰 기반 폴백
+            except Exception as e:
+                logger.error(f"[MLRiskPredictor] calculate 실패: {type(e).__name__}: {e}")
+                logger.error(traceback.format_exc())
         return self._fallback.calculate(payload)

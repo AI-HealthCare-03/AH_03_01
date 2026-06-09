@@ -207,6 +207,21 @@ FEAT_KOR = {
 }
 
 
+def _unwrap_lgbm(model):
+    """래퍼 클래스(PlattCalibrator → TripleEnsemble → ResidualEnsemble)를 벗겨
+    SHAP 이 지원하는 LGBMClassifier 를 반환한다."""
+    # PlattCalibrator
+    if isinstance(model, PlattCalibrator):
+        model = model.base_model
+    # TripleEnsemble → LGBM 쪽만 사용
+    if isinstance(model, TripleEnsemble):
+        model = model.lgbm_model
+    # ResidualEnsemble → M1 사용
+    if isinstance(model, ResidualEnsemble):
+        model = model.m1
+    return model
+
+
 def _get_top5_features(
     model, feature_cols: list[str], X_in, predicted_class: int, n: int = 5
 ) -> list[dict[str, Any]]:
@@ -216,7 +231,9 @@ def _get_top5_features(
         # OrdinalClassifier는 SHAP 불가 → 빈 리스트
         if isinstance(model, OrdinalClassifier):
             return []
-        explainer = shap.TreeExplainer(model)
+        # 래퍼 클래스 언래핑 → 실제 LGBMClassifier
+        lgbm_model = _unwrap_lgbm(model)
+        explainer = shap.TreeExplainer(lgbm_model)
         shap_vals = explainer.shap_values(X_in)
         if isinstance(shap_vals, list):
             cls_idx = min(predicted_class, len(shap_vals) - 1)
@@ -239,7 +256,11 @@ def _get_top5_features(
                 "direction":         "위험 증가↑" if contribution > 0 else "위험 감소↓",
             })
         return result
-    except Exception:
+    except Exception as e:
+        import logging, traceback
+        logging.getLogger(__name__).error(
+            f"[SHAP] 실패: {type(e).__name__}: {e}\n{traceback.format_exc()}"
+        )
         return []
 
 
@@ -275,6 +296,30 @@ LIPID_BASE_TARGETS = [
 
 
 # ──────────────────────────────────────────────────────────────
+# Colab pkl 역직렬화 — 클래스 경로 재매핑
+# Colab에서 저장된 pkl은 클래스가 __mp_main__ / __main__ 에 등록됨
+# FastAPI 환경에서는 app.services.ml.ml_risk_predictor_draft 로 매핑 필요
+# ──────────────────────────────────────────────────────────────
+_THIS_MODULE = "app.services.ml.ml_risk_predictor_draft"
+_COLAB_CLASS_NAMES = {
+    "PlattCalibrator", "ResidualEnsemble", "TripleEnsemble", "OrdinalClassifier",
+}
+
+
+class _ColabUnpickler(pickle.Unpickler):
+    def find_class(self, module: str, name: str):
+        if name in _COLAB_CLASS_NAMES and module in ("__mp_main__", "__main__"):
+            module = _THIS_MODULE
+        return super().find_class(module, name)
+
+
+def _pkl_load(path: Path):
+    """Colab pkl 안전 로드 (클래스 경로 재매핑 포함)"""
+    with open(path, "rb") as f:
+        return _ColabUnpickler(f).load()
+
+
+# ──────────────────────────────────────────────────────────────
 # 모델 로더
 # ──────────────────────────────────────────────────────────────
 def _load_model(
@@ -283,7 +328,7 @@ def _load_model(
     """pkl 로드 → (model, feature_cols, threshold) 반환"""
     d = artifact_dir / sex / f"{layer}_{target}"
     with open(d / "lgbm_model.pkl", "rb") as f:
-        data = pickle.load(f)
+        data = _ColabUnpickler(f).load()
     feat = json.loads((d / "feature_columns.json").read_text(encoding="utf-8"))
     cols = [x["name"] for x in sorted(feat["features"], key=lambda x: x["order_index"])]
     thr  = json.loads((d / "threshold_config.json").read_text(encoding="utf-8"))["threshold"]
@@ -293,8 +338,12 @@ def _load_model(
 # ──────────────────────────────────────────────────────────────
 # 핵심 추론 함수
 # ──────────────────────────────────────────────────────────────
-def _get_sex_str(gender: str | None) -> str:
-    if gender and gender.lower() in ("female", "f", "여", "2"):
+def _get_sex_str(gender: str | int | None) -> str:
+    if gender is None:
+        return "male"
+    if isinstance(gender, int):
+        return "female" if gender == 2 else "male"
+    if str(gender).lower() in ("female", "f", "여", "2"):
         return "female"
     return "male"
 
