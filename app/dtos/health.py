@@ -6,9 +6,9 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.dtos.base import BaseSerializerModel
 from app.models.health import (
-    AlcoholIntake,
+    BpMeasureEnv,
     DiseaseType,
-    PregnancyHistory,
+    PregnancyStatus,
     RecordSource,
     RecordSubType,
     RecordType,
@@ -21,31 +21,78 @@ from app.models.health import (
 
 
 class HealthProfileUpsertRequest(BaseModel):
+    # 수치형
     height_cm: Annotated[Decimal | None, Field(None, ge=50, le=250)]
     weight_kg: Annotated[Decimal | None, Field(None, ge=20, le=300)]
     waist_cm: Annotated[Decimal | None, Field(None, ge=30, le=200)]
-    is_smoker: bool | None = None
-    alcohol_intake: AlcoholIntake | None = None
-    pregnancy_history: PregnancyHistory | None = None
-    has_diabetes_family_history: bool | None = None
-    has_hypertension_family_history: bool | None = None
-    is_chronic_patient: bool | None = None
-    diseases: list[str] | None = None
+    systolic_bp: Annotated[Decimal | None, Field(None, ge=50, le=300)]
+    diastolic_bp: Annotated[Decimal | None, Field(None, ge=30, le=200)]
+    fasting_blood_sugar: Annotated[Decimal | None, Field(None, ge=20, le=600)]
+    sleep_weekday: Annotated[Decimal | None, Field(None, ge=0, le=24)]
+    sleep_weekend: Annotated[Decimal | None, Field(None, ge=0, le=24)]
+    moderate_exercise_hour: Annotated[Decimal | None, Field(None, ge=0, le=24)]
+    smoking_risk: Annotated[Decimal | None, Field(None, ge=0, le=1)]
+    # 정수형 (활동/식습관/물)
+    mid_act_day: Annotated[int | None, Field(None, ge=0, le=7)]
+    walk_day: Annotated[int | None, Field(None, ge=0, le=7)]
+    water_count: Annotated[int | None, Field(None, ge=0, le=50)]
+    # 가족력: 1=있음 / 0=없음 / -1=모름
+    family_dm: Annotated[int | None, Field(None, ge=-1, le=1)]
+    family_hp: Annotated[int | None, Field(None, ge=-1, le=1)]
+    family_hl: Annotated[int | None, Field(None, ge=-1, le=1)]
+    # 흡연: 현재흡연 1 / 비흡연 0
+    current_smoker: Annotated[int | None, Field(None, ge=0, le=1)]
+    # 음주 (KNHANES 코드)
+    alcohol_freq_y: Annotated[int | None, Field(None, ge=-1, le=7)]
+    alcohol_cup: Annotated[int | None, Field(None, ge=0, le=100)]
+    # 식습관 (KNHANES 빈도 코드)
+    fruit_freq: Annotated[int | None, Field(None, ge=0, le=99)]
+    veg_freq_1: Annotated[int | None, Field(None, ge=0, le=99)]
+    out_meal_freq: Annotated[int | None, Field(None, ge=0, le=99)]
+    breakfast_freq: Annotated[int | None, Field(None, ge=0, le=99)]
+    # 폐경 / 호르몬: 폐경 1 / 비폐경여성 0 / 남성·비해당 -1
+    is_menopause: Annotated[int | None, Field(None, ge=-1, le=1)]
+    ocp_total_months: Annotated[int | None, Field(None, ge=0, le=1200)]
+    # 빈혈: 1=있음 / 0=없음
+    anemia: Annotated[int | None, Field(None, ge=0, le=1)]
+    # 예측 미사용 · 권고/챗봇용 프로필
+    chronic_diseases: list[str] | None = None
     medications: list[str] | None = None
+    pregnancy_status: PregnancyStatus | None = None
+    bp_measure_env: BpMeasureEnv | None = None
 
 
 class HealthProfileResponse(BaseSerializerModel):
     height_cm: Decimal | None
     weight_kg: Decimal | None
     waist_cm: Decimal | None
-    is_smoker: bool
-    alcohol_intake: AlcoholIntake
-    pregnancy_history: PregnancyHistory
-    has_diabetes_family_history: bool
-    has_hypertension_family_history: bool
-    is_chronic_patient: bool
-    diseases: list[str]
+    systolic_bp: Decimal | None
+    diastolic_bp: Decimal | None
+    fasting_blood_sugar: Decimal | None
+    sleep_weekday: Decimal | None
+    sleep_weekend: Decimal | None
+    moderate_exercise_hour: Decimal | None
+    smoking_risk: Decimal | None
+    mid_act_day: int | None
+    walk_day: int | None
+    water_count: int | None
+    family_dm: int | None
+    family_hp: int | None
+    family_hl: int | None
+    current_smoker: int | None
+    alcohol_freq_y: int | None
+    alcohol_cup: int | None
+    fruit_freq: int | None
+    veg_freq_1: int | None
+    out_meal_freq: int | None
+    breakfast_freq: int | None
+    is_menopause: int | None
+    ocp_total_months: int | None
+    anemia: int | None
+    chronic_diseases: list[str]
     medications: list[str]
+    pregnancy_status: PregnancyStatus | None
+    bp_measure_env: BpMeasureEnv | None
     updated_at: datetime
 
 
@@ -73,10 +120,9 @@ class HealthRecordCreateRequest(BaseModel):
                 raise ValueError("혈압의 sub_type 은 HOME 또는 HOSPITAL 이어야 합니다.")
         if self.record_type == RecordType.BLOOD_GLUCOSE and self.sub_type not in (
             RecordSubType.FASTING,
-            RecordSubType.POSTMEAL,
             None,
         ):
-            raise ValueError("혈당의 sub_type 은 FASTING 또는 POSTMEAL 이어야 합니다.")
+            raise ValueError("혈당의 sub_type 은 FASTING 이어야 합니다.")
         return self
 
 
