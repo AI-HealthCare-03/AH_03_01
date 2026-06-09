@@ -131,9 +131,9 @@ class ChallengeListItem(BaseModel):
     start_date: date
     end_date: date
     progress_percent: float | None = None
-    my_progress: int | None = None    # 내 달성일 수 (승인된 인증 횟수)
-    total_days: int | None = None     # 챌린지 전체 기간 일 수
-    missed_count: int | None = None   # 누락 횟수
+    my_progress: int | None = None  # 내 달성일 수 (승인된 인증 횟수)
+    total_days: int | None = None  # 챌린지 전체 기간 일 수
+    missed_count: int | None = None  # 누락 횟수
 
 
 class ChallengeListResponse(BaseModel):

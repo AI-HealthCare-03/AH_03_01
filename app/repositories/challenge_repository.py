@@ -60,7 +60,7 @@ class ChallengeRepository:
         keyword: str | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
-        sort_by: str | None = None,   # "start_date" | "end_date" | None(기본: created_at)
+        sort_by: str | None = None,  # "start_date" | "end_date" | None(기본: created_at)
         page: int = 1,
         size: int = 20,
     ) -> tuple[list[Challenge], int]:
@@ -387,7 +387,9 @@ class ChallengeReactionRepository:
                 type=ReactionType.COMMENT,
                 parent_id__isnull=True,
                 is_deleted=False,
-            ).prefetch_related("user").order_by("created_at")
+            )
+            .prefetch_related("user")
+            .order_by("created_at")
         )
         for comment in top_level:
             comment.reply_list = list(  # type: ignore[attr-defined]
@@ -395,7 +397,9 @@ class ChallengeReactionRepository:
                     parent_id=comment.id,
                     type=ReactionType.COMMENT,
                     is_deleted=False,
-                ).prefetch_related("user").order_by("created_at")
+                )
+                .prefetch_related("user")
+                .order_by("created_at")
             )
         return top_level
 

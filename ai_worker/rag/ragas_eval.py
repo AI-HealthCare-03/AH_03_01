@@ -91,6 +91,7 @@ async def _collect_single(
     print(f"\n  [{idx}/{total}] {question}")
     try:
         from app.graphs.chat_rag_graph import ChatRAGGraph, _state_to_result
+
         graph = ChatRAGGraph()
         initial = {
             "user_id": None,
@@ -102,9 +103,7 @@ async def _collect_single(
         final_state = await graph.ainvoke(initial)
         result = _state_to_result(final_state)
         answer = result.answer or ""
-        ctx_texts: list[str] = [
-            chunk.chunk_text for chunk in (result.sources or []) if chunk.chunk_text
-        ]
+        ctx_texts: list[str] = [chunk.chunk_text for chunk in (result.sources or []) if chunk.chunk_text]
     except Exception as e:
         print(f"    ❌ 오류: {e}")
         answer = ""
@@ -157,19 +156,22 @@ def collect_answers(eval_dataset: list[dict], seed: int | None = None) -> dict:
     import random
 
     import nest_asyncio
+
     nest_asyncio.apply()
 
     # RAGAS 평가용 필터링 — 서비스 범위 밖 질문 제외
     filtered = [
-        item for item in eval_dataset
-        if item.get("category") not in ("out_of_scope",)
-        and item.get("eval_type") not in ("out_of_scope",)
+        item
+        for item in eval_dataset
+        if item.get("category") not in ("out_of_scope",) and item.get("eval_type") not in ("out_of_scope",)
     ]
 
     if seed is not None:
         random.seed(seed)
     sampled = random.sample(filtered, min(EVAL_SAMPLE_SIZE, len(filtered)))
-    print(f"  샘플링: {len(eval_dataset)}개 중 필터링 후 {len(filtered)}개 → {len(sampled)}개 선택 (seed={seed if seed else '랜덤'})")
+    print(
+        f"  샘플링: {len(eval_dataset)}개 중 필터링 후 {len(filtered)}개 → {len(sampled)}개 선택 (seed={seed if seed else '랜덤'})"
+    )
     return asyncio.run(_collect_all(sampled))
 
 
@@ -304,8 +306,7 @@ def print_results(ragas_result, ko_ar_scores: list[float], data: dict):
     output_data = {
         "summary": {k: float(v) for k, v in scores.items()},
         "ko_ar_per_question": [
-            {"question": q, "ko_ar_score": s}
-            for q, s in zip(data["question"], ko_ar_scores, strict=False)
+            {"question": q, "ko_ar_score": s} for q, s in zip(data["question"], ko_ar_scores, strict=False)
         ],
     }
     with open(output_path, "w", encoding="utf-8") as f:

@@ -44,7 +44,9 @@ class RewardService:
     def __init__(self) -> None:
         self.point_repo = PointTransactionRepository()
 
-    async def grant_daily(self, *, user_id: int, challenge_id: int, verification_id: int, challenge_title: str | None = None) -> RewardResult:
+    async def grant_daily(
+        self, *, user_id: int, challenge_id: int, verification_id: int, challenge_title: str | None = None
+    ) -> RewardResult:
         amount = random.choice(self.DAILY_OPTIONS)
         label = challenge_title or f"챌린지 {challenge_id}"
         tx = await self.point_repo.grant(
@@ -62,7 +64,9 @@ class RewardService:
             description=tx.description or "",
         )
 
-    async def grant_period_completion(self, *, user_id: int, challenge_id: int, challenge_title: str | None = None) -> RewardResult:
+    async def grant_period_completion(
+        self, *, user_id: int, challenge_id: int, challenge_title: str | None = None
+    ) -> RewardResult:
         amount = self.PERIOD_REWARD
         label = challenge_title or f"챌린지 {challenge_id}"
         tx = await self.point_repo.grant(

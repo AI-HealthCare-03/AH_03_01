@@ -11,7 +11,6 @@ from app.apis.v1.challenge_routers import (
 )
 from app.apis.v1.chatbot_routers import chatbot_router
 from app.apis.v1.community_routers import comments_router, posts_router, reports_router
-from app.apis.v1.notification_routers import notifications_router
 from app.apis.v1.experience_routers import experience_router, leaderboard_router
 from app.apis.v1.files_routers import files_router
 from app.apis.v1.health_routers import (
@@ -19,6 +18,7 @@ from app.apis.v1.health_routers import (
     health_reports_router,
     predictions_router,
 )
+from app.apis.v1.notification_routers import notifications_router
 from app.apis.v1.pet_routers import (
     attendance_router,
     inventory_router,
