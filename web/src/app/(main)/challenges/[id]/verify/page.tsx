@@ -48,7 +48,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
   /* 오늘 이미 인증했는지 확인 (내 인증만, APPROVED/PENDING/REJECTED 모두 포함)
      REJECTED도 포함 — 아니요 선택 후 재제출 시 백엔드 409 방지 */
   const alreadyVerifiedToday = verificationsData?.items.some(
-    (v) => v.verified_date === today &&
+    (v) => v.verified_at?.split("T")[0] === today &&
            (v.status === "APPROVED" || v.status === "PENDING" || v.status === "REJECTED")
   ) ?? false;
 
