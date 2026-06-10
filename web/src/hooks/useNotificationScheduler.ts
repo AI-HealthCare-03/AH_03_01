@@ -46,10 +46,16 @@ function replayMissed(settings: Settings) {
           dt.setHours(hh, mm, 0, 0);
           if (dt.getTime() <= from) dt.setDate(dt.getDate() + 1);
           while (dt.getTime() < now) {
-            pushNotification(
-              { category: "복약", title: "💊 복약 알림", body: `${label} 복용 시간이었어요.` },
-              dt.getTime(),
-            );
+            const dayOfWeek = dt.getDay();
+            const shouldNotify =
+              med.scheduleType !== "specific_days" ||
+              med.scheduleDays.includes(dayOfWeek);
+            if (shouldNotify) {
+              pushNotification(
+                { category: "복약", title: "💊 복약 알림", body: `${label} 복용 시간이었어요.` },
+                dt.getTime(),
+              );
+            }
             dt.setDate(dt.getDate() + 1);
           }
         });
@@ -142,6 +148,13 @@ export function useNotificationScheduler() {
           const meds: Medication[] = raw ? JSON.parse(raw) : [];
 
           meds.filter((m) => m.active).forEach((med) => {
+            const todayDow = new Date().getDay();
+            const scheduledToday =
+              med.scheduleType !== "specific_days" ||
+              med.scheduleDays.includes(todayDow);
+
+            if (!scheduledToday) return;
+
             med.times.forEach((t) => {
               const label = med.dosageAmount
                 ? `${med.name} ${med.dosageAmount}${med.dosageUnit}`
