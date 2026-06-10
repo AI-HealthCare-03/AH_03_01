@@ -604,6 +604,11 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:  # noqa: C901
         "monitoring",
         "service",
         "challenge",
+        "exercise",
+        "diet",
+        "weight",
+        "smoking",
+        "alcohol",
     }
     raw_topics = data.get("topics") or []
     if not isinstance(raw_topics, list):
