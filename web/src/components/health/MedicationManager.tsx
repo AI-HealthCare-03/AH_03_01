@@ -58,7 +58,7 @@ function TimeTagInput({
 
   const add = () => {
     if (!input || times.includes(input)) return;
-    onChange([...times, input]);
+    onChange([...times, input].sort());
   };
 
   const remove = (t: string) => onChange(times.filter((x) => x !== t));
