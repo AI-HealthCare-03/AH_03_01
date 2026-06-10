@@ -30,13 +30,16 @@ services:
       redis:
         condition: service_healthy
 
-  # 3. AI Worker (Model 학습 및 추론)
+  # 3. AI Worker (SigLIP2 사진인증) — 동시 요청 대비 3 replica.
+  # 3개 워커가 같은 큐(queue:image-verification)를 BRPOP → Redis 가 자동 분배.
+  # replicas 사용을 위해 container_name 제거(고정 이름은 복제와 충돌). 실측 1벌 ~1GB.
   ai-worker:
-    container_name: ai-worker
     image: ${DOCKER_USER}/${DOCKER_REPOSITORY}:ai-${AI_WORKER_VERSION}  # AI_WORKER_VERSION은 빌드된 이미지의 버전관리를 위함입니다. V1.0.0 형식으로 사용합니다.
     env_file: .env
     restart: always
-    mem_limit: 4G
+    mem_limit: 2G  # 워커당 상한 (SigLIP2 idle ~1GB + 추론 여유). 3×2G=6G, t3.large(8G) 내.
+    deploy:
+      replicas: 3
     networks:
       - ws
     depends_on:
