@@ -79,3 +79,55 @@ class Report(models.Model):
     class Meta:
         table = "community_reports"
         unique_together = (("reporter", "target_type", "target_id"),)
+
+
+class QuizCategory(StrEnum):
+    BLOOD_SUGAR = "BLOOD_SUGAR"
+    BLOOD_PRESSURE = "BLOOD_PRESSURE"
+    DIET = "DIET"
+    EXERCISE = "EXERCISE"
+    GENERAL = "GENERAL"
+
+
+class QuizOption(StrEnum):
+    A = "A"
+    B = "B"
+    C = "C"
+    D = "D"
+
+
+class HealthQuiz(models.Model):
+    id = fields.BigIntField(primary_key=True)
+    question = fields.TextField()
+    option_a = fields.CharField(max_length=200)
+    option_b = fields.CharField(max_length=200)
+    option_c = fields.CharField(max_length=200)
+    option_d = fields.CharField(max_length=200)
+    correct_option = fields.CharEnumField(QuizOption, max_length=1)
+    explanation = fields.TextField()
+    category = fields.CharEnumField(QuizCategory, max_length=20, default=QuizCategory.GENERAL)
+    quiz_date = fields.DateField()
+    is_active = fields.BooleanField(default=True)
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "health_quizzes"
+        ordering = ["quiz_date", "id"]
+
+
+class QuizAttempt(models.Model):
+    id = fields.BigIntField(primary_key=True)
+    user: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(
+        "models.User", related_name="quiz_attempts", on_delete=fields.CASCADE
+    )
+    quiz: fields.ForeignKeyRelation["HealthQuiz"] = fields.ForeignKeyField(
+        "models.HealthQuiz", related_name="attempts", on_delete=fields.CASCADE
+    )
+    selected_option = fields.CharEnumField(QuizOption, max_length=1)
+    is_correct = fields.BooleanField()
+    points_earned = fields.IntField(default=0)
+    attempted_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "quiz_attempts"
+        unique_together = (("user", "quiz"),)
