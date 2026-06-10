@@ -164,7 +164,10 @@ def build_embedding_text(block: str) -> str:
     if rag_match:
         parts.append("[RAG요약] " + rag_match.group(1).strip())
 
-    kw_match = re.search(r"^#{3,5}.*?검색 키워드.*?\n(.*?)(?=^#{3,5}|\Z)", block, re.DOTALL | re.MULTILINE)
+    kw_match = re.search(
+    r"^#{3,5}.*?(?:검색 키워드|Keywords).*?\n(.*?)(?=^#{3,5}|\Z)",
+    block, re.DOTALL | re.MULTILINE
+    )
     if kw_match:
         keywords = [
             line.strip().lstrip("- ").strip()
