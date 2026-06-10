@@ -5,6 +5,7 @@ from dataclasses import field
 from enum import StrEnum
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +32,14 @@ class Config(BaseSettings):
     DB_CONNECTION_POOL_MAXSIZE: int = 10
 
     COOKIE_DOMAIN: str = "localhost"
+
+    @model_validator(mode="after")
+    def _guard_prod_db_host(self) -> "Config":
+        # PROD 에서 DB_HOST 가 RDS 엔드포인트로 주입되지 않으면(=.env 누락/오타) 부팅 거부.
+        # default localhost 로 조용히 폴백해 엉뚱한 DB 에 운영 트래픽이 쓰이는 사고 방지.
+        if self.ENV == Env.PROD and self.DB_HOST in ("", "localhost", "127.0.0.1"):
+            raise ValueError("PROD 환경에서 DB_HOST 가 RDS 엔드포인트로 설정되지 않았습니다.")
+        return self
 
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60

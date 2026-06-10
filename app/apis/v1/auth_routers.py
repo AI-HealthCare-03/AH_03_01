@@ -178,6 +178,7 @@ async def login(
         value=str(tokens["refresh_token"]),
         httponly=True,
         secure=True if config.ENV == Env.PROD else False,
+        samesite="lax",  # api.↔apex 는 same-site 서브도메인 → lax 로 쿠키 정상 전달
         domain=config.COOKIE_DOMAIN or None,
         expires=tokens["access_token"].payload["exp"],
     )
