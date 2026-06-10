@@ -17,6 +17,8 @@ export interface Medication {
   disease: string;
   times: string[];
   active: boolean;
+  scheduleType: "everyday" | "specific_days"; // 복용 주기
+  scheduleDays: number[];                     // 0=일, 1=월, ..., 6=토 (specific_days 일 때만 사용)
 }
 
 const DISEASE_OPTIONS = ["고혈압", "당뇨", "고지혈증", "기타"];
@@ -103,6 +105,8 @@ function TimeTagInput({
 }
 
 /* ── 약 추가/수정 폼 ─────────────────────────────────── */
+const DAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+
 function MedicationForm({
   initial,
   onSave,
@@ -117,10 +121,19 @@ function MedicationForm({
   const [dosageUnit, setDosageUnit] = useState(initial?.dosageUnit ?? "mg");
   const [disease, setDisease] = useState(initial?.disease ?? "");
   const [times, setTimes] = useState<string[]>(initial?.times ?? []);
+  const [scheduleType, setScheduleType] = useState<"everyday" | "specific_days">(
+    initial?.scheduleType ?? "everyday"
+  );
+  const [scheduleDays, setScheduleDays] = useState<number[]>(initial?.scheduleDays ?? []);
+
+  const toggleDay = (day: number) =>
+    setScheduleDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort()
+    );
 
   const handleSubmit = () => {
     if (!name.trim()) return;
-    onSave({ name: name.trim(), dosageAmount, dosageUnit, disease, times });
+    onSave({ name: name.trim(), dosageAmount, dosageUnit, disease, times, scheduleType, scheduleDays });
   };
 
   return (
@@ -203,6 +216,47 @@ function MedicationForm({
         </div>
       </div>
 
+      {/* 복용 주기 */}
+      <div>
+        <p className="text-xs font-medium text-text-secondary mb-1.5">복용 주기</p>
+        <div className="flex gap-2 mb-2">
+          {(["everyday", "specific_days"] as const).map((type) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => setScheduleType(type)}
+              className={[
+                "px-3 py-1.5 text-xs rounded-full border transition-colors",
+                scheduleType === type
+                  ? "bg-brand-black text-white border-brand-black"
+                  : "bg-white text-text-secondary border-border hover:border-text-primary",
+              ].join(" ")}
+            >
+              {type === "everyday" ? "매일" : "특정 요일"}
+            </button>
+          ))}
+        </div>
+        {scheduleType === "specific_days" && (
+          <div className="flex gap-1.5">
+            {DAY_LABELS.map((label, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => toggleDay(idx)}
+                className={[
+                  "w-8 h-8 text-xs rounded-full border transition-colors font-medium",
+                  scheduleDays.includes(idx)
+                    ? "bg-brand-black text-white border-brand-black"
+                    : "bg-white text-text-secondary border-border hover:border-text-primary",
+                ].join(" ")}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* 복용 시간 */}
       <TimeTagInput times={times} onChange={setTimes} />
 
@@ -257,7 +311,10 @@ function MedicationCard({
           </div>
           {med.times.length > 0 && (
             <p className="text-xs text-text-tertiary mt-0.5">
-              매일 {med.times.join(", ")}
+              {med.scheduleType === "specific_days" && med.scheduleDays.length > 0
+                ? `${med.scheduleDays.map((d) => DAY_LABELS[d]).join("·")}요일`
+                : "매일"}{" "}
+              {med.times.join(", ")}
             </p>
           )}
         </div>
