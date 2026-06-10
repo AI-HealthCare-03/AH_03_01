@@ -244,10 +244,11 @@ export default function SignupPage() {
 
   return (
     <SplitAuthShell>
-      <div>
+      <div className="px-6 md:px-10 py-8 md:py-10">
+      <div className="bg-white rounded-3xl border border-gray-200 shadow-sm px-8 py-8">
         <h2 className="text-2xl font-bold text-text-primary mb-2">회원가입</h2>
         <p className="text-sm text-text-secondary mb-8">
-          헬씨루틴과 함께 건강한 일상을 시작하세요
+          케어로그와 함께 건강한 일상을 시작하세요
         </p>
 
         <form onSubmit={handleSubmit(onSubmit)} noValidate>
@@ -578,6 +579,7 @@ export default function SignupPage() {
             로그인
           </Link>
         </p>
+      </div>
       </div>
     </SplitAuthShell>
   );

@@ -41,7 +41,7 @@ export default function ChatMessageList({
         <div className="space-y-4">
           <div className="text-center py-4">
             <p className="text-sm font-semibold text-text-primary">
-              헬씨루틴 건강 도우미
+              케어로그 건강 도우미
             </p>
             <p className="text-xs text-text-secondary mt-1 leading-relaxed">
               만성질환 관리, 챌린지, 생활습관에 대해<br />
