@@ -1,10 +1,10 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from app.dtos.base import BaseSerializerModel
-from app.models.community import PostCategory, ReportReason, ReportTargetType
+from app.models.community import PostCategory, QuizCategory, QuizOption, ReportReason, ReportTargetType
 
 
 class PostListItem(BaseSerializerModel):
@@ -70,3 +70,38 @@ class ReportCreateRequest(BaseModel):
     target_type: ReportTargetType
     target_id: int
     reason: ReportReason
+
+
+# ── Quiz DTOs ──────────────────────────────────────────────────────────────────
+
+class QuizResponse(BaseSerializerModel):
+    id: int
+    question: str
+    option_a: str
+    option_b: str
+    option_c: str
+    option_d: str
+    category: QuizCategory
+    quiz_date: date
+
+
+class QuizAnswerRequest(BaseModel):
+    selected_option: QuizOption
+
+
+class QuizAnswerResponse(BaseSerializerModel):
+    is_correct: bool
+    correct_option: QuizOption
+    explanation: str
+    points_earned: int
+
+
+class QuizAttemptHistoryItem(BaseSerializerModel):
+    quiz_id: int
+    quiz_date: date
+    question: str
+    category: QuizCategory
+    selected_option: QuizOption
+    is_correct: bool
+    points_earned: int
+    attempted_at: datetime

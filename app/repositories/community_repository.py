@@ -4,7 +4,9 @@ from uuid import UUID
 
 from tortoise.functions import Count
 
-from app.models.community import Comment, Post, PostCategory, Report, ReportReason, ReportTargetType
+from datetime import date
+
+from app.models.community import Comment, HealthQuiz, Post, PostCategory, QuizAttempt, QuizOption, Report, ReportReason, ReportTargetType
 
 
 class PostRepository:
@@ -80,3 +82,27 @@ class ReportRepository:
         if not created:
             raise ValueError("already_reported")
         return report
+
+
+class QuizRepository:
+    async def get_quiz_by_date(self, quiz_date: date) -> HealthQuiz | None:
+        return await HealthQuiz.get_or_none(quiz_date=quiz_date, is_active=True)
+
+    async def get_attempt(self, user_id: UUID, quiz_id: int) -> QuizAttempt | None:
+        return await QuizAttempt.get_or_none(user_id=user_id, quiz_id=quiz_id)
+
+    async def create_attempt(
+        self, user_id: UUID, quiz_id: int, selected_option: QuizOption, is_correct: bool, points_earned: int
+    ) -> QuizAttempt:
+        return await QuizAttempt.create(
+            user_id=user_id,
+            quiz_id=quiz_id,
+            selected_option=selected_option,
+            is_correct=is_correct,
+            points_earned=points_earned,
+        )
+
+    async def list_attempts(self, user_id: UUID, page: int = 1, size: int = 20) -> tuple[list[QuizAttempt], int]:
+        qs = QuizAttempt.filter(user_id=user_id).prefetch_related("quiz").order_by("-attempted_at")
+        total = await qs.count()
+        return list(await qs.offset((page - 1) * size).limit(size)), total

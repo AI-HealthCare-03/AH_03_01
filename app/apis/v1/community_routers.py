@@ -8,6 +8,10 @@ from app.dependencies.security import get_request_user
 from app.dtos.community import (
     CommentCreateRequest,
     CommentResponse,
+    QuizAnswerRequest,
+    QuizAnswerResponse,
+    QuizAttemptHistoryItem,
+    QuizResponse,
     CommentUpdateRequest,
     PostCreateRequest,
     PostDetailResponse,
@@ -17,6 +21,7 @@ from app.dtos.community import (
     ReportCreateRequest,
 )
 from app.models.community import Comment, Post, PostCategory
+from app.services.quiz import HealthQuizService
 from app.models.notifications import NotificationType
 from app.models.users import User
 from app.repositories.community_repository import CommentRepository, PostRepository, ReportRepository
@@ -234,3 +239,65 @@ async def create_report(
     except ValueError as err:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 신고한 대상입니다.") from err
     return {"message": "신고가 접수되었습니다."}
+
+
+# ── 퀴즈 ─────────────────────────────────────────────────────────────────────
+
+quiz_router = APIRouter(prefix="/quizzes", tags=["quiz"])
+
+_QUIZ_ERRORS: dict[str, tuple[int, str]] = {
+    "no_quiz_today": (status.HTTP_404_NOT_FOUND, "오늘의 퀴즈가 없습니다."),
+    "already_answered": (status.HTTP_409_CONFLICT, "이미 답변한 퀴즈입니다."),
+    "daily_limit_exceeded": (status.HTTP_429_TOO_MANY_REQUESTS, "일일 퀴즈 한도(5문제)를 초과했습니다."),
+    "quiz_not_found": (status.HTTP_404_NOT_FOUND, "퀴즈를 찾을 수 없습니다."),
+}
+
+
+@quiz_router.get("/today")
+async def get_today_quiz(current_user: User = Depends(get_request_user)) -> dict:  # noqa: B008
+    try:
+        data = await HealthQuizService().get_today_quiz(current_user.id)
+    except ValueError as e:
+        code, detail = _QUIZ_ERRORS.get(str(e), (status.HTTP_400_BAD_REQUEST, str(e)))
+        raise HTTPException(status_code=code, detail=detail)
+    quiz = data["quiz"]
+    return {
+        "quiz": QuizResponse.model_validate(quiz),
+        "already_answered": data["already_answered"],
+    }
+
+
+@quiz_router.post("/{quiz_id}/answer", response_model=QuizAnswerResponse)
+async def answer_quiz(
+    quiz_id: int,
+    body: QuizAnswerRequest,
+    current_user: User = Depends(get_request_user),  # noqa: B008
+) -> QuizAnswerResponse:
+    try:
+        result = await HealthQuizService().answer_quiz(current_user.id, quiz_id, body.selected_option)
+    except ValueError as e:
+        code, detail = _QUIZ_ERRORS.get(str(e), (status.HTTP_400_BAD_REQUEST, str(e)))
+        raise HTTPException(status_code=code, detail=detail)
+    return QuizAnswerResponse(**result)
+
+
+@quiz_router.get("/history", response_model=list[QuizAttemptHistoryItem])
+async def get_quiz_history(
+    page: int = Query(1, ge=1),  # noqa: B008
+    size: int = Query(20, ge=1, le=100),  # noqa: B008
+    current_user: User = Depends(get_request_user),  # noqa: B008
+) -> list[QuizAttemptHistoryItem]:
+    attempts, _ = await HealthQuizService().get_attempt_history(current_user.id, page, size)
+    return [
+        QuizAttemptHistoryItem(
+            quiz_id=a.quiz_id,
+            quiz_date=a.quiz.quiz_date,
+            question=a.quiz.question,
+            category=a.quiz.category,
+            selected_option=a.selected_option,
+            is_correct=a.is_correct,
+            points_earned=a.points_earned,
+            attempted_at=a.attempted_at,
+        )
+        for a in attempts
+    ]
