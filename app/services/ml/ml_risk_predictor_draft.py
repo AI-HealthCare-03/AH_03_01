@@ -125,23 +125,26 @@ class PlattCalibrator:
 # 위험 확률 계산 (AHA/ACC + 대한고혈압학회 기준)
 # ──────────────────────────────────────────────────────────────
 def _risk_prob_for_score(proba: np.ndarray, n_cls: int) -> float:
-    """다중클래스 모델의 대표 위험 확률 계산.
+    """다중클래스 모델의 대표 위험 확률 계산 (Blend v4).
 
+    Blend 방식: AHA가중합 x 0.55 + P(질환있음) x 0.45
+    - AHA 임상 가이드라인 방향성 + 모델 확률 직접 반영
+    - 이중 분포(건강/환자군 bimodal) 완화
     가중치 기준:
-    - HE_HP(4): AHA/ACC 2017 + 대한고혈압학회 2022 — 단계별 심혈관 상대위험도
-      정상(0) / 주의혈압(0.25) / 고혈압1기(0.60) / 고혈압2기(1.0)
-    - HE_DM(3): ADA 2023 + 대한당뇨병학회 2023 — DPP 10년 진행률 ~50%
-      정상(0) / 전당뇨(0.50) / 당뇨(1.0)
+    - HE_HP(4): 정상(0) / 주의혈압(0.25) / 고혈압1기(0.60) / 고혈압2기(1.0)
+    - HE_DM(3): 정상(0) / 전당뇨(0.50) / 당뇨(1.0)
     - binary(2): 양성 확률 직접 사용 (이상지질혈증)
     """
     if n_cls == 2:
         return float(proba[1])
     elif n_cls == 4:
-        # 고혈압: AHA/ACC 2017 + 대한고혈압학회 가이드라인 가중치
-        return float(0.25 * proba[1] + 0.60 * proba[2] + 1.00 * proba[3])
+        # 고혈압: AHA Blend
+        aha = 0.25 * proba[1] + 0.60 * proba[2] + 1.00 * proba[3]
+        return float(0.55 * aha + 0.45 * (1.0 - proba[0]))
     elif n_cls == 3:
-        # 당뇨: ADA + 대한당뇨병학회 가이드라인 가중치
-        return float(0.50 * proba[1] + 1.00 * proba[2])
+        # 당뇨: ADA Blend
+        aha = 0.50 * proba[1] + 1.00 * proba[2]
+        return float(0.55 * aha + 0.45 * (1.0 - proba[0]))
     else:
         return float(proba[-1])
 
