@@ -84,8 +84,8 @@ export default function SplitAuthShell({ children }: SplitAuthShellProps) {
 
         {/* 헤드라인 */}
         <h1 className="text-4xl xl:text-5xl font-black text-text-primary leading-[1.15] mb-3">
-          매일의 <span className="text-red-500">케어</span>,<br />
-          건강의 <span className="text-red-500">기록</span>
+          매일의 <span className="text-amber-500">케어</span>,<br />
+          건강의 <span className="text-amber-500">기록</span>
         </h1>
         <p className="text-sm text-text-secondary leading-relaxed mb-5">
           혈당·혈압·식단·운동을 쉽고 간편하게 기록하고,<br />
@@ -121,9 +121,9 @@ export default function SplitAuthShell({ children }: SplitAuthShellProps) {
         </div>
 
         {/* 하단 tagline 카드 */}
-        <div className="mt-4 bg-amber-50/60 border border-amber-100 rounded-2xl px-4 py-3 flex items-center gap-3 shrink-0">
-          <span className="text-xl shrink-0">🛡️</span>
-          <p className="text-xs text-amber-900/70 leading-relaxed">
+        <div className="mt-4 bg-amber-100 border border-amber-200 rounded-2xl px-4 py-3 flex items-center gap-3 shrink-0">
+          <Image src="/images/checklogo.png" alt="케어로그 아이콘" width={40} height={40} className="shrink-0 object-contain" unoptimized/>
+          <p className="text-xs text-amber-900/80 leading-relaxed font-medium">
             케어로그는 당신의 매일을 기록하고, 더 건강한 내일로 이어주는 든든한 동반자입니다.
           </p>
         </div>
