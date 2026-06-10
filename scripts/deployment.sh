@@ -99,6 +99,11 @@ echo "${COLOR_BLUE}EC2 인스턴스의 IP를 입력하세요.${COLOR_NC}"
 read -p "EC2-IP: " ec2_ip
 echo ""
 
+echo "${COLOR_BLUE}EC2 SSH 접속 계정을 입력하세요. (Amazon Linux=ec2-user, Ubuntu=ubuntu)${COLOR_NC}"
+read -p "SSH 계정 [ec2-user]: " ssh_user
+ssh_user=${ssh_user:-ec2-user}
+echo ""
+
 echo "${COLOR_BLUE}배포중인 서버의 https 여부를 선택하세요.${COLOR_NC}"
 echo "1) http 사용중"
 echo "2) https 사용중"
@@ -106,25 +111,25 @@ read -p "선택(ex. 1): " is_https
 echo ""
 
 # ---------- EC2 내에 배포 준비 파일 복사  ----------
-scp -i ~/.ssh/${ssh_key_file} envs/.prod.env ubuntu@${ec2_ip}:~/project/.env
-scp -i ~/.ssh/${ssh_key_file} infra/docker/docker-compose.prod.yml ubuntu@${ec2_ip}:~/project/docker-compose.yml
+scp -i ~/.ssh/${ssh_key_file} envs/.prod.env ${ssh_user}@${ec2_ip}:~/project/.env
+scp -i ~/.ssh/${ssh_key_file} infra/docker/docker-compose.prod.yml ${ssh_user}@${ec2_ip}:~/project/docker-compose.yml
 if [[ "$is_https" == "1" ]] ; then
   # ---------- prod_http.conf 파일의 server_name 자동 수정 ----------
   sed -i '' "s/server_name .*/server_name ${ec2_ip};/g" infra/nginx/prod_http.conf
-  scp -i ~/.ssh/${ssh_key_file} infra/nginx/prod_http.conf ubuntu@${ec2_ip}:~/project/nginx/default.conf
+  scp -i ~/.ssh/${ssh_key_file} infra/nginx/prod_http.conf ${ssh_user}@${ec2_ip}:~/project/nginx/default.conf
 else
   echo "${COLOR_BLUE} 사용중인 도메인을 입력하세요. (ex. api.ozcoding.site)${COLOR_NC}"
   read -p "Domain: " domain
   # ---------- prod_https.conf 파일의 server_name, ssl_certificate 자동 수정 ----------
   sed -i '' "s/server_name .*/server_name ${domain};/g" infra/nginx/prod_https.conf
   sed -i '' "s|/etc/letsencrypt/live/[^/]*|/etc/letsencrypt/live/${domain}|g" infra/nginx/prod_https.conf
-  scp -i ~/.ssh/${ssh_key_file} infra/nginx/prod_https.conf ubuntu@${ec2_ip}:~/project/nginx/default.conf
+  scp -i ~/.ssh/${ssh_key_file} infra/nginx/prod_https.conf ${ssh_user}@${ec2_ip}:~/project/nginx/default.conf
 fi
 
 # ---------- EC2 배포 자동화  ----------
 echo "${COLOR_BLUE}EC2 인스턴스에 SSH 접속을 시도합니다.${COLOR_NC}"
 chmod 400 ~/.ssh/${ssh_key_file}
-ssh -i ~/.ssh/${ssh_key_file} ubuntu@${ec2_ip} \
+ssh -i ~/.ssh/${ssh_key_file} ${ssh_user}@${ec2_ip} \
   "DOCKER_USERNAME=${docker_user} \
    DOCKER_PAT=${docker_pw} \
    DEPLOY_SERVICES='${DEPLOY_SERVICES[*]}' \
