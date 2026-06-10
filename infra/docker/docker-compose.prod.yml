@@ -6,7 +6,7 @@ services:
     networks:
       - ws
     ports:
-      - "${REDIS_PORT}:6379"
+      - "127.0.0.1:${REDIS_PORT}:6379"  # 외부 NIC 미바인딩 — 호스트 loopback 한정(디버깅용)
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
@@ -14,75 +14,36 @@ services:
       retries: 5
       start_period: 5s
 
-  # 2. Database (PostgreSQL + PGVector)
-  postgres:
-    image: pgvector/pgvector:pg16
-    container_name: postgres
-    restart: always
-    environment:
-    # ${환경변수명} 문법은 OS 환경변수 혹은 .env에서 해당 환경변수명과 일치하는 항목이 있으면 대입합니다.
-    # 반드시 사전에 .env에 해당 항목이 존재하는지 확인해야 합니다.
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
-      TZ: Asia/Seoul
-      PGTZ: Asia/Seoul
-    ports:
-      - ${DB_EXPOSE_PORT}:${DB_PORT}
-    networks:
-      - ws
-    volumes:
-      - postgres_data:/var/lib/postgresql/data  # 컨테이너가 삭제돼도 데이터는 호스트 파일시스템에 남음
-      - ./postgres-init.sql:/docker-entrypoint-initdb.d/01_pgvector.sql:ro
-    command:
-      - "postgres"
-      - "-p"
-      - "${DB_PORT}"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME} -p ${DB_PORT}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # 3. API Server (FastAPI)
+  # 2. API Server (FastAPI) — DB 는 외부 RDS 사용(.env 의 DB_HOST 가 RDS 엔드포인트)
   fastapi:
     container_name: fastapi
     image: ${DOCKER_USER}/${DOCKER_REPOSITORY}:app-${APP_VERSION}  # APP_VERSION은 빌드된 이미지의 버전관리를 위함입니다. v1.0.0 형식으로 사용합니다.
     env_file: .env
-    environment:
-      DB_HOST: postgres
     volumes:
       - static_volume:/app/templates
       - media_volume:/app/media
     restart: always
-    ports:
-      - "8000:8000"
+    # 호스트 포트 미노출 — nginx 가 내부 ws 네트워크로 proxy_pass http://fastapi 한다.
     networks:
       - ws
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
 
-  # 4. AI Worker (Model 학습 및 추론)
+  # 3. AI Worker (Model 학습 및 추론)
   ai-worker:
     container_name: ai-worker
     image: ${DOCKER_USER}/${DOCKER_REPOSITORY}:ai-${AI_WORKER_VERSION}  # AI_WORKER_VERSION은 빌드된 이미지의 버전관리를 위함입니다. V1.0.0 형식으로 사용합니다.
     env_file: .env
-    environment:
-      DB_HOST: postgres
     restart: always
     mem_limit: 4G
     networks:
       - ws
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
 
-  # 5. Nginx (웹 서버 - 요청 리버스 프록시로 전달)
+  # 4. Nginx (웹 서버 - 요청 리버스 프록시로 전달)
   nginx:
     container_name: nginx
     image: nginx:latest
@@ -100,7 +61,7 @@ services:
     depends_on:
       - fastapi
 
-  # 6. certbot: SSL 인증서 발급담당
+  # 5. certbot: SSL 인증서 발급담당
   certbot:
     image: certbot/certbot
     container_name: auto-certbot
@@ -112,8 +73,6 @@ services:
       - nginx
 
 volumes:
-  postgres_data:
-    name: postgres_data
   static_volume:
     name: static_volume
   media_volume:
