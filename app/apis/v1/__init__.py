@@ -10,7 +10,7 @@ from app.apis.v1.challenge_routers import (
     challenges_router,
 )
 from app.apis.v1.chatbot_routers import chatbot_router
-from app.apis.v1.community_routers import comments_router, posts_router, reports_router
+from app.apis.v1.community_routers import comments_router, posts_router, quiz_router, reports_router
 from app.apis.v1.experience_routers import experience_router, leaderboard_router
 from app.apis.v1.files_routers import files_router
 from app.apis.v1.health_routers import (
@@ -56,4 +56,5 @@ v1_routers.include_router(leaderboard_router)
 v1_routers.include_router(posts_router)
 v1_routers.include_router(comments_router)
 v1_routers.include_router(reports_router)
+v1_routers.include_router(quiz_router)
 v1_routers.include_router(notifications_router)
