@@ -87,6 +87,18 @@ class QuizRepository:
     async def get_quiz_by_date(self, quiz_date: date) -> HealthQuiz | None:
         return await HealthQuiz.get_or_none(quiz_date=quiz_date, is_active=True)
 
+    async def get_quiz_by_id(self, quiz_id: int) -> HealthQuiz | None:
+        return await HealthQuiz.get_or_none(id=quiz_id, is_active=True)
+
+    async def list_unanswered_quizzes(self, user_id: UUID, limit: int) -> list[HealthQuiz]:
+        attempted_ids = await QuizAttempt.filter(user_id=user_id).values_list("quiz_id", flat=True)
+        return list(
+            await HealthQuiz.filter(is_active=True, quiz_date__lte=date.today())
+            .exclude(id__in=list(attempted_ids))
+            .order_by("-quiz_date")
+            .limit(limit)
+        )
+
     async def get_attempt(self, user_id: UUID, quiz_id: int) -> QuizAttempt | None:
         return await QuizAttempt.get_or_none(user_id=user_id, quiz_id=quiz_id)
 

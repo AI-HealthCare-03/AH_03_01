@@ -28,6 +28,14 @@ class HealthQuizService:
         attempt = await self.repo.get_attempt(user_id, quiz.id)
         return {"quiz": quiz, "already_answered": attempt is not None}
 
+    async def get_available_quizzes(self, user_id: UUID) -> list:
+        today_start = datetime.combine(_today(), datetime.min.time()).replace(tzinfo=SEOUL)
+        today_count = await QuizAttempt.filter(user_id=user_id, attempted_at__gte=today_start).count()
+        remaining = max(0, DAILY_LIMIT - today_count)
+        if remaining == 0:
+            return []
+        return await self.repo.list_unanswered_quizzes(user_id, remaining)
+
     async def answer_quiz(self, user_id: UUID, quiz_id: int, selected_option: str) -> dict:
         # 이미 답한 경우
         if await self.repo.get_attempt(user_id, quiz_id):
@@ -41,8 +49,8 @@ class HealthQuizService:
         if daily_count >= DAILY_LIMIT:
             raise ValueError("daily_limit_exceeded")
 
-        quiz = await self.repo.get_quiz_by_date(_today())
-        if not quiz or quiz.id != quiz_id:
+        quiz = await self.repo.get_quiz_by_id(quiz_id)
+        if not quiz:
             raise ValueError("quiz_not_found")
 
         is_correct = selected_option == quiz.correct_option
