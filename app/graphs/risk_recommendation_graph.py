@@ -71,6 +71,8 @@ from app.models.ml_inference import (
     MLInferenceRequest,
     MLInferenceStatus,
 )
+from app.repositories.challenge_recommendation_repository import save_recommendations
+from app.services.ml.challenge_eligibility_filter import EligibleTemplate, filter_eligible_templates
 from app.services.ml.retrieval import RetrievedChunk, retrieve
 from app.services.ml.risk_predictor import (
     PredictionInput,
@@ -145,6 +147,11 @@ class RiskState(TypedDict, total=False):
     eval_stage: EvalStageLiteral
     eval_revision_count: int
     eval_feedback: str
+
+    # challenge eligibility filter
+    eligible_templates: list[EligibleTemplate]
+    safety_notes: str
+    recommended_challenges: list[dict[str, Any]]  # [{template_id, priority, reason}, ...]
 
     # final
     final_answer: str
@@ -555,7 +562,22 @@ async def build_query(state: RiskState) -> dict[str, Any]:
     else:
         query = base_query
 
-    return {"retrieval_query": query, "retrieved_diseases": diseases}
+    # 챌린지 적합성 필터 — 안전 제약 + 우선순위 힌트
+    profile = state.get("profile") or {}
+    try:
+        filter_result = await filter_eligible_templates(predictions, profile)
+    except Exception as e:  # noqa: BLE001
+        _logger.warning("ChallengeEligibilityFilter 실패, 빈 결과로 진행: %s", _safe_err_repr(e))
+        from app.services.ml.challenge_eligibility_filter import FilterResult
+
+        filter_result = FilterResult()
+
+    return {
+        "retrieval_query": query,
+        "retrieved_diseases": diseases,
+        "eligible_templates": filter_result.eligible_templates,
+        "safety_notes": filter_result.safety_notes,
+    }
 
 
 # ─────────────────────────────────────────────
@@ -668,6 +690,35 @@ def _format_context(docs: list[RetrievedChunk]) -> str:
     return "\n\n".join(parts)
 
 
+def _format_eligible_templates_block(eligible: list[EligibleTemplate]) -> str:
+    if not eligible:
+        return ""
+    lines = ["[추천 가능 챌린지 템플릿 — 이 목록에 있는 template_id 만 추천 가능]"]
+    for t in eligible:
+        sub = f" / {t.sub_category}" if t.sub_category else ""
+        lines.append(f"- id={t.template_id}  {t.title}  ({t.category}{sub}, {t.difficulty}, 우선도 힌트: {t.priority_hint})")
+    return "\n".join(lines) + "\n\n"
+
+
+def _parse_recommendation_json(draft: str) -> tuple[str, list[dict[str, Any]]]:
+    """draft 에서 <!--RECS:[...]–-> 블록을 추출하고 clean 본문과 파싱된 목록을 반환."""
+    import re
+
+    pattern = r"<!--RECS:(\[.*?\])-->"
+    m = re.search(pattern, draft, re.DOTALL)
+    if not m:
+        return draft, []
+    json_str = m.group(1)
+    clean = draft[: m.start()].rstrip() + draft[m.end():]
+    try:
+        items = json.loads(json_str)
+        if not isinstance(items, list):
+            items = []
+    except Exception:  # noqa: BLE001
+        items = []
+    return clean.strip(), items
+
+
 async def generate_recommendation(state: RiskState) -> dict[str, Any]:
     predictions = state.get("predictions") or []
     docs = state.get("retrieved_docs") or []
@@ -679,11 +730,27 @@ async def generate_recommendation(state: RiskState) -> dict[str, Any]:
     feedback = state.get("eval_feedback", "")
     feedback_hint = f"\n\n[Evaluator 피드백] 이전 답변에서 보완할 점: {feedback}" if feedback else ""
 
+    eligible: list[EligibleTemplate] = state.get("eligible_templates") or []
+    safety_notes = state.get("safety_notes") or ""
+
+    safety_block = f"[안전 제약 — 반드시 준수]\n{safety_notes}\n\n" if safety_notes else ""
+    templates_block = _format_eligible_templates_block(eligible)
+
+    allowed_ids = {t.template_id for t in eligible}
+    json_instruction = (
+        "\n\n답변 본문 작성 후, 아래 형식으로 추천 챌린지 JSON 블록을 **반드시** 본문 끝에 붙이세요 "
+        "(템플릿 목록의 id 만 사용, 최대 3개):\n"
+        '<!--RECS:[{"template_id": <id>, "priority": "TOP"|"RECOMMENDED"|"OPTIONAL", "reason": "한국어 한 줄 이유"}]-->'
+    ) if allowed_ids else ""
+
     user_prompt = (
         f"{_format_predictions_block(predictions)}"
         f"{_format_user_profile_block(state)}"
+        f"{safety_block}"
+        f"{templates_block}"
         f"컨텍스트(진료지침 + 챌린지 카탈로그):\n{_format_context(docs)}\n\n"
         f"위 정보를 사용해 한국어로 위험도 요약 + 권고 + 챌린지 추천을 작성하세요."
+        f"{json_instruction}"
         f"{feedback_hint}"
     )
 
@@ -702,7 +769,13 @@ async def generate_recommendation(state: RiskState) -> dict[str, Any]:
         _logger.warning("generate_recommendation 실패: %s", _safe_err_repr(e))
         return {"draft_answer": "", "error": _safe_err_repr(e)}
 
-    return {"draft_answer": draft}
+    # JSON 추천 블록 추출 (whitelist 검증 포함)
+    eligible = state.get("eligible_templates") or []
+    allowed_ids = {t.template_id for t in eligible}
+    clean_draft, raw_recs = _parse_recommendation_json(draft)
+    validated_recs = [r for r in raw_recs if isinstance(r.get("template_id"), int) and r["template_id"] in allowed_ids]
+
+    return {"draft_answer": clean_draft, "recommended_challenges": validated_recs}
 
 
 # ─────────────────────────────────────────────
@@ -753,6 +826,17 @@ def decide_after_evaluate(
 # 노드 9: final_ok / final_fallback
 # ─────────────────────────────────────────────
 async def final_ok(state: RiskState) -> dict[str, Any]:
+    # 챌린지 추천 DB 저장
+    recommended = state.get("recommended_challenges") or []
+    if recommended:
+        user_id = state.get("user_id")
+        risk_ids = state.get("disease_risk_row_ids") or []
+        disease_risk_id = risk_ids[0] if risk_ids else None
+        try:
+            await save_recommendations(user_id, disease_risk_id, recommended)
+        except Exception as e:  # noqa: BLE001
+            _logger.warning("챌린지 추천 저장 실패: %s", _safe_err_repr(e))
+
     return {
         "final_answer": state.get("draft_answer", ""),
         "sources": state.get("retrieved_docs", []),
