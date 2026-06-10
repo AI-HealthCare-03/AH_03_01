@@ -224,7 +224,7 @@ def _build_filter_sql(
         # service 카테고리는 disease 필터 비활성 (질환 횡단)
         return ("".join(clauses), args)
 
-    if diseases:
+    if diseases and source_type not in ("service", "all"):
         # metadata 는 jsonb. ->> 'disease' 텍스트 추출 후 IN 매치. 수백 청크 규모에서
         # 인덱스 안 타도 비용 무시.
         disease_placeholders = ", ".join(f"${next_idx + i}" for i in range(len(diseases)))
@@ -317,7 +317,7 @@ def _sparse_search(  # noqa: C901
                 scores[i] = mask_value
 
     # disease 필터 (medical/all 케이스에만 — service 는 횡단). list 면 OR 매치.
-    if diseases and source_type != "service":
+    if diseases and source_type not in ("service", "all"):
         disease_set = set(diseases)
         for i, d in enumerate(bm.diseases):
             if d not in disease_set:
