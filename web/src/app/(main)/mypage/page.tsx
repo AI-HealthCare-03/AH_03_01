@@ -214,14 +214,13 @@ export default function MyPage() {
           <dt className="text-text-tertiary">가족력</dt>
           <dd className="text-text-primary text-right">
             {[
-              (profile?.has_hypertension_family_history ??
-                profile?.family_history_hypertension)
+              profile?.family_hp === 1 || profile?.has_hypertension_family_history === true
                 ? "고혈압"
                 : null,
-              (profile?.has_diabetes_family_history ??
-                profile?.family_history_diabetes)
+              profile?.family_dm === 1 || profile?.has_diabetes_family_history === true
                 ? "당뇨"
                 : null,
+              profile?.family_hl === 1 ? "고지혈증" : null,
             ]
               .filter(Boolean)
               .join(", ") || "없음"}
