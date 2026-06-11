@@ -17,7 +17,13 @@ COPY pyproject.toml uv.lock ./
 # 3. pyproject.toml에 명시된 의존성 패키지 중에서 'app' 그룹만 설치합니다.
 RUN uv sync --group app --no-dev --frozen
 
-# 4. 로컬 소스 코드를 컨테이너 내부로 복사합니다.
+# 4. ML 모델 아티팩트(예측 모델 번들)를 이미지에 포함합니다.
+#    models/ 는 git 미추적이라 빌드 머신의 models/ 디렉터리가 그대로 구워집니다.
+#    MODEL_ARTIFACT_DIR=/app/models/rb3_... 와 경로 일치. 모델 재튜닝 시 models/ 교체 후 재빌드.
+#    (app 코드보다 변경이 드물어 캐시 효율을 위해 COPY ./app 보다 먼저 둡니다.)
+COPY ./models ./models
+
+# 5. 로컬 소스 코드를 컨테이너 내부로 복사합니다.
 COPY ./app ./app
 
 # 5. 해당 이미지를 활용하여 도커컨테이너 실행시 실행되는 명령어입니다.
