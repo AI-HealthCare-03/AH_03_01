@@ -108,7 +108,7 @@ class QuizAnswerResponse(BaseSerializerModel):
 
 class QuizAttemptHistoryItem(BaseSerializerModel):
     quiz_id: int
-    quiz_date: date
+    quiz_date: date | None
     question: str
     category: QuizCategory
     selected_option: QuizOption

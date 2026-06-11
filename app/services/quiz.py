@@ -5,7 +5,7 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from app.models.community import QuizAttempt
-from app.repositories.community_repository import QuizRepository
+from app.repositories.community_repository import DailyAssignmentRepository, QuizRepository
 from app.services.rewards import RewardService
 
 SEOUL = ZoneInfo("Asia/Seoul")
@@ -21,27 +21,41 @@ class HealthQuizService:
         self.repo = QuizRepository()
         self.reward_service = RewardService()
 
-    async def get_today_quiz(self, user_id: UUID) -> dict:
-        quiz = await self.repo.get_quiz_by_date(_today())
-        if not quiz:
-            raise ValueError("no_quiz_today")
-        attempt = await self.repo.get_attempt(user_id, quiz.id)
-        return {"quiz": quiz, "already_answered": attempt is not None}
-
     async def get_available_quizzes(self, user_id: UUID) -> list:
-        today_start = datetime.combine(_today(), datetime.min.time()).replace(tzinfo=SEOUL)
-        today_count = await QuizAttempt.filter(user_id=user_id, attempted_at__gte=today_start).count()
-        remaining = max(0, DAILY_LIMIT - today_count)
-        if remaining == 0:
+        today = _today()
+        assignment_repo = DailyAssignmentRepository()
+
+        assignments = await assignment_repo.get_today_assignments(user_id, today)
+
+        if not assignments:
+            # 오늘 첫 요청 — 랜덤으로 DAILY_LIMIT개 배정
+            candidates = await self.repo.list_unanswered_quizzes(user_id, DAILY_LIMIT)
+            if candidates:
+                await assignment_repo.create_assignments(user_id, [q.id for q in candidates], today)
+                assignments = await assignment_repo.get_today_assignments(user_id, today)
+
+        if not assignments:
             return []
-        return await self.repo.list_unanswered_quizzes(user_id, remaining)
+
+        # 오늘 배정된 퀴즈 중 아직 풀지 않은 것만 반환
+        answered_ids = set(
+            await QuizAttempt.filter(
+                user_id=user_id,
+                quiz_id__in=[a.quiz_id for a in assignments],
+            ).values_list("quiz_id", flat=True)
+        )
+        return [a.quiz for a in assignments if a.quiz_id not in answered_ids]
+
+    async def get_today_quiz(self, user_id: UUID) -> dict:
+        quizzes = await self.get_available_quizzes(user_id)
+        if not quizzes:
+            raise ValueError("no_quiz_today")
+        return {"quiz": quizzes[0], "already_answered": False}
 
     async def answer_quiz(self, user_id: UUID, quiz_id: int, selected_option: str) -> dict:
-        # 이미 답한 경우
         if await self.repo.get_attempt(user_id, quiz_id):
             raise ValueError("already_answered")
 
-        # 일일 제한 확인
         today_start = datetime.combine(_today(), datetime.min.time()).replace(tzinfo=SEOUL)
         daily_count = await QuizAttempt.filter(user_id=user_id, attempted_at__gte=today_start).count()
         if daily_count >= DAILY_LIMIT:
