@@ -44,6 +44,15 @@ jobs:
   test:
     runs-on: ubuntu-latest
     services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
       # 프로젝트가 PostgreSQL + pgvector(RAG embedding) 사용.
       # 일반 postgres:16 에는 pgvector 가 없어 `type "vector" does not exist` 발생 →
       # ankane/pgvector 또는 pgvector/pgvector 의 사전 빌드 이미지 사용.
@@ -66,6 +75,7 @@ jobs:
       DB_USER: postgres
       DB_PASSWORD: pw1234
       DB_NAME: ai_health
+      REDIS_HOST: localhost
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
