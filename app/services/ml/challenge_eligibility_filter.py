@@ -105,7 +105,7 @@ def _extract_risk_factors(
 
     h = profile.get("height_cm")
     w = profile.get("weight_kg")
-    if h and w and float(w) / ((float(h) / 100) ** 2) >= 25.0:
+    if h and w and float(h) > 50 and float(w) > 0 and float(w) / ((float(h) / 100) ** 2) >= 25.0:
         factors["high_bmi"] = True
 
     if profile.get("current_smoker") == 1:

@@ -24,7 +24,7 @@ async def save_recommendations(
     saved_ids: list[int] = []
     for item in recommended:
         template_id = item.get("template_id")
-        if not template_id:
+        if not isinstance(template_id, int) or template_id <= 0:
             continue
         priority_val = str(item.get("priority", RecommendationPriority.RECOMMENDED))
         if priority_val not in _VALID_PRIORITIES:
