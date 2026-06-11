@@ -9,6 +9,7 @@ import {
   CartesianGrid,
   Tooltip,
   ReferenceLine,
+  ReferenceArea,
   Cell,
 } from "recharts";
 import { format } from "date-fns";
@@ -41,6 +42,14 @@ export default function HbA1cBarChart({ series }: HbA1cBarChartProps) {
   return (
     <ResponsiveContainer width="100%" height={260}>
       <BarChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+        {/* 구간 배경 */}
+        <ReferenceArea y1={6.5} y2={12} fill="#ffeaea" fillOpacity={0.4}
+          label={{ value: "위험", position: "insideTopRight", fill: "#e53935", fontSize: 10, fontWeight: 600 }} />
+        <ReferenceArea y1={5.7} y2={6.5} fill="#fffbe6" fillOpacity={0.5}
+          label={{ value: "주의", position: "insideTopRight", fill: "#856404", fontSize: 10, fontWeight: 600 }} />
+        <ReferenceArea y1={4} y2={5.7} fill="#e8f5e9" fillOpacity={0.3}
+          label={{ value: "정상", position: "insideTopRight", fill: "#2e7d32", fontSize: 10, fontWeight: 600 }} />
+
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
         <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#999" }} />
         <YAxis
