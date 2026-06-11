@@ -221,6 +221,8 @@ export default function ReportTab() {
     .slice(0, 3);
   const challengeSummary = report?.challenge_summary;
 
+  const hasReport = !!report && !isLoading;
+
   const hyp = summaryFor("HYPERTENSION");
   const dia = summaryFor("DIABETES");
   const car = summaryFor("CARDIOVASCULAR");
@@ -275,6 +277,14 @@ export default function ReportTab() {
             <div key={i} className="h-40 bg-surface rounded-[16px]" />
           ))}
         </div>
+      ) : !hasReport ? (
+        <div className="text-center py-16 space-y-2">
+          <p className="text-4xl">📭</p>
+          <p className="font-semibold text-text-primary">해당 월 리포트가 없습니다</p>
+          <p className="text-sm text-text-secondary">
+            건강 데이터를 기록하면 월간 리포트를 확인할 수 있어요.
+          </p>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* 카드 1: 이번 달 위험도 */}
@@ -306,6 +316,14 @@ export default function ReportTab() {
               주요 위험 인자 TOP 3
             </h3>
             <ContributingTop3 factors={top3Factors} />
+            <h3 className="font-bold text-text-primary mb-4">주요 위험 인자 TOP 3</h3>
+            {hasReport ? (
+              <ContributingTop3 factors={top3Factors} />
+            ) : (
+              <p className="text-sm text-text-tertiary text-center py-4">
+                해당 월 위험 인자 데이터가 없습니다.
+              </p>
+            )}
           </div>
 
           {/* 카드 3: 챌린지 수행 내역 */}
@@ -317,15 +335,12 @@ export default function ReportTab() {
           </div>
 
           {/* 카드 4: 코칭 한 마디 */}
-          <div className="bg-brand-yellow-light rounded-[16px] p-5 md:col-span-2">
-            <p className="text-xs font-semibold text-[#856404] mb-1">
-              💡 코칭 한 마디
-            </p>
-            <p className="text-sm text-text-primary">
-              {report?.coaching_message ??
-                "꾸준한 기록이 건강 관리의 첫걸음입니다. 오늘도 혈압과 혈당을 체크해 보세요!"}
-            </p>
-          </div>
+          {hasReport && report?.coaching_message && (
+            <div className="bg-brand-yellow-light rounded-[16px] p-5 md:col-span-2">
+              <p className="text-xs font-semibold text-[#856404] mb-1">💡 코칭 한 마디</p>
+              <p className="text-sm text-text-primary">{report.coaching_message}</p>
+            </div>
+          )}
         </div>
       )}
 
