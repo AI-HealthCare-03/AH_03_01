@@ -207,11 +207,10 @@ async def main() -> None:
     for q in QUIZZES:
         quiz_date = date(BASE_DATE.year, BASE_DATE.month, BASE_DATE.day)
         from datetime import timedelta
+
         quiz_date = BASE_DATE + timedelta(days=q["offset"])
 
-        exists = await conn.fetchval(
-            'SELECT id FROM "health_quizzes" WHERE "quiz_date" = $1', quiz_date
-        )
+        exists = await conn.fetchval('SELECT id FROM "health_quizzes" WHERE "quiz_date" = $1', quiz_date)
         if exists:
             skipped += 1
             continue
