@@ -57,6 +57,13 @@ class Config(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     IMAGE_VERIFY_QUEUE: str = "queue:image-verification"
+    # 위험도 예측 ML 추론 큐 (risk-worker BRPOP consumer)
+    RISK_INFERENCE_QUEUE: str = "queue:ml-inference"
+    # ml_inference 노드 dispatch 모드: True=Redis 큐+워커 비동기, False=P1 동기(인라인 RiskPredictor)
+    RISK_INFERENCE_ASYNC: bool = False
+    # async 모드에서 노드가 결과 row 를 폴링하는 간격/최대 대기(초). 타임아웃 시 인라인 룰 폴백.
+    RISK_INFERENCE_POLL_INTERVAL: float = 0.2
+    RISK_INFERENCE_POLL_TIMEOUT: float = 15.0
 
     # AI 모델
     SIGLIP_MODEL_NAME: str = "google/siglip2-base-patch16-224"
