@@ -62,6 +62,14 @@ class HealthProfileUpsertRequest(BaseModel):
     bp_measure_env: BpMeasureEnv | None = None
 
 
+class ProfileCompleteness(BaseModel):
+    percent: int
+    filled: int
+    total: int
+    missing_fields: list[str]
+    complete: bool
+
+
 class HealthProfileResponse(BaseSerializerModel):
     height_cm: Decimal | None
     weight_kg: Decimal | None
@@ -94,6 +102,7 @@ class HealthProfileResponse(BaseSerializerModel):
     pregnancy_status: PregnancyStatus | None
     bp_measure_env: BpMeasureEnv | None
     updated_at: datetime
+    completeness: ProfileCompleteness | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -217,6 +226,8 @@ class ContributingFactor(BaseModel):
     factor: str
     weight: float
     description: str | None = None
+    name_kor: str | None = None  # 한글명 (ML 경로; 룰 폴백은 None → UI 는 description 사용)
+    direction: str | None = None  # "위험 증가↑"/"위험 감소↓"
 
 
 class PredictionResponse(BaseSerializerModel):
@@ -224,6 +235,7 @@ class PredictionResponse(BaseSerializerModel):
     disease_type: DiseaseType
     risk_score: Decimal
     risk_level: RiskLevel
+    risk_level_label: str  # risk_score 기반 5단계 한글 라벨 (DiseaseRisk.risk_level_label @property 파생)
     contributing_factors: list[ContributingFactor]
     model_version: str
     calculated_at: datetime

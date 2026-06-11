@@ -14,6 +14,7 @@ class PostListItem(BaseSerializerModel):
     is_pinned: bool
     view_count: int
     comment_count: int
+    like_count: int = 0
     author_id: UUID
     author_nickname: str | None
     created_at: datetime
@@ -22,6 +23,7 @@ class PostListItem(BaseSerializerModel):
 class PostDetailResponse(PostListItem):
     content: str
     updated_at: datetime
+    is_liked: bool = False
 
 
 class PostListResponse(BaseModel):
@@ -51,6 +53,8 @@ class CommentResponse(BaseSerializerModel):
     parent_id: int | None
     created_at: datetime
     updated_at: datetime
+    like_count: int = 0
+    is_liked: bool = False
     replies: list["CommentResponse"] = []
 
 
@@ -64,6 +68,11 @@ class CommentCreateRequest(BaseModel):
 
 class CommentUpdateRequest(BaseModel):
     content: str
+
+
+class LikeResponse(BaseModel):
+    like_count: int
+    is_liked: bool
 
 
 class ReportCreateRequest(BaseModel):

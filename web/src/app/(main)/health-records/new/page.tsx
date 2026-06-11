@@ -13,11 +13,9 @@ import StepDiet from "@/components/health/new/StepDiet";
 import StepExtras from "@/components/health/new/StepExtras";
 import { useCreateProfile } from "@/hooks/queries/useCreateProfile";
 import { useCreateHealthRecord } from "@/hooks/queries/useCreateHealthRecord";
-import { useCreatePrediction } from "@/hooks/queries/useCreatePrediction";
 import { useMe } from "@/hooks/queries/useMe";
 import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
-import { pushNotification } from "@/components/layout/NotificationDropdown";
 import type {
   WizardFormStep1,
   WizardFormStep2,
@@ -64,10 +62,9 @@ export default function HealthRecordsNewPage() {
 
   const createProfile = useCreateProfile();
   const createRecord = useCreateHealthRecord();
-  const createPrediction = useCreatePrediction();
 
   const isLoading =
-    createProfile.isPending || createRecord.isPending || createPrediction.isPending;
+    createProfile.isPending || createRecord.isPending;
 
   /* 스텝 간 누적 페이로드 — 각 스텝이 완료될 때마다 병합 */
   const [accumulated, setAccumulated] = useState<HealthProfileUpsertRequest>({});
@@ -274,69 +271,9 @@ export default function HealthRecordsNewPage() {
 
     try {
       await upsert(patch);
+      showToast("건강 정보가 저장되었습니다.", "success");
     } catch (err) {
       showToast(extractErrorMessage(err), "error");
-      /* 프로필 저장 실패해도 예측은 시도 */
-    }
-
-    /* 예측 생성 — 같은 입력으로 3개 질병 모두 호출.
-       하나라도 성공하면 risk 탭에서 결과 표시 가능. 모두 실패해도 이동은 진행. */
-    const PREV_RISK_KEY = "prev-risk-levels";
-    let prevRisk: Record<string, string> = {};
-    try {
-      const raw = localStorage.getItem(PREV_RISK_KEY);
-      if (raw) prevRisk = JSON.parse(raw);
-    } catch { /* 무시 */ }
-
-    const DISEASE_LABEL: Record<string, string> = {
-      HYPERTENSION: "고혈압",
-      DIABETES: "당뇨",
-      CARDIOVASCULAR: "심혈관",
-    };
-    const RISK_LABEL: Record<string, string> = {
-      NORMAL: "정상",
-      CAUTION: "주의",
-      RISK: "위험",
-      HIGH_RISK: "고위험",
-    };
-
-    const predictionResults = await Promise.allSettled([
-      createPrediction.mutateAsync("HYPERTENSION"),
-      createPrediction.mutateAsync("DIABETES"),
-      createPrediction.mutateAsync("CARDIOVASCULAR"),
-    ]);
-
-    const nextRisk: Record<string, string> = { ...prevRisk };
-    predictionResults.forEach((result) => {
-      if (result.status !== "fulfilled") return;
-      const pred = result.value;
-      const diseaseType: string = pred.disease_type ?? "";
-      const newLevel: string = pred.risk_level ?? "";
-      const oldLevel: string = prevRisk[diseaseType] ?? "";
-
-      nextRisk[diseaseType] = newLevel;
-
-      if (newLevel && oldLevel && oldLevel !== newLevel) {
-        const dLabel = DISEASE_LABEL[diseaseType] ?? diseaseType;
-        const from = RISK_LABEL[oldLevel] ?? oldLevel;
-        const to = RISK_LABEL[newLevel] ?? newLevel;
-        pushNotification({
-          category: "위험도",
-          title: `${dLabel} 위험도 변화`,
-          body: `${dLabel} 위험도가 ${from}에서 ${to}로 변경되었어요.`,
-        });
-      }
-    });
-
-    try { localStorage.setItem(PREV_RISK_KEY, JSON.stringify(nextRisk)); } catch { /* 무시 */ }
-
-    const succeeded = predictionResults.filter((r) => r.status === "fulfilled").length;
-    if (succeeded === 3) {
-      showToast("위험도 분석이 완료되었습니다.", "success");
-    } else if (succeeded > 0) {
-      showToast(`위험도 분석 일부 완료 (${succeeded}/3)`, "warning");
-    } else {
-      showToast("위험도 계산에 실패했습니다. 나중에 다시 시도해 주세요.", "warning");
     }
 
     router.push("/health-records?tab=risk");

@@ -22,9 +22,17 @@ class RiskFactor:
     factor: str
     weight: float
     description: str | None = None
+    name_kor: str | None = None  # 사람이 읽는 한글명 (ML 경로만; 룰 폴백은 None)
+    direction: str | None = None  # "위험 증가↑"/"위험 감소↓" (없으면 weight 부호로 파생)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"factor": self.factor, "weight": self.weight, "description": self.description}
+        return {
+            "factor": self.factor,
+            "weight": self.weight,
+            "description": self.description,
+            "name_kor": self.name_kor,
+            "direction": self.direction or ("위험 증가↑" if self.weight > 0 else "위험 감소↓"),
+        }
 
 
 @dataclass(slots=True)
@@ -110,6 +118,18 @@ class PredictionOutput:
     model_version: str = "rule-v1"
 
 
+_FACTOR_KOR: dict[str, str] = {
+    "systolic_bp": "수축기 혈압",
+    "diastolic_bp": "이완기 혈압",
+    "fasting_blood_sugar": "공복혈당",
+    "bmi": "BMI",
+    "age": "나이",
+    "smoking": "흡연",
+    "alcohol": "음주 빈도",
+    "family_history": "가족력",
+}
+
+
 def _as_float(value: Decimal | None) -> float | None:
     return float(value) if value is not None else None
 
@@ -144,20 +164,20 @@ class RuleBasedRiskCalculator:
                 _as_float(p.systolic_bp),
                 140,
                 40,
-                "수축기 위험",
+                "수축기 혈압이 위험 수준으로 고혈압 위험을 높이고 있어요",
                 120,
                 20,
-                "수축기 주의",
+                "수축기 혈압이 주의 수준이에요, 생활습관 개선이 필요해요",
             ),
             _band(
                 "diastolic_bp",
                 _as_float(p.diastolic_bp),
                 90,
                 30,
-                "이완기 위험",
+                "이완기 혈압이 위험 수준으로 고혈압 위험을 높이고 있어요",
                 80,
                 15,
-                "이완기 주의",
+                "이완기 혈압이 주의 수준이에요, 꾸준한 관리가 필요해요",
             ),
         ]
         score, factors = _collect(bands)
@@ -165,10 +185,10 @@ class RuleBasedRiskCalculator:
             score,
             factors,
             [
-                (p.family_hp == 1, 10, "family_history", 0.1, "고혈압 가족력 있음"),
-                (p.current_smoker == 1, 7, "smoking", 0.07, "현재 흡연"),
-                (_is_frequent_drinker(p.alcohol_freq_y), 5, "alcohol", 0.05, "잦은 음주 빈도"),
-                (p.age is not None and (p.age or 0) >= 50, 5, "age", 0.05, "50세 이상"),
+                (p.family_hp == 1, 10, "family_history", 0.1, "고혈압 가족력이 발병 위험을 높이고 있어요"),
+                (p.current_smoker == 1, 7, "smoking", 0.07, "흡연이 혈압을 높여 고혈압 위험을 키우고 있어요"),
+                (_is_frequent_drinker(p.alcohol_freq_y), 5, "alcohol", 0.05, "잦은 음주가 고혈압 위험을 높이고 있어요"),
+                (p.age is not None and (p.age or 0) >= 50, 5, "age", 0.05, "나이가 많을수록 위험도가 높아져요"),
             ],
         )
         return _build(DiseaseType.HYPERTENSION, score, factors)
@@ -180,10 +200,10 @@ class RuleBasedRiskCalculator:
                 _as_float(p.fasting_blood_sugar),
                 126,
                 35,
-                "공복혈당 당뇨 의심",
+                "공복혈당이 당뇨 기준을 초과해 적극적인 관리가 필요해요",
                 100,
                 18,
-                "공복혈당 전당뇨",
+                "공복혈당이 전당뇨 수준으로 생활습관 개선이 중요해요",
             ),
         ]
         score, factors = _collect(bands)
@@ -192,8 +212,8 @@ class RuleBasedRiskCalculator:
             score,
             factors,
             [
-                (p.family_dm == 1, 10, "family_history", 0.1, "당뇨 가족력 있음"),
-                (bmi is not None and (bmi or 0) >= 25, 8, "bmi", 0.08, f"BMI {bmi:.1f} 비만" if bmi else "BMI 비만"),
+                (p.family_dm == 1, 10, "family_history", 0.1, "당뇨 가족력이 발병 위험을 높이고 있어요"),
+                (bmi is not None and (bmi or 0) >= 25, 8, "bmi", 0.08, f"BMI {bmi:.1f}로 비만 구간에 있어 당뇨 위험을 높이고 있어요" if bmi else "비만이 당뇨 위험을 높이고 있어요"),
             ],
         )
         return _build(DiseaseType.DIABETES, score, factors)
@@ -204,20 +224,20 @@ class RuleBasedRiskCalculator:
         sys_ = _as_float(p.systolic_bp)
         if sys_ is not None and sys_ >= 140:
             score += 25
-            factors.append(RiskFactor("systolic_bp", 0.25, "수축기 혈압 위험 구간"))
+            factors.append(RiskFactor("systolic_bp", 0.25, "수축기 혈압이 위험 수준으로 심혈관 위험을 높이고 있어요", name_kor=_FACTOR_KOR.get("systolic_bp")))
         if p.current_smoker == 1:
             score += 20
-            factors.append(RiskFactor("smoking", 0.2, "현재 흡연"))
+            factors.append(RiskFactor("smoking", 0.2, "흡연이 심혈관 위험을 크게 높이고 있어요", name_kor=_FACTOR_KOR.get("smoking")))
         bmi = _bmi(p.height_cm, p.weight_kg)
         if bmi is not None and bmi >= 25:
             score += 15
-            factors.append(RiskFactor("bmi", 0.15, f"BMI {bmi:.1f}, 비만 구간"))
+            factors.append(RiskFactor("bmi", 0.15, f"BMI {bmi:.1f}로 비만 구간에 있어 심혈관 위험을 높이고 있어요", name_kor=_FACTOR_KOR.get("bmi")))
         if p.age is not None and p.age >= 50:
             score += 10
-            factors.append(RiskFactor("age", 0.1, "50세 이상"))
+            factors.append(RiskFactor("age", 0.1, "나이가 많을수록 심혈관 위험이 높아져요", name_kor=_FACTOR_KOR.get("age")))
         if p.family_hp == 1 or p.family_dm == 1 or p.family_hl == 1:
             score += 8
-            factors.append(RiskFactor("family_history", 0.08, "가족력 있음"))
+            factors.append(RiskFactor("family_history", 0.08, "가족력이 심혈관 위험을 높이고 있어요", name_kor=_FACTOR_KOR.get("family_history")))
         return PredictionOutput(
             disease_type=DiseaseType.CARDIOVASCULAR,
             risk_score=Decimal(str(min(round(score, 2), 100.0))),
@@ -249,10 +269,10 @@ def _collect(
             continue
         if value >= high_t:
             score += high_s
-            factors.append(RiskFactor(factor, high_s / 100.0, f"{high_d} (값={value})"))
+            factors.append(RiskFactor(factor, high_s / 100.0, high_d, name_kor=_FACTOR_KOR.get(factor)))
         elif value >= mid_t:
             score += mid_s
-            factors.append(RiskFactor(factor, mid_s / 100.0, f"{mid_d} (값={value})"))
+            factors.append(RiskFactor(factor, mid_s / 100.0, mid_d, name_kor=_FACTOR_KOR.get(factor)))
     return score, factors
 
 
@@ -264,7 +284,7 @@ def _apply_flags(
     for active, points, factor, weight, desc in flags:
         if active:
             score += points
-            factors.append(RiskFactor(factor, weight, desc))
+            factors.append(RiskFactor(factor, weight, desc, name_kor=_FACTOR_KOR.get(factor)))
     return score, factors
 
 

@@ -39,7 +39,7 @@ class RewardService:
     ATTENDANCE_DAILY = 10
     ATTENDANCE_BONUS_THRESHOLDS = (7, 14, 30)
     ATTENDANCE_BONUS_AMOUNT = 20
-    QUIZ_CORRECT = 50
+    QUIZ_CORRECT = 10
 
     def __init__(self) -> None:
         self.point_repo = PointTransactionRepository()

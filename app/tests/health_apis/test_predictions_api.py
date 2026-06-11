@@ -3,21 +3,43 @@ from tortoise.contrib.test import TestCase
 
 from app.tests.health_apis.helpers import make_client, signup_and_login
 
+# 모델입력 필수 필드(MALE 기준 24개)를 모두 채운 프로필 페이로드.
+# 예측 게이트(완성도 100%)를 통과시키기 위한 공용 시드값.
+_FULL_MALE_PROFILE_PAYLOAD = {
+    "height_cm": 170,
+    "weight_kg": 78,
+    "waist_cm": 92,
+    "systolic_bp": 120,
+    "diastolic_bp": 80,
+    "fasting_blood_sugar": 95,
+    "sleep_weekday": 7,
+    "sleep_weekend": 8,
+    "moderate_exercise_hour": 1,
+    "smoking_risk": 1,
+    "current_smoker": 1,
+    "mid_act_day": 3,
+    "walk_day": 5,
+    "water_count": 6,
+    "family_dm": 1,
+    "family_hp": 1,
+    "family_hl": 0,
+    "alcohol_freq_y": 2,
+    "alcohol_cup": 3,
+    "fruit_freq": 5,
+    "veg_freq_1": 5,
+    "out_meal_freq": 3,
+    "breakfast_freq": 7,
+    "anemia": 0,
+}
+
 
 class TestPredictionsApi(TestCase):
     async def _seed_profile_and_bp(self, client, headers, systolic: int, diastolic: int) -> None:
+        # 예측 게이트(완성도)를 통과하도록 모델입력 필수 필드(MALE 기준 24개)를 모두 채운다.
         await client.post(
             "/api/v1/health-records?recordType=profile",
             headers=headers,
-            json={
-                "height_cm": 170,
-                "weight_kg": 78,
-                "waist_cm": 92,
-                "current_smoker": 1,
-                "alcohol_freq_y": 2,
-                "family_hp": 1,
-                "family_dm": 1,
-            },
+            json=_FULL_MALE_PROFILE_PAYLOAD,
         )
         await client.post(
             "/api/v1/health-records",
@@ -45,6 +67,10 @@ class TestPredictionsApi(TestCase):
             assert body["risk_level"] in {"RISK", "HIGH_RISK"}
             assert float(body["risk_score"]) > 0
             assert len(body["contributing_factors"]) >= 1
+            # risk_score 기반 5단계 한글 라벨이 응답에 실리는지 (DiseaseRisk.risk_level_label @property)
+            assert body["risk_level_label"] in {"매우 낮음", "낮음", "보통", "높음", "매우 높음"}
+            # 기여요인 방향(↑/↓)이 weight 부호로 파생돼 응답에 실리는지 (UI 논리 설명용)
+            assert all(f["direction"] in {"위험 증가↑", "위험 감소↓"} for f in body["contributing_factors"])
 
     async def test_create_diabetes_prediction_with_snapshot_override(self):
         async with make_client() as client:

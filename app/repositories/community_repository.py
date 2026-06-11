@@ -7,9 +7,11 @@ from tortoise.functions import Count
 
 from app.models.community import (
     Comment,
+    CommentLike,
     HealthQuiz,
     Post,
     PostCategory,
+    PostLike,
     QuizAttempt,
     QuizOption,
     Report,
@@ -18,18 +20,55 @@ from app.models.community import (
 )
 
 
+class LikeRepository:
+    async def get_post_like_count(self, post_id: int) -> int:
+        return await PostLike.filter(post_id=post_id).count()
+
+    async def is_post_liked(self, post_id: int, user_id: UUID) -> bool:
+        return await PostLike.filter(post_id=post_id, user_id=user_id).exists()
+
+    async def like_post(self, post_id: int, user_id: UUID) -> None:
+        await PostLike.get_or_create(post_id=post_id, user_id=user_id)
+
+    async def unlike_post(self, post_id: int, user_id: UUID) -> None:
+        await PostLike.filter(post_id=post_id, user_id=user_id).delete()
+
+    async def get_comment_like_count(self, comment_id: int) -> int:
+        return await CommentLike.filter(comment_id=comment_id).count()
+
+    async def is_comment_liked(self, comment_id: int, user_id: UUID) -> bool:
+        return await CommentLike.filter(comment_id=comment_id, user_id=user_id).exists()
+
+    async def like_comment(self, comment_id: int, user_id: UUID) -> None:
+        await CommentLike.get_or_create(comment_id=comment_id, user_id=user_id)
+
+    async def unlike_comment(self, comment_id: int, user_id: UUID) -> None:
+        await CommentLike.filter(comment_id=comment_id, user_id=user_id).delete()
+
+
 class PostRepository:
     async def list_posts(
         self, page: int = 1, size: int = 20, category: PostCategory | None = None
     ) -> tuple[list[Post], int]:
-        qs = Post.all().prefetch_related("author").annotate(comment_count=Count("comments"))
+        qs = (
+            Post.all()
+            .prefetch_related("author")
+            .annotate(
+                comment_count=Count("comments", distinct=True),
+                like_count=Count("likes", distinct=True),
+            )
+        )
         if category:
             qs = qs.filter(category=category)
         total = await qs.count()
         return list(await qs.offset((page - 1) * size).limit(size)), total
 
     async def get_post(self, post_id: int) -> Post | None:
-        return await Post.get_or_none(id=post_id).prefetch_related("author").annotate(comment_count=Count("comments"))
+        return (
+            await Post.get_or_none(id=post_id)
+            .prefetch_related("author")
+            .annotate(comment_count=Count("comments", distinct=True), like_count=Count("likes", distinct=True))
+        )
 
     async def increment_view(self, post_id: int, current: int) -> None:
         await Post.filter(id=post_id).update(view_count=current + 1)
@@ -96,6 +135,18 @@ class ReportRepository:
 class QuizRepository:
     async def get_quiz_by_date(self, quiz_date: date) -> HealthQuiz | None:
         return await HealthQuiz.get_or_none(quiz_date=quiz_date, is_active=True)
+
+    async def get_quiz_by_id(self, quiz_id: int) -> HealthQuiz | None:
+        return await HealthQuiz.get_or_none(id=quiz_id, is_active=True)
+
+    async def list_unanswered_quizzes(self, user_id: UUID, limit: int) -> list[HealthQuiz]:
+        attempted_ids = await QuizAttempt.filter(user_id=user_id).values_list("quiz_id", flat=True)
+        return list(
+            await HealthQuiz.filter(is_active=True, quiz_date__lte=date.today())
+            .exclude(id__in=list(attempted_ids))
+            .order_by("-quiz_date")
+            .limit(limit)
+        )
 
     async def get_attempt(self, user_id: UUID, quiz_id: int) -> QuizAttempt | None:
         return await QuizAttempt.get_or_none(user_id=user_id, quiz_id=quiz_id)

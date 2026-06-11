@@ -9,6 +9,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  ReferenceArea,
 } from "recharts";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
@@ -33,6 +34,18 @@ export default function WeightTrendChart({ series, heightCm }: WeightTrendChartP
   return (
     <ResponsiveContainer width="100%" height={260}>
       <ComposedChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+        {/* BMI 구간 배경 (BMI 우측 축 기준, heightCm 있을 때만) */}
+        {heightCm && (
+          <>
+            <ReferenceArea yAxisId="bmi" y1={25} y2={40} fill="#ffeaea" fillOpacity={0.3}
+              label={{ value: "비만", position: "insideTopRight", fill: "#e53935", fontSize: 10, fontWeight: 600 }} />
+            <ReferenceArea yAxisId="bmi" y1={23} y2={25} fill="#fffbe6" fillOpacity={0.4}
+              label={{ value: "과체중", position: "insideTopRight", fill: "#856404", fontSize: 10, fontWeight: 600 }} />
+            <ReferenceArea yAxisId="bmi" y1={10} y2={23} fill="#e8f5e9" fillOpacity={0.25}
+              label={{ value: "정상", position: "insideTopRight", fill: "#2e7d32", fontSize: 10, fontWeight: 600 }} />
+          </>
+        )}
+
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
         <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#999" }} />
         {/* 좌측 Y축: 체중 */}

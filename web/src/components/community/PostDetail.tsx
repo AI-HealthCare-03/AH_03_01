@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getPost, deletePost } from "@/lib/api/community";
+import { getPost, deletePost, likePost, unlikePost } from "@/lib/api/community";
+import type { PostDetail as PostDetailType } from "@/types/community";
 import CommentSection from "@/components/community/CommentSection";
 import ReportModal from "@/components/community/ReportModal";
 import { renderMarkdown } from "@/components/community/MarkdownEditor";
@@ -38,6 +39,25 @@ export default function PostDetail({ postId }: { postId: number }) {
       qc.invalidateQueries({ queryKey: ["posts"] });
       router.push(post ? BACK_PATH[post.category] : "/community/board");
     },
+    onError: (err) => showToast(extractErrorMessage(err), "error"),
+  });
+
+  const updateLikeCache = (data: { like_count: number; is_liked: boolean }) => {
+    qc.setQueryData<PostDetailType>(["post", postId], (old) =>
+      old ? { ...old, like_count: data.like_count, is_liked: data.is_liked } : old
+    );
+    qc.invalidateQueries({ queryKey: ["posts"] });
+  };
+
+  const { mutate: like, isPending: liking } = useMutation({
+    mutationFn: () => likePost(postId),
+    onSuccess: updateLikeCache,
+    onError: (err) => showToast(extractErrorMessage(err), "error"),
+  });
+
+  const { mutate: unlike, isPending: unliking } = useMutation({
+    mutationFn: () => unlikePost(postId),
+    onSuccess: updateLikeCache,
     onError: (err) => showToast(extractErrorMessage(err), "error"),
   });
 
@@ -97,7 +117,25 @@ export default function PostDetail({ postId }: { postId: number }) {
         dangerouslySetInnerHTML={{ __html: renderMarkdown(post.content) }}
       />
 
-      <hr className="border-border mt-6 mb-4" />
+      {/* 좋아요 · 댓글 수 */}
+      <div className="flex items-center gap-4 mt-6 mb-4">
+        <button
+          type="button"
+          disabled={!me || liking || unliking}
+          onClick={() => (post.is_liked ? unlike() : like())}
+          className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-red-500 disabled:cursor-default transition-colors"
+        >
+          <span className={post.is_liked ? "text-red-500" : ""}>{post.is_liked ? "❤️" : "🤍"}</span>
+          <span className={post.is_liked ? "text-red-500" : ""}>{post.like_count}</span>
+        </button>
+        <span className="flex items-center gap-1.5 text-sm text-text-secondary">
+          <span>💬</span>
+          <span>{post.comment_count}</span>
+          <span>댓글</span>
+        </span>
+      </div>
+
+      <hr className="border-border mb-4" />
 
       <CommentSection postId={postId} />
 

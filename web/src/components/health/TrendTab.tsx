@@ -5,18 +5,16 @@ import { useHealthStatistics } from "@/hooks/queries/useHealthStatistics";
 import { useHealthProfile } from "@/hooks/queries/useHealthProfile";
 import BPTrendChart from "./charts/BPTrendChart";
 import BGTrendChart from "./charts/BGTrendChart";
-import HbA1cBarChart from "./charts/HbA1cBarChart";
 import WeightTrendChart from "./charts/WeightTrendChart";
 import type { StatPeriod, HealthProfileDetail } from "@/types/health";
 
 /* ── 상수 ──────────────────────────────── */
 
-type SubTab = "bp" | "glucose" | "hba1c" | "weight";
+type SubTab = "bp" | "glucose" | "weight";
 
 const SUB_TABS: { id: SubTab; label: string }[] = [
   { id: "bp", label: "혈압" },
   { id: "glucose", label: "혈당" },
-  { id: "hba1c", label: "HbA1c" },
   { id: "weight", label: "체중·BMI" },
 ];
 
@@ -76,7 +74,6 @@ function StatSideCard({ subTab, series, peerAverage }: StatSideCardProps) {
   const unitMap: Record<SubTab, string> = {
     bp: "mmHg",
     glucose: "mg/dL",
-    hba1c: "%",
     weight: "kg",
   };
   const unit = unitMap[subTab];
@@ -96,15 +93,15 @@ function StatSideCard({ subTab, series, peerAverage }: StatSideCardProps) {
           <StatRow label="평균" value={`${avg.toFixed(1)} ${unit}`} />
         )}
 
-        <StatRow label="최고" value={`${max.toFixed(subTab === "hba1c" ? 1 : 0)} ${unit}`} />
-        <StatRow label="최저" value={`${min.toFixed(subTab === "hba1c" ? 1 : 0)} ${unit}`} />
+        <StatRow label="최고" value={`${max.toFixed(0)} ${unit}`} />
+        <StatRow label="최저" value={`${min.toFixed(0)} ${unit}`} />
         <StatRow label="측정 횟수" value={`${series.length}회`} />
 
         {peerAverage && (
           <div className="pt-2 border-t border-border">
             <p className="text-xs text-text-tertiary mb-1">동연령 평균</p>
             <p className="text-sm font-semibold text-text-primary">
-              {peerAverage.label}: {peerAverage.primary_value.toFixed(subTab === "hba1c" ? 1 : 0)} {unit}
+              {peerAverage.label}: {peerAverage.primary_value.toFixed(0)} {unit}
             </p>
           </div>
         )}
@@ -150,22 +147,16 @@ function BPPanel({ period }: { period: StatPeriod }) {
 /* ── 혈당 패널 ──────────────────────────── */
 
 function GlucosePanel({ period }: { period: StatPeriod }) {
-  const { data: fastingData, isLoading: l1 } = useHealthStatistics({
+  const { data: fastingData, isLoading } = useHealthStatistics({
     metric: "BLOOD_GLUCOSE",
     subType: "FASTING",
     period,
   });
-  const { data: postmealData, isLoading: l2 } = useHealthStatistics({
-    metric: "BLOOD_GLUCOSE",
-    subType: "POSTMEAL",
-    period,
-  });
 
-  if (l1 || l2) return <ChartSkeleton />;
+  if (isLoading) return <ChartSkeleton />;
 
   const fastingSeries = fastingData?.series ?? [];
-  const postmealSeries = postmealData?.series ?? [];
-  const insufficient = fastingSeries.length < MIN_DATA_COUNT && postmealSeries.length < MIN_DATA_COUNT;
+  const insufficient = fastingSeries.length < MIN_DATA_COUNT;
 
   return (
     <div className="flex gap-4">
@@ -173,7 +164,7 @@ function GlucosePanel({ period }: { period: StatPeriod }) {
         {insufficient ? (
           <InsufficientDataNotice />
         ) : (
-          <BGTrendChart fastingSeries={fastingSeries} postmealSeries={postmealSeries} />
+          <BGTrendChart series={fastingSeries} />
         )}
       </div>
       {!insufficient && (
@@ -181,31 +172,6 @@ function GlucosePanel({ period }: { period: StatPeriod }) {
           subTab="glucose"
           series={fastingSeries}
           peerAverage={fastingData?.peer_average}
-        />
-      )}
-    </div>
-  );
-}
-
-/* ── HbA1c 패널 ─────────────────────────── */
-
-function HbA1cPanel({ period }: { period: StatPeriod }) {
-  const { data, isLoading } = useHealthStatistics({ metric: "HBA1C", period });
-
-  if (isLoading) return <ChartSkeleton />;
-  const series = data?.series ?? [];
-  const insufficient = series.length < MIN_DATA_COUNT;
-
-  return (
-    <div className="flex gap-4">
-      <div className="flex-1 min-w-0">
-        {insufficient ? <InsufficientDataNotice /> : <HbA1cBarChart series={series} />}
-      </div>
-      {!insufficient && (
-        <StatSideCard
-          subTab="hba1c"
-          series={series}
-          peerAverage={data?.peer_average}
         />
       )}
     </div>
@@ -296,7 +262,6 @@ export default function TrendTab() {
       <div className="bg-white rounded-[16px] p-4 shadow-[0_1px_4px_rgba(0,0,0,0.08)]">
         {subTab === "bp" && <BPPanel period={period} />}
         {subTab === "glucose" && <GlucosePanel period={period} />}
-        {subTab === "hba1c" && <HbA1cPanel period={period} />}
         {subTab === "weight" && <WeightPanel period={period} />}
       </div>
 

@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useHealthProfile } from "@/hooks/queries/useHealthProfile";
+import { useHealthRecordList } from "@/hooks/queries/useHealthRecordList";
 import StatusBadge from "./StatusBadge";
 import WaistPopover from "./WaistPopover";
 import type { HealthStatus } from "@/lib/health/status";
@@ -124,10 +126,23 @@ function SideGuide() {
 /* ── 메인 컴포넌트 ─────────────────────────── */
 
 export default function DetailTab() {
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const today = new Date().toISOString().slice(0, 10);
+
   const { data: rawProfile, isLoading } = useHealthProfile() as {
     data: HealthProfileDetail | null | undefined;
     isLoading: boolean;
   };
+
+  /* 날짜 선택 시 해당 날짜의 체중/허리둘레 기록 조회 */
+  const { data: weightRecords } = useHealthRecordList(
+    { recordType: "WEIGHT", from: selectedDate, to: selectedDate },
+    { enabled: !!selectedDate }
+  );
+  const { data: waistRecords } = useHealthRecordList(
+    { recordType: "WAIST", from: selectedDate, to: selectedDate },
+    { enabled: !!selectedDate }
+  );
 
   if (isLoading) {
     return (
@@ -141,9 +156,18 @@ export default function DetailTab() {
 
   const profile = rawProfile as HealthProfileDetail | null;
 
+  /* 날짜 선택 시 해당 날짜 기록만 사용 (없으면 null), 미선택 시 프로필 기본값 사용 */
+  const displayWeightKg: number | null = selectedDate
+    ? (weightRecords && weightRecords.length > 0 ? parseFloat(weightRecords[0].primary_value) : null)
+    : (profile?.weight_kg != null ? Number(profile.weight_kg) : null);
+
+  const displayWaistCm: number | null = selectedDate
+    ? (waistRecords && waistRecords.length > 0 ? parseFloat(waistRecords[0].primary_value) : null)
+    : (profile?.waist_cm != null ? Number(profile.waist_cm) : null);
+
   const bmi =
-    profile?.height_cm && profile?.weight_kg
-      ? calcBmi(profile.height_cm, profile.weight_kg)
+    profile?.height_cm && displayWeightKg
+      ? calcBmi(profile.height_cm, displayWeightKg)
       : null;
 
   /* 만성질환 표시. 백엔드는 diseases: string[] 사용 (chronic_diseases 아님).
@@ -180,31 +204,65 @@ export default function DetailTab() {
           </div>
         ) : (
           <div className="bg-white rounded-[16px] shadow-[0_1px_4px_rgba(0,0,0,0.08)] overflow-hidden">
-            <div className="px-5 py-4 border-b border-border">
-              <h2 className="font-bold text-text-primary">건강 기본 정보</h2>
-              <p className="text-xs text-text-tertiary mt-0.5">
-                기록일: {(() => {
-                  const d = profile.updated_at ?? profile.recorded_at;
-                  return d ? new Date(d).toLocaleDateString("ko-KR") : "—";
-                })()}
-              </p>
+            <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-3">
+              <div>
+                <h2 className="font-bold text-text-primary">건강 기본 정보</h2>
+                <p className="text-xs text-text-tertiary mt-0.5">
+                  {selectedDate
+                    ? `조회 날짜: ${new Date(selectedDate).toLocaleDateString("ko-KR")}`
+                    : `기록일: ${(() => {
+                        const d = profile.updated_at ?? profile.recorded_at;
+                        return d ? new Date(d).toLocaleDateString("ko-KR") : "—";
+                      })()}`
+                  }
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <label htmlFor="detail-date-picker" className="text-[10px] text-text-tertiary whitespace-nowrap">날짜 선택</label>
+                <input
+                  id="detail-date-picker"
+                  type="date"
+                  value={selectedDate}
+                  max={today}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="text-xs border border-border rounded-lg px-2 py-1.5 cursor-pointer text-text-secondary hover:border-text-primary focus:outline-none focus:border-text-primary transition-colors"
+                />
+                {selectedDate && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDate("")}
+                    className="text-xs text-text-tertiary hover:text-text-primary transition-colors"
+                    aria-label="날짜 초기화"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
             </div>
             <div className="px-5">
               <DetailRow
                 label="신장 / 체중"
                 value={
-                  profile.height_cm && profile.weight_kg
-                    ? `${profile.height_cm}cm / ${profile.weight_kg}kg`
+                  profile.height_cm && displayWeightKg
+                    ? `${profile.height_cm}cm / ${displayWeightKg}kg`
+                    : selectedDate && weightRecords?.length === 0
+                    ? "해당 날짜 기록 없음"
                     : null
                 }
                 status={bmi !== null ? getBmiStatus(bmi) : "N/A"}
               />
               <DetailRow
                 label="허리둘레"
-                value={profile.waist_cm ? `${profile.waist_cm}cm` : null}
+                value={
+                  displayWaistCm
+                    ? `${displayWaistCm}cm`
+                    : selectedDate && waistRecords?.length === 0
+                    ? "해당 날짜 기록 없음"
+                    : null
+                }
                 status={
-                  profile.waist_cm
-                    ? getWaistStatus(profile.waist_cm, undefined)
+                  displayWaistCm
+                    ? getWaistStatus(displayWaistCm, undefined)
                     : "N/A"
                 }
                 helpTip={<WaistPopover />}

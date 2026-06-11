@@ -8,7 +8,13 @@ import type {
   PostCategory,
   Comment,
   CommentCreateRequest,
+  LikeResponse,
   ReportCreateRequest,
+  TodayQuizResponse,
+  QuizResponse,
+  QuizAnswerRequest,
+  QuizAnswerResponse,
+  QuizAttemptHistoryItem,
 } from "@/types/community";
 
 export async function listPosts(params?: {
@@ -58,8 +64,49 @@ export async function deleteComment(postId: number, commentId: number): Promise<
   await apiClient.delete(`/api/v1/posts/${postId}/comments/${commentId}`);
 }
 
+export async function likePost(postId: number): Promise<LikeResponse> {
+  const res = await apiClient.post<LikeResponse>(`/api/v1/posts/${postId}/like`);
+  return res.data;
+}
+
+export async function unlikePost(postId: number): Promise<LikeResponse> {
+  const res = await apiClient.delete<LikeResponse>(`/api/v1/posts/${postId}/like`);
+  return res.data;
+}
+
+export async function likeComment(postId: number, commentId: number): Promise<LikeResponse> {
+  const res = await apiClient.post<LikeResponse>(`/api/v1/posts/${postId}/comments/${commentId}/like`);
+  return res.data;
+}
+
+export async function unlikeComment(postId: number, commentId: number): Promise<LikeResponse> {
+  const res = await apiClient.delete<LikeResponse>(`/api/v1/posts/${postId}/comments/${commentId}/like`);
+  return res.data;
+}
+
 export async function createReport(data: ReportCreateRequest): Promise<{ message: string }> {
   const res = await apiClient.post<{ message: string }>("/api/v1/reports", data);
+  return res.data;
+}
+
+// ── Quiz ──────────────────────────────────────────────────────────────────────
+export async function getAvailableQuizzes(): Promise<QuizResponse[]> {
+  const res = await apiClient.get<QuizResponse[]>("/api/v1/quizzes/available");
+  return res.data;
+}
+
+export async function getTodayQuiz(): Promise<TodayQuizResponse> {
+  const res = await apiClient.get<TodayQuizResponse>("/api/v1/quizzes/today");
+  return res.data;
+}
+
+export async function answerQuiz(quizId: number, data: QuizAnswerRequest): Promise<QuizAnswerResponse> {
+  const res = await apiClient.post<QuizAnswerResponse>(`/api/v1/quizzes/${quizId}/answer`, data);
+  return res.data;
+}
+
+export async function getQuizHistory(params?: { page?: number; size?: number }): Promise<QuizAttemptHistoryItem[]> {
+  const res = await apiClient.get<QuizAttemptHistoryItem[]>("/api/v1/quizzes/history", { params });
   return res.data;
 }
 

@@ -49,7 +49,7 @@ function MonthNav({ current, onPrev, onNext }: MonthNavProps) {
 
 /* ── 기여 인자 TOP 3 ─────────────────── */
 
-function ContributingTop3({ factors }: { factors: { factor: string; weight: number; description?: string }[] }) {
+function ContributingTop3({ factors }: { factors: ContributingFactor[] }) {
   const top3 = [...factors].sort((a, b) => b.weight - a.weight).slice(0, 3);
 
   return (
@@ -60,7 +60,9 @@ function ContributingTop3({ factors }: { factors: { factor: string; weight: numb
             {i + 1}
           </span>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-text-primary truncate">{f.factor}</p>
+            <p className="text-sm font-medium text-text-primary truncate">
+              {f.factor}
+            </p>
             {f.description && (
               <p className="text-xs text-text-secondary">{f.description}</p>
             )}
@@ -71,7 +73,9 @@ function ContributingTop3({ factors }: { factors: { factor: string; weight: numb
         </div>
       ))}
       {factors.length === 0 && (
-        <p className="text-sm text-text-tertiary">이번 달 위험 인자 데이터가 없습니다.</p>
+        <p className="text-sm text-text-tertiary">
+          이번 달 위험 인자 데이터가 없습니다.
+        </p>
       )}
     </div>
   );
@@ -116,10 +120,22 @@ function ChallengeSummaryCard({ summary }: ChallengeSummaryCardProps) {
   }
 
   const counts = [
-    { label: "참여", value: summary.participated ?? 0, color: "text-status-info" },
-    { label: "성공", value: summary.succeeded ?? 0, color: "text-status-success" },
+    {
+      label: "참여",
+      value: summary.participated ?? 0,
+      color: "text-status-info",
+    },
+    {
+      label: "성공",
+      value: summary.succeeded ?? 0,
+      color: "text-status-success",
+    },
     { label: "실패", value: summary.failed ?? 0, color: "text-status-danger" },
-    { label: "진행중", value: summary.in_progress ?? 0, color: "text-[#856404]" },
+    {
+      label: "진행중",
+      value: summary.in_progress ?? 0,
+      color: "text-[#856404]",
+    },
   ];
 
   return (
@@ -194,11 +210,18 @@ export default function ReportTab() {
   const dominant = (predItems as PredictionWithFactors[])
     .slice()
     .sort((a, b) => Number(b.risk_score) - Number(a.risk_score))[0];
-  const top3Factors: ContributingFactor[] = (dominant?.contributing_factors ?? [])
+  const top3Factors: ContributingFactor[] = (
+    dominant?.contributing_factors ?? []
+  )
     .slice()
-    .sort((a: ContributingFactor, b: ContributingFactor) => (b.weight ?? 0) - (a.weight ?? 0))
+    .sort(
+      (a: ContributingFactor, b: ContributingFactor) =>
+        (b.weight ?? 0) - (a.weight ?? 0),
+    )
     .slice(0, 3);
   const challengeSummary = report?.challenge_summary;
+
+  const hasReport = !!report && !isLoading;
 
   const hyp = summaryFor("HYPERTENSION");
   const dia = summaryFor("DIABETES");
@@ -212,7 +235,8 @@ export default function ReportTab() {
       score: hyp?.score ?? 0,
       grade: hyp?.level as RiskGrade | undefined,
       factorCount:
-        predItems.find((p) => p.disease_type === "HYPERTENSION")?.risk_factors_count ?? 0,
+        predItems.find((p) => p.disease_type === "HYPERTENSION")
+          ?.risk_factors_count ?? 0,
     },
     {
       label: "당뇨",
@@ -220,7 +244,8 @@ export default function ReportTab() {
       score: dia?.score ?? 0,
       grade: dia?.level as RiskGrade | undefined,
       factorCount:
-        predItems.find((p) => p.disease_type === "DIABETES")?.risk_factors_count ?? 0,
+        predItems.find((p) => p.disease_type === "DIABETES")
+          ?.risk_factors_count ?? 0,
     },
     {
       label: "심혈관",
@@ -228,7 +253,8 @@ export default function ReportTab() {
       score: car?.score ?? 0,
       grade: car?.level as RiskGrade | undefined,
       factorCount:
-        predItems.find((p) => p.disease_type === "CARDIOVASCULAR")?.risk_factors_count ?? 0,
+        predItems.find((p) => p.disease_type === "CARDIOVASCULAR")
+          ?.risk_factors_count ?? 0,
     },
   ];
 
@@ -250,6 +276,14 @@ export default function ReportTab() {
           {[...Array(4)].map((_, i) => (
             <div key={i} className="h-40 bg-surface rounded-[16px]" />
           ))}
+        </div>
+      ) : !hasReport ? (
+        <div className="text-center py-16 space-y-2">
+          <p className="text-4xl">📭</p>
+          <p className="font-semibold text-text-primary">해당 월 리포트가 없습니다</p>
+          <p className="text-sm text-text-secondary">
+            건강 데이터를 기록하면 월간 리포트를 확인할 수 있어요.
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -278,24 +312,35 @@ export default function ReportTab() {
 
           {/* 카드 2: 판단 근거 TOP 3 */}
           <div className="bg-white rounded-[16px] p-5 shadow-[0_1px_4px_rgba(0,0,0,0.08)]">
-            <h3 className="font-bold text-text-primary mb-4">주요 위험 인자 TOP 3</h3>
+            <h3 className="font-bold text-text-primary mb-4">
+              주요 위험 인자 TOP 3
+            </h3>
             <ContributingTop3 factors={top3Factors} />
+            <h3 className="font-bold text-text-primary mb-4">주요 위험 인자 TOP 3</h3>
+            {hasReport ? (
+              <ContributingTop3 factors={top3Factors} />
+            ) : (
+              <p className="text-sm text-text-tertiary text-center py-4">
+                해당 월 위험 인자 데이터가 없습니다.
+              </p>
+            )}
           </div>
 
           {/* 카드 3: 챌린지 수행 내역 */}
           <div className="bg-white rounded-[16px] p-5 shadow-[0_1px_4px_rgba(0,0,0,0.08)] md:col-span-2">
-            <h3 className="font-bold text-text-primary mb-4">챌린지 수행 내역</h3>
+            <h3 className="font-bold text-text-primary mb-4">
+              챌린지 수행 내역
+            </h3>
             <ChallengeSummaryCard summary={challengeSummary} />
           </div>
 
           {/* 카드 4: 코칭 한 마디 */}
-          <div className="bg-brand-yellow-light rounded-[16px] p-5 md:col-span-2">
-            <p className="text-xs font-semibold text-[#856404] mb-1">💡 코칭 한 마디</p>
-            <p className="text-sm text-text-primary">
-              {report?.coaching_message ??
-                "꾸준한 기록이 건강 관리의 첫걸음입니다. 오늘도 혈압과 혈당을 체크해 보세요!"}
-            </p>
-          </div>
+          {hasReport && report?.coaching_message && (
+            <div className="bg-brand-yellow-light rounded-[16px] p-5 md:col-span-2">
+              <p className="text-xs font-semibold text-[#856404] mb-1">💡 코칭 한 마디</p>
+              <p className="text-sm text-text-primary">{report.coaching_message}</p>
+            </div>
+          )}
         </div>
       )}
 
