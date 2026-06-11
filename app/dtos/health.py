@@ -217,6 +217,8 @@ class ContributingFactor(BaseModel):
     factor: str
     weight: float
     description: str | None = None
+    name_kor: str | None = None  # 한글명 (ML 경로; 룰 폴백은 None → UI 는 description 사용)
+    direction: str | None = None  # "위험 증가↑"/"위험 감소↓"
 
 
 class PredictionResponse(BaseSerializerModel):

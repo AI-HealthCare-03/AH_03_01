@@ -801,6 +801,8 @@ class MLRiskPredictor:
                 factor=f["feature"],
                 weight=f["shap_contribution"],  # 부호 그대로 저장
                 description=f.get("user_description", f"{f['name_kor']}  {f['direction']}"),
+                name_kor=f.get("name_kor"),
+                direction=f.get("direction"),
             )
             for f in result["top_5_features"]
         ]

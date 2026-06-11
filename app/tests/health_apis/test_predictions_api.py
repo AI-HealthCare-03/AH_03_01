@@ -47,6 +47,8 @@ class TestPredictionsApi(TestCase):
             assert len(body["contributing_factors"]) >= 1
             # risk_score 기반 5단계 한글 라벨이 응답에 실리는지 (DiseaseRisk.risk_level_label @property)
             assert body["risk_level_label"] in {"매우 낮음", "낮음", "보통", "높음", "매우 높음"}
+            # 기여요인 방향(↑/↓)이 weight 부호로 파생돼 응답에 실리는지 (UI 논리 설명용)
+            assert all(f["direction"] in {"위험 증가↑", "위험 감소↓"} for f in body["contributing_factors"])
 
     async def test_create_diabetes_prediction_with_snapshot_override(self):
         async with make_client() as client:
