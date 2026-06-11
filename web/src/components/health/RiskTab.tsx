@@ -8,10 +8,13 @@ import { usePredictionsList } from "@/hooks/queries/usePredictionsList";
 import { useChallengeRecommendations } from "@/hooks/queries/useChallengeRecommendations";
 import { useRiskRecommendation } from "@/hooks/queries/useRiskRecommendation";
 import { useMe } from "@/hooks/queries/useMe";
+import { useCreatePrediction } from "@/hooks/queries/useCreatePrediction";
+import { useProfileCompleteness } from "@/hooks/queries/useProfileCompleteness";
 import RiskSemiGauge from "@/components/health/RiskSemiGauge";
 import { CATEGORY_CONFIG } from "@/components/challenges/common/ChallengeCategoryIcon";
 import type { RiskGrade, DiseaseType, ChallengeCategory } from "@/types/api";
 import type { ContributingFactor, PredictionDetail } from "@/types/health";
+import { MISSING_FIELD_LABEL } from "@/lib/healthFields";
 
 /* ── 상수 ──────────────────────────── */
 
@@ -423,7 +426,6 @@ function ContributingBars({ factors }: ContributingBarsProps) {
       {factors.map((f) => {
         const pct = Math.min(Math.round((Math.abs(f.weight) / maxWeight) * 100), 100);
         const isRisk = f.weight > 0;
-        const barColor = isRisk ? "bg-status-danger" : "bg-blue-400";
         const friendlyDir = isRisk ? "위험도를 높이는 요인입니다" : "위험도를 낮추는 요인입니다";
         // name_kor 있으면(ML) 그대로 라벨 사용, 없으면(rule-based) description에서 방향 suffix 제거
         const label = f.name_kor
@@ -443,7 +445,6 @@ function ContributingBars({ factors }: ContributingBarsProps) {
               ? "bg-orange-400"
               : "bg-yellow-400"
           : "bg-blue-400";
-        const directionColor = isRisk ? "text-red-600" : "text-blue-500";
 
         return (
           <div key={f.factor}>
@@ -459,7 +460,7 @@ function ContributingBars({ factors }: ContributingBarsProps) {
                 aria-valuenow={pct}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-label={`${displayText} 기여도 ${pct}%`}
+                aria-label={`${label} 기여도 ${pct}%`}
               />
             </div>
             <p className="text-xs text-text-tertiary mt-0.5">{userDesc}</p>
@@ -744,17 +745,180 @@ function DisclaimerBar({ text }: { text?: string }) {
    메인 컴포넌트
    ======================================================== */
 
+/* ========================================================
+   컴플리트니스 게이트 섹션
+   ======================================================== */
+
+interface CompletenessGateProps {
+  percent: number;
+  filled: number;
+  total: number;
+  missingFields: string[];
+  complete: boolean;
+  isPredicting: boolean;
+  onPredict: () => void;
+}
+
+function CompletenessGate({
+  percent,
+  filled,
+  total,
+  missingFields,
+  complete,
+  isPredicting,
+  onPredict,
+}: CompletenessGateProps) {
+  /* SVG 링 파라미터 */
+  const SIZE = 72;
+  const STROKE = 7;
+  const R = (SIZE - STROKE) / 2;
+  const CIRCUMFERENCE = 2 * Math.PI * R;
+  const offset = CIRCUMFERENCE - (percent / 100) * CIRCUMFERENCE;
+
+  return (
+    <div className="bg-white rounded-[16px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.07)]">
+      <div className="flex items-start gap-4">
+        {/* 완성도 Ring */}
+        <div className="shrink-0 flex flex-col items-center gap-1">
+          <svg width={SIZE} height={SIZE} aria-hidden="true">
+            <circle
+              cx={SIZE / 2}
+              cy={SIZE / 2}
+              r={R}
+              fill="none"
+              stroke="#f0f0f0"
+              strokeWidth={STROKE}
+            />
+            <circle
+              cx={SIZE / 2}
+              cy={SIZE / 2}
+              r={R}
+              fill="none"
+              stroke={complete ? "#22c55e" : "#d4a500"}
+              strokeWidth={STROKE}
+              strokeDasharray={CIRCUMFERENCE}
+              strokeDashoffset={offset}
+              strokeLinecap="round"
+              transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
+              style={{ transition: "stroke-dashoffset 0.6s ease" }}
+            />
+            <text
+              x={SIZE / 2}
+              y={SIZE / 2 + 5}
+              textAnchor="middle"
+              fontSize="14"
+              fontWeight="700"
+              fill={complete ? "#22c55e" : "#333"}
+            >
+              {percent}%
+            </text>
+          </svg>
+          <p className="text-[10px] text-text-tertiary">{filled}/{total}</p>
+        </div>
+
+        {/* 텍스트 + 버튼 */}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-text-primary mb-0.5">
+            {complete ? "모든 데이터가 입력되었어요" : "위험도 예측 준비 중"}
+          </p>
+          {!complete ? (
+            <>
+              <p className="text-xs text-text-secondary mb-2">
+                건강 데이터를 모두 입력해야 위험도 예측을 이용할 수 있어요.
+                아직 {missingFields.length}개 항목이 남았습니다.
+              </p>
+              {missingFields.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {missingFields.slice(0, 6).map((f) => (
+                    <span
+                      key={f}
+                      className="px-2 py-0.5 bg-[#fff3cd] text-[#856404] text-[11px] rounded-full border border-[#ffe082]"
+                    >
+                      {MISSING_FIELD_LABEL[f] ?? f}
+                    </span>
+                  ))}
+                  {missingFields.length > 6 && (
+                    <span className="px-2 py-0.5 bg-surface text-text-tertiary text-[11px] rounded-full">
+                      +{missingFields.length - 6}개
+                    </span>
+                  )}
+                </div>
+              )}
+              <Link
+                href="/health-records/complete"
+                className="inline-flex items-center gap-1 px-4 py-2 bg-brand text-brand-black text-sm font-bold rounded-[10px] hover:bg-brand-hover transition-colors"
+              >
+                누락 항목 채우기 →
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-text-secondary mb-3">
+                모든 항목이 입력되어 위험도 예측을 실행할 수 있어요.
+              </p>
+              <button
+                type="button"
+                onClick={onPredict}
+                disabled={isPredicting}
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-brand-black text-white text-sm font-bold rounded-[10px] hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isPredicting ? (
+                  <>
+                    <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+                    분석 중...
+                  </>
+                ) : (
+                  "위험도 예측 실행 →"
+                )}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ========================================================
+   메인 컴포넌트
+   ======================================================== */
+
 export default function RiskTab() {
   const [activeDisease, setActiveDisease] =
     useState<DiseaseType>("HYPERTENSION");
+  const [predictError, setPredictError] = useState<string | null>(null);
 
   const { data: meData } = useMe();
   const { data: latestPredictions, isLoading: l1 } = useLatestPredictions();
   const { data: detailPredictions, isLoading: l2 } = usePredictionsList({
     latest: true,
   });
+  const { data: completeness, isLoading: completenessLoading } = useProfileCompleteness();
+  const createPrediction = useCreatePrediction();
 
   const isLoading = l1 || l2;
+
+  /* ── 예측 실행 핸들러 ── */
+  const handlePredict = async () => {
+    setPredictError(null);
+    try {
+      await Promise.allSettled([
+        createPrediction.mutateAsync("HYPERTENSION"),
+        createPrediction.mutateAsync("DIABETES"),
+        createPrediction.mutateAsync("CARDIOVASCULAR"),
+      ]);
+    } catch (err) {
+      /* 422: missing_fields 안내 */
+      const axiosErr = err as { response?: { status: number; data?: { detail?: { message?: string; missing_fields?: string[] } } } };
+      if (axiosErr?.response?.status === 422) {
+        const detail = axiosErr.response?.data?.detail;
+        const msg = detail?.message ?? "건강 데이터를 모두 입력해야 위험도 예측을 이용할 수 있어요.";
+        setPredictError(msg);
+        return;
+      }
+      setPredictError("예측 실행 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+    }
+  };
 
   const latestItems = latestPredictions?.items ?? [];
   const detailItems =
@@ -843,7 +1007,7 @@ export default function RiskTab() {
   const userName = meData?.nickname ?? meData?.name ?? null;
 
   /* ── 로딩 ── */
-  if (isLoading) {
+  if (isLoading || completenessLoading) {
     return (
       <div className="animate-pulse space-y-4">
         <div className="h-28 bg-surface rounded-[16px]" />
@@ -859,25 +1023,31 @@ export default function RiskTab() {
     );
   }
 
-  /* ── 데이터 없음 ── */
+  /* ── 예측 결과 없음 (완성도 게이트 먼저 표시) ── */
   if (latestItems.length === 0) {
     return (
-      <div className="text-center py-16 space-y-3">
-        <p className="text-5xl" aria-hidden="true">
-          🔍
-        </p>
-        <p className="font-bold text-text-primary text-lg">
-          위험도 분석이 없습니다
-        </p>
-        <p className="text-sm text-text-secondary">
-          건강 기록을 입력하면 맞춤 위험도 분석을 받을 수 있어요.
-        </p>
-        <Link
-          href="/health-records/new"
-          className="inline-flex items-center gap-1 mt-2 px-5 py-2.5 bg-brand text-brand-black font-semibold rounded-[12px] text-sm hover:bg-brand-hover transition-colors"
-        >
-          건강 기록 입력하기
-        </Link>
+      <div className="space-y-5">
+        <CompletenessGate
+          percent={completeness?.percent ?? 0}
+          filled={completeness?.filled ?? 0}
+          total={completeness?.total ?? 0}
+          missingFields={completeness?.missing_fields ?? []}
+          complete={completeness?.complete ?? false}
+          isPredicting={createPrediction.isPending}
+          onPredict={handlePredict}
+        />
+        {predictError && (
+          <p className="text-sm text-red-600 bg-red-50 rounded-[12px] p-3">{predictError}</p>
+        )}
+        {!completeness?.complete && (
+          <div className="text-center py-8 space-y-2">
+            <p className="text-5xl" aria-hidden="true">🔍</p>
+            <p className="font-bold text-text-primary text-lg">아직 위험도 분석이 없습니다</p>
+            <p className="text-sm text-text-secondary">
+              건강 기록 입력 후 위험도 예측을 실행하면 맞춤 분석 결과를 받을 수 있어요.
+            </p>
+          </div>
+        )}
       </div>
     );
   }
@@ -886,6 +1056,20 @@ export default function RiskTab() {
     <div className="space-y-5">
       {/* 1. 헤더 */}
       <HeaderSection userName={userName} latestDate={latestDate} />
+
+      {/* 완성도 + 예측 버튼 게이트 */}
+      <CompletenessGate
+        percent={completeness?.percent ?? 100}
+        filled={completeness?.filled ?? 0}
+        total={completeness?.total ?? 0}
+        missingFields={completeness?.missing_fields ?? []}
+        complete={completeness?.complete ?? false}
+        isPredicting={createPrediction.isPending}
+        onPredict={handlePredict}
+      />
+      {predictError && (
+        <p className="text-sm text-red-600 bg-red-50 rounded-[12px] p-3">{predictError}</p>
+      )}
 
       {/* 2. 질환 카드 3개 */}
       <div className="grid grid-cols-3 gap-3">
