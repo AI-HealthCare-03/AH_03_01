@@ -79,11 +79,15 @@ FEMALE_ONLY_PROFILE_FIELDS = (
     "is_menopause",
     "ocp_total_months",
 )
+# profile 값이 비어도 최신 일별 레코드로 충족 가능한 필드 (DiseaseRiskService._build_input 의
+# 레코드→profile 폴백과 동일). 완성도 판정 시 profile OR 최신 레코드 둘 중 하나면 "채워짐".
+RECORD_FALLBACK_FIELDS = frozenset({"weight_kg", "waist_cm", "systolic_bp", "diastolic_bp", "fasting_blood_sugar"})
 
 
 class HealthProfileService:
     def __init__(self) -> None:
         self.repo = HealthProfileRepository()
+        self.record_repo = HealthRecordRepository()
 
     async def get_or_init(self, user: User) -> UserHealthInfo:
         profile = await self.repo.get_by_user(user.id)
@@ -98,24 +102,45 @@ class HealthProfileService:
             return REQUIRED_PROFILE_FIELDS + FEMALE_ONLY_PROFILE_FIELDS
         return REQUIRED_PROFILE_FIELDS
 
-    def compute_completeness(self, profile: UserHealthInfo | None, user: User) -> ProfileCompleteness:
+    async def _record_satisfied_fields(self, user: User) -> set[str]:
+        """profile 이 비어도 최신 일별 레코드로 충족되는 필드 집합.
+
+        DiseaseRiskService._build_input 의 레코드→profile 폴백과 동일한 소스를 본다.
+        """
+        satisfied: set[str] = set()
+        latest_weight = await self.record_repo.latest_value(user.id, RecordType.WEIGHT)
+        if latest_weight and latest_weight.primary_value is not None:
+            satisfied.add("weight_kg")
+        latest_waist = await self.record_repo.latest_value(user.id, RecordType.WAIST)
+        if latest_waist and latest_waist.primary_value is not None:
+            satisfied.add("waist_cm")
+        latest_bp = await self.record_repo.latest_value(user.id, RecordType.BLOOD_PRESSURE)
+        if latest_bp and latest_bp.primary_value is not None:
+            satisfied.add("systolic_bp")
+        if latest_bp and latest_bp.secondary_value is not None:
+            satisfied.add("diastolic_bp")
+        latest_fasting = await self.record_repo.latest_value(user.id, RecordType.BLOOD_GLUCOSE, RecordSubType.FASTING)
+        if latest_fasting and latest_fasting.primary_value is not None:
+            satisfied.add("fasting_blood_sugar")
+        return satisfied
+
+    async def compute_completeness(self, profile: UserHealthInfo | None, user: User) -> ProfileCompleteness:
         """위험도 예측 모델입력 필드 기준 완성도 계산.
 
-        - "채워짐" = 값이 None 이 아님 (가족력 -1=모름도 채워진 것으로 인정).
+        - "채워짐" = profile 값이 None 이 아님 (가족력 -1=모름도 인정).
+        - 단 RECORD_FALLBACK_FIELDS(혈압·혈당·체중·허리)는 최신 일별 레코드가 있으면 채워진 것으로 인정.
         - 여성은 is_menopause/ocp_total_months 를 필수에 포함, 남성/비해당은 제외.
-        - profile 이 None 이면 전부 미충족.
+        - profile 이 None 이어도 레코드로 일부 충족될 수 있어 레코드를 함께 조회한다.
         """
         required = self.required_fields_for(user)
         total = len(required)
-        if profile is None:
-            return ProfileCompleteness(
-                percent=0,
-                filled=0,
-                total=total,
-                missing_fields=list(required),
-                complete=False,
-            )
-        missing = [field_name for field_name in required if getattr(profile, field_name, None) is None]
+        record_satisfied = await self._record_satisfied_fields(user)
+        missing = []
+        for field_name in required:
+            profile_filled = profile is not None and getattr(profile, field_name, None) is not None
+            if profile_filled or (field_name in RECORD_FALLBACK_FIELDS and field_name in record_satisfied):
+                continue
+            missing.append(field_name)
         filled = total - len(missing)
         percent = round(filled / total * 100) if total else 100
         return ProfileCompleteness(
