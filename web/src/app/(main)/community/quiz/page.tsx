@@ -7,14 +7,6 @@ import QuizHistoryList from "@/components/community/QuizHistoryList";
 import type { QuizAnswerResponse, QuizAttemptHistoryItem, QuizResponse } from "@/types/community";
 
 const DAILY_LIMIT = 5;
-const BASE_DATE = new Date("2026-06-01");
-
-function getDayNumber(quizDate: string): number {
-  const diff = Math.round(
-    (new Date(quizDate).getTime() - BASE_DATE.getTime()) / (1000 * 60 * 60 * 24)
-  );
-  return diff + 1;
-}
 
 type Tab = "quiz" | "history";
 
@@ -142,7 +134,7 @@ export default function CommunityQuizPage() {
                 <QuizCard
                   key={current.id}
                   quiz={current}
-                  dayNumber={getDayNumber(current.quiz_date)}
+                  dayNumber={displayNumber}
                   hasNext={currentIndex + 1 < queue.length}
                   onAnswered={handleAnswered}
                   onNext={handleNext}

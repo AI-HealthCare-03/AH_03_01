@@ -92,7 +92,7 @@ class QuizResponse(BaseSerializerModel):
     option_c: str
     option_d: str
     category: QuizCategory
-    quiz_date: date
+    quiz_date: date | None
 
 
 class QuizAnswerRequest(BaseModel):

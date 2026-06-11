@@ -82,7 +82,7 @@ export interface QuizResponse {
   option_c: string;
   option_d: string;
   category: QuizCategory;
-  quiz_date: string;
+  quiz_date: string | null;
 }
 
 export interface TodayQuizResponse {
@@ -103,7 +103,7 @@ export interface QuizAnswerResponse {
 
 export interface QuizAttemptHistoryItem {
   quiz_id: number;
-  quiz_date: string;
+  quiz_date: string | null;
   question: string;
   category: QuizCategory;
   selected_option: QuizOption;
