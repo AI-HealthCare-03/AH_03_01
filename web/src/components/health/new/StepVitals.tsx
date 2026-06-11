@@ -3,46 +3,46 @@
 import { useState } from "react";
 import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/health/StatusBadge";
-import { getBloodPressureStatus } from "@/lib/health/status";
+import { getBloodPressureStatus, getFastingGlucoseStatus } from "@/lib/health/status";
 import type { WizardFormStep2 } from "@/types/health";
 
-interface StepBPProps {
+interface StepVitalsProps {
   onSubmit: (data: WizardFormStep2) => void;
   onSkip: () => void;
   isLoading?: boolean;
 }
 
-export default function StepBP({ onSubmit, onSkip, isLoading }: StepBPProps) {
+export default function StepVitals({ onSubmit, onSkip, isLoading }: StepVitalsProps) {
   const [systolic, setSystolic] = useState("");
   const [diastolic, setDiastolic] = useState("");
   const [env, setEnv] = useState<"HOME" | "HOSPITAL">("HOME");
+  const [fasting, setFasting] = useState("");
 
   const sysParsed = systolic ? parseFloat(systolic) : null;
   const bpStatus = sysParsed !== null ? getBloodPressureStatus(sysParsed) : null;
+
+  const fastingParsed = fasting ? parseFloat(fasting) : null;
+  const fastingStatus = fastingParsed !== null ? getFastingGlucoseStatus(fastingParsed) : null;
 
   const canSubmit = systolic !== "" && diastolic !== "";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
-    onSubmit({
-      systolic,
-      diastolic,
-      measurement_env: env,
-    });
+    onSubmit({ systolic, diastolic, measurement_env: env, fasting_glucose: fasting });
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="bg-white rounded-[16px] p-5 shadow-[0_1px_4px_rgba(0,0,0,0.08)] space-y-5">
         <div>
-          <h2 className="font-bold text-lg text-text-primary">혈압</h2>
+          <h2 className="font-bold text-lg text-text-primary">혈압 / 공복혈당</h2>
           <p className="text-sm text-text-secondary mt-0.5">선택 입력 — 건너뛸 수 있습니다.</p>
         </div>
 
-        {/* 측정환경 */}
+        {/* 측정 환경 */}
         <div>
-          <p className="text-sm font-medium text-text-primary mb-2">측정 환경</p>
+          <p className="text-sm font-medium text-text-primary mb-2">혈압 측정 환경</p>
           <div className="flex gap-2">
             {([
               { v: "HOME" as const, label: "가정" },
@@ -70,7 +70,7 @@ export default function StepBP({ onSubmit, onSkip, isLoading }: StepBPProps) {
           )}
         </div>
 
-        {/* 수축기/이완기 */}
+        {/* 수축기 / 이완기 */}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label htmlFor="systolic" className="text-sm font-medium text-text-primary mb-1 block">
@@ -112,34 +112,49 @@ export default function StepBP({ onSubmit, onSkip, isLoading }: StepBPProps) {
           </div>
         </div>
 
-        {/* 인라인 등급 */}
         {bpStatus && (
           <div className="flex items-center gap-2 p-3 bg-surface rounded-[10px]">
-            <span className="text-sm text-text-secondary">현재 판정:</span>
+            <span className="text-sm text-text-secondary">혈압 판정:</span>
             <StatusBadge status={bpStatus} size="md" />
-            <span className="text-xs text-text-tertiary">
-              {bpStatus === "정상"
-                ? "(수축기 120mmHg 미만)"
-                : bpStatus === "주의"
-                ? "(수축기 120~139mmHg)"
-                : "(수축기 140mmHg 이상)"}
-            </span>
           </div>
         )}
+
+        {/* 공복혈당 */}
+        <div>
+          <label htmlFor="fasting_glucose" className="text-sm font-medium text-text-primary mb-1 block">
+            공복혈당 <span className="text-text-tertiary font-normal">(선택)</span>
+          </label>
+          <div className="relative">
+            <input
+              id="fasting_glucose"
+              type="number"
+              inputMode="decimal"
+              placeholder="100"
+              value={fasting}
+              onChange={(e) => setFasting(e.target.value)}
+              className="w-full h-12 px-4 pr-16 border border-border rounded-[12px] text-text-primary bg-white focus:outline-none focus:border-brand-black transition-colors"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-tertiary">
+              mg/dL
+            </span>
+          </div>
+          {fastingStatus && (
+            <div className="flex items-center gap-2 mt-1.5">
+              <StatusBadge status={fastingStatus} />
+              <span className="text-xs text-text-tertiary">
+                정상: 100 미만 / 전당뇨: 100~125 / 당뇨: 126 이상
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-2">
         <Button type="submit" fullWidth loading={isLoading} disabled={!canSubmit}>
           저장 후 다음
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          fullWidth
-          onClick={onSkip}
-          disabled={isLoading}
-        >
-          혈압 정보 건너뛰기
+        <Button type="button" variant="ghost" fullWidth onClick={onSkip} disabled={isLoading}>
+          이 단계 건너뛰기
         </Button>
       </div>
     </form>

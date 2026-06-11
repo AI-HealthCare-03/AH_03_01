@@ -3,47 +3,35 @@
 import type { ReactNode } from "react";
 
 interface WizardShellProps {
-  currentStep: 1 | 2 | 3;
+  currentStep: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   children: ReactNode;
 }
 
 const STEPS = [
-  { num: 1, label: "기본 정보" },
-  { num: 2, label: "혈압" },
-  { num: 3, label: "혈당/HbA1c" },
+  { num: 1, label: "신체 계측" },
+  { num: 2, label: "혈압·혈당" },
+  { num: 3, label: "가족력" },
+  { num: 4, label: "흡연·음주" },
+  { num: 5, label: "수면·운동" },
+  { num: 6, label: "식습관" },
+  { num: 7, label: "추가 정보" },
 ] as const;
 
 export default function WizardShell({ currentStep, children }: WizardShellProps) {
   const progress = ((currentStep - 1) / (STEPS.length - 1)) * 100;
+  /* 모바일에서는 스텝이 많아 번호+레이블 모두 표시하지 않고 진행바 + "X/7단계" 텍스트만 표시 */
 
   return (
     <div className="md:flex md:gap-8 max-w-4xl mx-auto">
-      {/* 모바일: 상단 진행바 */}
+      {/* 모바일: 상단 진행바 + 단계 텍스트 */}
       <div className="md:hidden mb-6">
-        <div className="flex justify-between mb-2">
-          {STEPS.map(({ num, label }) => (
-            <div
-              key={num}
-              className={[
-                "flex flex-col items-center gap-1",
-                num <= currentStep ? "opacity-100" : "opacity-40",
-              ].join(" ")}
-            >
-              <div
-                className={[
-                  "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold",
-                  num < currentStep
-                    ? "bg-brand-black text-white"
-                    : num === currentStep
-                    ? "bg-brand text-brand-black"
-                    : "bg-surface text-text-tertiary border border-border",
-                ].join(" ")}
-              >
-                {num < currentStep ? "✓" : num}
-              </div>
-              <span className="text-[10px] text-text-secondary">{label}</span>
-            </div>
-          ))}
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-semibold text-text-primary">
+            {STEPS[currentStep - 1]?.label}
+          </span>
+          <span className="text-xs text-text-tertiary">
+            {currentStep} / {STEPS.length}단계
+          </span>
         </div>
         <div className="h-1.5 bg-surface rounded-full overflow-hidden">
           <div
