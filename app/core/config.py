@@ -64,6 +64,10 @@ class Config(BaseSettings):
     # async 모드에서 노드가 결과 row 를 폴링하는 간격/최대 대기(초). 타임아웃 시 인라인 룰 폴백.
     RISK_INFERENCE_POLL_INTERVAL: float = 0.2
     RISK_INFERENCE_POLL_TIMEOUT: float = 15.0
+    # True 면 ML 모델 로드/추론 실패 시 룰로 조용히 폴백하지 않고 MLUnavailableError 를 던진다.
+    # (prod 에서 켜면 예측 결과가 항상 진짜 ML 임을 보장 — 모델 장애가 룰로 가려지지 않음.)
+    # 로컬/테스트 기본 False(룰 폴백으로 graceful degrade 유지).
+    RISK_REQUIRE_ML: bool = False
 
     # AI 모델
     SIGLIP_MODEL_NAME: str = "google/siglip2-base-patch16-224"

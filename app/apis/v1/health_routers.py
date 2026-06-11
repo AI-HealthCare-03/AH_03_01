@@ -33,6 +33,7 @@ from app.services.health import (
     MonthlyReportService,
     total_pages,
 )
+from app.services.ml.risk_predictor import MLUnavailableError
 
 health_records_router = APIRouter(prefix="/health-records", tags=["health-records"])
 health_reports_router = APIRouter(prefix="/health-reports", tags=["health-reports"])
@@ -259,7 +260,14 @@ async def create_prediction(
             },
         )
     snapshot = body.input_snapshot if body and body.input_snapshot else None
-    risk = await service.create(user, disease_type, snapshot)
+    try:
+        risk = await service.create(user, disease_type, snapshot)
+    except MLUnavailableError as e:
+        # RISK_REQUIRE_ML=True 에서 ML 로드/추론 실패 — 룰로 가리지 않고 503 으로 드러낸다.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"message": "위험도 예측 모델을 일시적으로 사용할 수 없습니다.", "code": "ML_UNAVAILABLE"},
+        ) from e
     return Response(
         PredictionResponse.model_validate(risk).model_dump(),
         status_code=status.HTTP_201_CREATED,

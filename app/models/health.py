@@ -160,7 +160,7 @@ class UserHealthInfo(models.Model):
     ocp_total_months = fields.SmallIntField(null=True)
 
     # ── 기타 건강 지표 ────────────────────────────────────────────────────────
-    anemia = fields.SmallIntField(null=True)  # 빈혈: 1=있음 / 0=없음  → anemia
+    anemia = fields.SmallIntField(null=True)  # 빈혈: 1=있음 / 0=없음 / -1=모름  → anemia
 
     # ── 예측 미사용 · 권고/챗봇용 프로필 ─────────────────────────────────────
     chronic_diseases: list[str] = fields.JSONField(default=list)  # type: ignore[assignment]
