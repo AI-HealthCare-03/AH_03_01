@@ -316,10 +316,19 @@ def _score_to_level(score: float) -> RiskLevel:
     return RiskLevel.NORMAL
 
 
+class MLUnavailableError(RuntimeError):
+    """RISK_REQUIRE_ML=True 인데 ML 모델 로드/추론에 실패한 경우.
+
+    이 예외를 던지면 룰 폴백으로 조용히 가려지지 않고, 호출 측(라우터)이 명시적
+    오류(503)로 변환해 '모델 장애'를 사용자/운영에 드러낼 수 있다.
+    """
+
+
 class RiskPredictor:
     """ML 모델 기반 위험도 예측 진입점.
 
-    ML 모델 로드 실패 시 룰 기반 폴백으로 자동 전환.
+    기본은 ML 모델 로드/추론 실패 시 룰 기반 폴백으로 자동 전환(graceful degrade).
+    config.RISK_REQUIRE_ML=True 면 폴백 없이 MLUnavailableError 를 던져 모델 장애를 드러낸다.
     호출 측은 PredictionInput / PredictionOutput 인터페이스만 의존.
     """
 
@@ -346,6 +355,8 @@ class RiskPredictor:
         import logging
         import traceback
 
+        from app.core import config
+
         logger = logging.getLogger(__name__)
         ml = self._get_ml()
         if ml is not None:
@@ -354,4 +365,8 @@ class RiskPredictor:
             except Exception as e:
                 logger.error(f"[MLRiskPredictor] calculate 실패: {type(e).__name__}: {e}")
                 logger.error(traceback.format_exc())
+                if config.RISK_REQUIRE_ML:
+                    raise MLUnavailableError(f"ML 추론 실패: {type(e).__name__}") from e
+        elif config.RISK_REQUIRE_ML:
+            raise MLUnavailableError("ML 모델 로드 실패")
         return self._fallback.calculate(payload)

@@ -53,8 +53,8 @@ class HealthProfileUpsertRequest(BaseModel):
     # 폐경 / 호르몬: 폐경 1 / 비폐경여성 0 / 남성·비해당 -1
     is_menopause: Annotated[int | None, Field(None, ge=-1, le=1)]
     ocp_total_months: Annotated[int | None, Field(None, ge=0, le=1200)]
-    # 빈혈: 1=있음 / 0=없음
-    anemia: Annotated[int | None, Field(None, ge=0, le=1)]
+    # 빈혈: 1=있음 / 0=없음 / -1=모름 (가족력·폐경과 동일하게 모름 허용)
+    anemia: Annotated[int | None, Field(None, ge=-1, le=1)]
     # 예측 미사용 · 권고/챗봇용 프로필
     chronic_diseases: list[str] | None = None
     medications: list[str] | None = None

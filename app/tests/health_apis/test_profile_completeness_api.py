@@ -1,6 +1,9 @@
+from unittest.mock import patch
+
 from starlette import status
 from tortoise.contrib.test import TestCase
 
+from app.core import config
 from app.tests.health_apis.helpers import make_client, signup_and_login
 
 # 모델입력 필수 필드(MALE 기준 24개) 전부 채운 페이로드.
@@ -231,3 +234,29 @@ class TestPredictionGate(TestCase):
             res = await client.post("/api/v1/predictions?diseaseType=HYPERTENSION", headers=headers, json={})
             assert res.status_code == status.HTTP_201_CREATED
             assert res.json()["disease_type"] == "HYPERTENSION"
+
+    async def test_anemia_unknown_accepted_and_counts(self):
+        """빈혈 '모름'(-1)이 저장(422 아님)되고 완성도에 '채워짐'으로 집계되는지."""
+        async with make_client() as client:
+            token = await signup_and_login(client, email="anemia_unknown@example.com", phone_number="01033330010")
+            headers = {"Authorization": f"Bearer {token}"}
+            payload = {**_FULL_MALE_PROFILE_PAYLOAD, "anemia": -1}
+            res = await client.post("/api/v1/health-records?recordType=profile", headers=headers, json=payload)
+            assert res.status_code in (200, 201), res.json()  # -1 거부(422) 아님
+            prof = await client.get("/api/v1/health-records?recordType=profile", headers=headers)
+            comp = prof.json()["completeness"]
+            assert comp["complete"] is True  # 모름(-1)도 채워진 것으로 인정
+            assert "anemia" not in comp["missing_fields"]
+
+    async def test_strict_ml_returns_503_when_model_unavailable(self):
+        """RISK_REQUIRE_ML=True + 모델 미로드(테스트 환경) → 룰 폴백 없이 503(ML_UNAVAILABLE)."""
+        async with make_client() as client:
+            token = await signup_and_login(client, email="strict_ml@example.com", phone_number="01033330011")
+            headers = {"Authorization": f"Bearer {token}"}
+            await client.post(
+                "/api/v1/health-records?recordType=profile", headers=headers, json=_FULL_MALE_PROFILE_PAYLOAD
+            )
+            with patch.object(config, "RISK_REQUIRE_ML", True):
+                res = await client.post("/api/v1/predictions?diseaseType=HYPERTENSION", headers=headers, json={})
+            assert res.status_code == status.HTTP_503_SERVICE_UNAVAILABLE, res.json()
+            assert res.json()["detail"]["code"] == "ML_UNAVAILABLE"
