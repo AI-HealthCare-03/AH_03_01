@@ -474,7 +474,8 @@ async def ml_inference(state: RiskState) -> dict[str, Any]:
             request_ids.append(request.id)
             predictions.append(result_dict)
         except Exception as e:  # noqa: BLE001
-            _logger.warning("ml_inference (%s) 실패: %s", dt.value, _safe_err_repr(e))
+            _logger.warning("ml_inference (%s) 실패: %s", dt.value, type(e).__name__)
+            _logger.debug("ml_inference (%s) 실패 상세: %s", dt.value, _safe_err_repr(e))
             request.status = MLInferenceStatus.FAILED
             request.error_message = _safe_err_repr(e)
             request.completed_at = datetime.now(tz=UTC)
@@ -704,8 +705,8 @@ def _parse_recommendation_json(draft: str) -> tuple[str, list[dict[str, Any]]]:
     """draft 에서 <!--RECS:[...]–-> 블록을 추출하고 clean 본문과 파싱된 목록을 반환."""
     import re
 
-    pattern = r"<!--RECS:(\[.*?\])-->"
-    m = re.search(pattern, draft, re.DOTALL)
+    pattern = r"<!--RECS:(\[[\s\S]*?\])-->"
+    m = re.search(pattern, draft)
     if not m:
         return draft, []
     json_str = m.group(1)
@@ -836,6 +837,11 @@ async def final_ok(state: RiskState) -> dict[str, Any]:
             await save_recommendations(user_id, disease_risk_id, recommended)
         except Exception as e:  # noqa: BLE001
             _logger.warning("챌린지 추천 저장 실패: %s", _safe_err_repr(e))
+            return {
+                "final_answer": state.get("draft_answer", ""),
+                "sources": state.get("retrieved_docs", []),
+                "is_fallback": True,
+            }
 
     return {
         "final_answer": state.get("draft_answer", ""),

@@ -101,7 +101,7 @@ splitter = RecursiveCharacterTextSplitter(
 )
 
 # `## KDA2025_SEC_0001 — 당뇨병`, `## DYS_FIG_001 — ...`, `## GUIDE_SEC_001 — ...`,
-# 그리고 `## KSOLA2022_SEC_0020_A — ...` (숫자 뒤 _접미사) 형태까지 모두 매칭.
+# 그리고 `## KSLA2022_SEC_0020_A — ...` (숫자 뒤 _접미사) 형태까지 모두 매칭.
 SEC_HEADER = re.compile(
     r"^## ([A-Z][A-Z0-9_]+(?:_SEC_\d+(?:_[A-Z0-9]+)?|_FIG_\d+|FIG_\d+)) — (.+)$",
     re.MULTILINE,
@@ -191,7 +191,7 @@ def parse_file(filepath: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:  
     body = post.content
     matches = list(SEC_HEADER.finditer(body))
 
-    # M-6 sanity: section_id 가 frontmatter.source_id 의 prefix(예: "KSOLA2022")로 시작하거나
+    # M-6 sanity: section_id 가 frontmatter.source_id 의 prefix(예: "KSLA2022")로 시작하거나
     # 의료 도메인의 알려진 figure 접두사 인지 sample 검증. 정규식 확장으로 의도 외 패턴이
     # 매치되면 즉시 경고 (silent 매치 방지).
     # 알려진 figure 접두사: 각 진료지침이 본문에 다른 자료의 figure 를 인용하는 경우가 있음.
