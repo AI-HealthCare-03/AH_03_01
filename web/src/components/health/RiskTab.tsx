@@ -819,12 +819,12 @@ function CompletenessGate({
         {/* 텍스트 + 버튼 */}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold text-text-primary mb-0.5">
-            {complete ? "모든 데이터가 입력되었어요" : "위험도 예측 준비 중"}
+            {complete ? "모든 데이터가 입력되었어요" : "건강 데이터 입력 현황"}
           </p>
           {!complete ? (
             <>
               <p className="text-xs text-text-secondary mb-2">
-                건강 데이터를 모두 입력해야 위험도 예측을 이용할 수 있어요.
+                건강데이터를 전부 입력해주셔야 예측 결과를 확인하실 수 있습니다.
                 아직 {missingFields.length}개 항목이 남았습니다.
               </p>
               {missingFields.length > 0 && (
@@ -887,6 +887,7 @@ export default function RiskTab() {
   const [activeDisease, setActiveDisease] =
     useState<DiseaseType>("HYPERTENSION");
   const [predictError, setPredictError] = useState<string | null>(null);
+  const [mlUnavailable, setMlUnavailable] = useState(false);
 
   const { data: meData } = useMe();
   const { data: latestPredictions, isLoading: l1 } = useLatestPredictions();
@@ -901,22 +902,31 @@ export default function RiskTab() {
   /* ── 예측 실행 핸들러 ── */
   const handlePredict = async () => {
     setPredictError(null);
-    try {
-      await Promise.allSettled([
-        createPrediction.mutateAsync("HYPERTENSION"),
-        createPrediction.mutateAsync("DIABETES"),
-        createPrediction.mutateAsync("CARDIOVASCULAR"),
-      ]);
-    } catch (err) {
-      /* 422: missing_fields 안내 */
-      const axiosErr = err as { response?: { status: number; data?: { detail?: { message?: string; missing_fields?: string[] } } } };
-      if (axiosErr?.response?.status === 422) {
-        const detail = axiosErr.response?.data?.detail;
-        const msg = detail?.message ?? "건강 데이터를 모두 입력해야 위험도 예측을 이용할 수 있어요.";
-        setPredictError(msg);
+    setMlUnavailable(false);
+    // Promise.allSettled 는 rejected 도 fulfilled 로 감싸므로 결과를 직접 순회해 에러를 판별한다.
+    const results = await Promise.allSettled([
+      createPrediction.mutateAsync("HYPERTENSION"),
+      createPrediction.mutateAsync("DIABETES"),
+      createPrediction.mutateAsync("CARDIOVASCULAR"),
+    ]);
+    for (const result of results) {
+      if (result.status !== "rejected") continue;
+      const axiosErr = result.reason as {
+        response?: { status: number; data?: { detail?: { message?: string; missing_fields?: string[]; code?: string } } };
+      };
+      const status = axiosErr?.response?.status;
+      const detail = axiosErr?.response?.data?.detail;
+      if (status === 503 && detail?.code === "ML_UNAVAILABLE") {
+        setMlUnavailable(true); // 모델 장애 → "위험도 예측 준비 중"
+        return;
+      }
+      if (status === 422) {
+        // 게이트(미완성). 보통 버튼 비활성으로 사전 차단되나 방어적으로 처리.
+        setPredictError(detail?.message ?? "건강데이터를 전부 입력해주셔야 예측 결과를 확인하실 수 있습니다.");
         return;
       }
       setPredictError("예측 실행 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+      return;
     }
   };
 
@@ -1023,8 +1033,8 @@ export default function RiskTab() {
     );
   }
 
-  /* ── 예측 결과 없음 (완성도 게이트 먼저 표시) ── */
-  if (latestItems.length === 0) {
+  /* ── 상태 1: 프로필 미완성 — 건강데이터 부족(stale 예측 카드는 절대 표시하지 않음) ── */
+  if (completeness?.complete === false) {
     return (
       <div className="space-y-5">
         <CompletenessGate
@@ -1032,22 +1042,71 @@ export default function RiskTab() {
           filled={completeness?.filled ?? 0}
           total={completeness?.total ?? 0}
           missingFields={completeness?.missing_fields ?? []}
-          complete={completeness?.complete ?? false}
+          complete={false}
           isPredicting={createPrediction.isPending}
           onPredict={handlePredict}
         />
         {predictError && (
           <p className="text-sm text-red-600 bg-red-50 rounded-[12px] p-3">{predictError}</p>
         )}
-        {!completeness?.complete && (
-          <div className="text-center py-8 space-y-2">
-            <p className="text-5xl" aria-hidden="true">🔍</p>
-            <p className="font-bold text-text-primary text-lg">아직 위험도 분석이 없습니다</p>
-            <p className="text-sm text-text-secondary">
-              건강 기록 입력 후 위험도 예측을 실행하면 맞춤 분석 결과를 받을 수 있어요.
-            </p>
-          </div>
+        <div className="text-center py-8 space-y-2">
+          <p className="text-5xl" aria-hidden="true">📝</p>
+          <p className="font-bold text-text-primary text-lg">
+            건강데이터를 전부 입력해주셔야 예측 결과를 확인하실 수 있습니다
+          </p>
+          <p className="text-sm text-text-secondary">
+            누락된 항목을 모두 입력하면 맞춤 위험도 분석 결과를 받을 수 있어요.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── 상태 2: 모델 장애 (예측 호출이 503 ML_UNAVAILABLE 로 실패) ── */
+  if (mlUnavailable) {
+    return (
+      <div className="space-y-5">
+        <CompletenessGate
+          percent={completeness?.percent ?? 100}
+          filled={completeness?.filled ?? 0}
+          total={completeness?.total ?? 0}
+          missingFields={completeness?.missing_fields ?? []}
+          complete
+          isPredicting={createPrediction.isPending}
+          onPredict={handlePredict}
+        />
+        <div className="text-center py-8 space-y-2">
+          <p className="text-5xl" aria-hidden="true">⚙️</p>
+          <p className="font-bold text-text-primary text-lg">위험도 예측 준비 중</p>
+          <p className="text-sm text-text-secondary">잠시 후 다시 시도해 주세요.</p>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── 상태 3: 완성이지만 표시할 예측 결과 없음 (추론은 됐으나 저장 결과 없음/조회 이상) ── */
+  if (latestItems.length === 0) {
+    return (
+      <div className="space-y-5">
+        <CompletenessGate
+          percent={completeness?.percent ?? 100}
+          filled={completeness?.filled ?? 0}
+          total={completeness?.total ?? 0}
+          missingFields={completeness?.missing_fields ?? []}
+          complete
+          isPredicting={createPrediction.isPending}
+          onPredict={handlePredict}
+        />
+        {predictError && (
+          <p className="text-sm text-red-600 bg-red-50 rounded-[12px] p-3">{predictError}</p>
         )}
+        <div className="text-center py-8 space-y-2">
+          <p className="text-5xl" aria-hidden="true">🔍</p>
+          <p className="font-bold text-text-primary text-lg">예측 결과가 확인이 되지 않고 있습니다</p>
+          <p className="text-sm text-text-secondary">
+            위험도 예측을 실행하면 맞춤 분석 결과를 받을 수 있어요.
+          </p>
+        </div>
       </div>
     );
   }
