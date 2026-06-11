@@ -705,7 +705,7 @@ def _parse_recommendation_json(draft: str) -> tuple[str, list[dict[str, Any]]]:
     """draft 에서 <!--RECS:[...]–-> 블록을 추출하고 clean 본문과 파싱된 목록을 반환."""
     import re
 
-    pattern = r"<!--RECS:(\[.*?\])-->"
+    pattern = r"<!--RECS:(\[[\s\S]*?\])-->"
     m = re.search(pattern, draft)
     if not m:
         return draft, []
@@ -837,6 +837,11 @@ async def final_ok(state: RiskState) -> dict[str, Any]:
             await save_recommendations(user_id, disease_risk_id, recommended)
         except Exception as e:  # noqa: BLE001
             _logger.warning("챌린지 추천 저장 실패: %s", _safe_err_repr(e))
+            return {
+                "final_answer": state.get("draft_answer", ""),
+                "sources": state.get("retrieved_docs", []),
+                "is_fallback": True,
+            }
 
     return {
         "final_answer": state.get("draft_answer", ""),
