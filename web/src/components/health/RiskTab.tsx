@@ -396,7 +396,7 @@ function SummaryStrip({
    ======================================================== */
 
 interface ContributingBarsProps {
-  factors: ContributingFactor[];
+  factors: { factor: string; weight: number; description?: string; name_kor?: string }[];
 }
 
 function ContributingBars({ factors }: ContributingBarsProps) {
@@ -419,17 +419,21 @@ function ContributingBars({ factors }: ContributingBarsProps) {
   const maxWeight = Math.max(...factors.map((f) => Math.abs(f.weight)), 1);
 
   return (
-    <div className="space-y-3.5">
-      {factors.map((f, idx) => {
-        const pct = Math.min(
-          Math.round((Math.abs(f.weight) / maxWeight) * 100),
-          100,
-        );
-        const displayText = factorDisplayText(f);
-        const direction =
-          f.direction ?? (f.weight > 0 ? "위험 증가↑" : "위험 감소↓");
-        const isRisk = direction.includes("증가") || f.weight > 0;
-        const tooltip = FACTOR_TOOLTIP[f.factor];
+    <div className="space-y-3">
+      {factors.map((f) => {
+        const pct = Math.min(Math.round((Math.abs(f.weight) / maxWeight) * 100), 100);
+        const isRisk = f.weight > 0;
+        const barColor = isRisk ? "bg-status-danger" : "bg-blue-400";
+        const friendlyDir = isRisk ? "위험도를 높이는 요인입니다" : "위험도를 낮추는 요인입니다";
+        // name_kor 있으면(ML) 그대로 라벨 사용, 없으면(rule-based) description에서 방향 suffix 제거
+        const label = f.name_kor
+          ?? (f.description
+            ? f.description.replace(/\s*(위험\s*(증가|감소)[↑↓]?)?\s*$/, "").trim()
+            : f.factor);
+        // ML 경로는 description이 user-friendly 문장, rule-based는 짧은 이름이므로 방향 텍스트로 보완
+        const userDesc = f.name_kor
+          ? (f.description ?? friendlyDir)
+          : friendlyDir;
 
         /* 막대 색: 위험 증가→빨강→주황(상대 강도), 감소→파랑 */
         const barColor = isRisk
@@ -442,24 +446,10 @@ function ContributingBars({ factors }: ContributingBarsProps) {
         const directionColor = isRisk ? "text-red-600" : "text-blue-500";
 
         return (
-          <div key={`${f.factor}-${idx}`}>
-            <div className="flex justify-between mb-1.5">
-              <span className="text-sm text-text-primary font-medium flex items-center gap-1">
-                {displayText}
-                {tooltip && (
-                  <span className="relative group inline-flex">
-                    <span className="text-[10px] text-text-tertiary border border-border rounded-full w-4 h-4 flex items-center justify-center cursor-help leading-none select-none">
-                      ?
-                    </span>
-                    <span className="absolute left-0 bottom-5 z-10 hidden group-hover:block w-60 bg-gray-800 text-white text-[11px] rounded-[8px] px-3 py-2 shadow-lg leading-relaxed pointer-events-none">
-                      {tooltip}
-                    </span>
-                  </span>
-                )}
-              </span>
-              <span className={`text-xs font-bold ${directionColor}`}>
-                {pct}%
-              </span>
+          <div key={f.factor}>
+            <div className="flex justify-between mb-1">
+              <span className="text-sm text-text-primary font-medium">{label}</span>
+              <span className="text-xs font-bold text-text-secondary">{pct}점</span>
             </div>
             <div className="h-2.5 bg-surface rounded-full overflow-hidden">
               <div
@@ -472,9 +462,7 @@ function ContributingBars({ factors }: ContributingBarsProps) {
                 aria-label={`${displayText} 기여도 ${pct}%`}
               />
             </div>
-            <p className={`text-[11px] mt-0.5 font-medium ${directionColor}`}>
-              {direction}
-            </p>
+            <p className="text-xs text-text-tertiary mt-0.5">{userDesc}</p>
           </div>
         );
       })}
@@ -830,7 +818,15 @@ export default function RiskTab() {
     (p) => p.disease_type === highestDiseaseData?.disease,
   );
   const topFactor = highestDetail?.contributing_factors?.[0]
-    ? factorDisplayText(highestDetail.contributing_factors[0])
+    ? (() => {
+        const f = highestDetail.contributing_factors[0];
+        return (
+          f.name_kor ??
+          (f.description
+            ? f.description.replace(/\s*(위험\s*(증가|감소)[↑↓]?)?\s*$/, "").trim()
+            : f.factor)
+        );
+      })()
     : null;
 
   /* AI 제안용 — 최고 위험 질환 예측 ID */

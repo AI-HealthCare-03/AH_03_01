@@ -196,10 +196,8 @@ export interface HealthStatisticsResponse {
 export interface ContributingFactor {
   factor: string;
   weight: number;
-  description?: string | null;
-  /** 기여요인 한글명. 룰 폴백 시 null. */
-  name_kor?: string | null;
-  /** 방향 라벨. 항상 존재. "위험 증가↑" | "위험 감소↓" */
+  description?: string;
+  name_kor?: string;
   direction?: string;
 }
 
