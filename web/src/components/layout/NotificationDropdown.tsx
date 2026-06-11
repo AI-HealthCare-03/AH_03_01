@@ -21,6 +21,7 @@ export interface NotifItem {
   body: string;
   timestamp: number; // Date.now()
   read: boolean;
+  checked?: boolean; // 복약 완료 여부 (복약 카테고리 전용)
 }
 
 const CATEGORIES: Array<"전체" | NotifCategory> = ["전체", "복약", "챌린지", "커뮤니티", "위험도"];
@@ -109,6 +110,13 @@ export default function NotificationDropdown() {
     try { localStorage.setItem(notifHistoryKey(), JSON.stringify(next)); } catch { /* 무시 */ }
   };
 
+  // 복약 완료 체크 토글
+  const toggleMedCheck = (id: string) => {
+    const next = list.map((n) => n.id === id ? { ...n, checked: !n.checked, read: true } : n);
+    setList(next);
+    try { localStorage.setItem(notifHistoryKey(), JSON.stringify(next)); } catch { /* 무시 */ }
+  };
+
   return (
     <div ref={wrapRef} className="relative">
       {/* 종 버튼 */}
@@ -171,9 +179,9 @@ export default function NotificationDropdown() {
               filtered.map((n) => (
                 <div
                   key={n.id}
-                  className={["px-4 py-3 transition-colors", n.read ? "bg-white" : "bg-surface"].join(" ")}
+                  className={["px-4 py-3 min-h-[76px] transition-colors", n.read ? "bg-white" : "bg-surface"].join(" ")}
                 >
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex justify-between gap-2 h-full">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 mb-0.5">
                         <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${CATEGORY_COLOR[n.category]}`}>
@@ -186,9 +194,25 @@ export default function NotificationDropdown() {
                       <p className="text-sm font-semibold text-text-primary leading-snug">{n.title}</p>
                       <p className="text-xs text-text-secondary mt-0.5 line-clamp-2">{n.body}</p>
                     </div>
-                    <span className="text-[10px] text-text-tertiary shrink-0 mt-0.5">
-                      {formatTime(n.timestamp)}
-                    </span>
+                    <div className="flex flex-col items-end justify-between shrink-0 min-h-[52px]">
+                      <span className="text-[10px] text-text-tertiary">
+                        {formatTime(n.timestamp)}
+                      </span>
+                      {n.category === "복약" && (
+                        <button
+                          type="button"
+                          onClick={() => toggleMedCheck(n.id)}
+                          className={[
+                            "px-2.5 py-1 text-xs rounded-full border transition-colors",
+                            n.checked
+                              ? "bg-green-100 border-green-400 text-green-700 font-medium"
+                              : "bg-white border-border text-text-secondary hover:border-text-primary",
+                          ].join(" ")}
+                        >
+                          {n.checked ? "✓ 복약 완료" : "○ 복약 완료"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))
