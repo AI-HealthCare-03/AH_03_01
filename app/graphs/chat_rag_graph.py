@@ -218,7 +218,7 @@ _PERSONAL_INFO_PREFILTER_PATTERN = re.compile(
 # 1인칭 건강 질문 감지 — needs_health_data=True 결정에 사용.
 # "내일"·"내용"·"내과" 등 오탐 방지: (내|제) 뒤에 조사·공백만 허용.
 _FIRST_PERSON_PATTERN = re.compile(
-    r"(나|저)(는|도|의|가|에게|한테|를|을|\s)"
+    r"(나|저)(는|도|의|가|에게|한테|를|을|\s|$)"
     r"|(내|제)(가|는|도|의|\s)"
     r"|본인"
 )
@@ -227,7 +227,8 @@ _FIRST_PERSON_PATTERN = re.compile(
 _CHALLENGE_CATALOG_PATTERN = re.compile(
     r"(챌린지|운동\s*프로그램|생활습관\s*프로그램).{0,20}(추천|맞는|적합|좋은|어떤|골라|알려)"
     r"|(추천|맞는|적합|어떤).{0,20}(챌린지|운동\s*프로그램)"
-    r"|챌린지\s*(추천|맞는|골라|알려줘|알려주)"
+    r"|챌린지\s*(추천|맞는|골라|알려줘|알려주)",
+    re.DOTALL,
 )
 
 # 질환 감지 — diseases 결정에 사용.
@@ -246,11 +247,11 @@ _DISEASE_PATTERNS: dict[str, re.Pattern[str]] = {
 # 토픽 감지 — topics 결정에 사용. 순서 무관, 모두 매칭.
 _TOPIC_PATTERNS: dict[str, re.Pattern[str]] = {
     "medication": re.compile(
-        r"약|복용|처방|부작용|이상반응|보관|용법|용량|인슐린|스타틴|와파린|메트포르민"
-        r"|티카그렐러|아스피린|이뇨제|베타차단제|혈압약|당뇨약|고지혈증약"
+        r"약물|약제|약품|복용|처방|부작용|이상반응|보관|용법|용량|혈압약|당뇨약|고지혈증약"
+        r"|인슐린|스타틴|와파린|메트포르민|티카그렐러|아스피린|이뇨제|베타차단제"
     ),
     "exercise": re.compile(r"운동|신체활동|유산소|근력|걷기|달리기|조깅|스트레칭"),
-    "diet": re.compile(r"식단|식이|식사|영양|저염|저지방|저당|음식|먹|섭취|칼로리|DASH"),
+    "diet": re.compile(r"식단|식이|식사|영양|저염|저지방|저당|음식|먹는|먹어|먹을|먹고|섭취|칼로리|DASH"),
     "weight": re.compile(r"체중|비만|BMI|살|다이어트|허리둘레|과체중"),
     "smoking": re.compile(r"금연|흡연|담배"),
     "alcohol": re.compile(r"음주|절주|술"),
