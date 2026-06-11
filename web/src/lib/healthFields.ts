@@ -1,0 +1,31 @@
+/* 위험도 예측 모델입력 필드 키 → 한글 라벨 매핑.
+ * 완성도 missing_fields(백엔드 프로필 필드 키)를 사용자 화면 라벨로 변환한다.
+ * (page.tsx 에서 분리 — Next.js App Router page 파일은 임의 named export 불가) */
+export const MISSING_FIELD_LABEL: Record<string, string> = {
+  height_cm: "키",
+  weight_kg: "몸무게",
+  waist_cm: "허리둘레",
+  systolic_bp: "수축기 혈압",
+  diastolic_bp: "이완기 혈압",
+  fasting_blood_sugar: "공복혈당",
+  sleep_weekday: "주중 수면시간",
+  sleep_weekend: "주말 수면시간",
+  moderate_exercise_hour: "중강도 운동 시간",
+  smoking_risk: "흡연 여부",
+  current_smoker: "현재 흡연 여부",
+  mid_act_day: "중간 강도 활동 일수",
+  walk_day: "걷기 일수",
+  water_count: "하루 물 섭취량",
+  family_dm: "당뇨 가족력",
+  family_hp: "고혈압 가족력",
+  family_hl: "고지혈증 가족력",
+  alcohol_freq_y: "음주 빈도",
+  alcohol_cup: "음주량",
+  fruit_freq: "과일 섭취 빈도",
+  veg_freq_1: "채소 섭취 빈도",
+  out_meal_freq: "외식 빈도",
+  breakfast_freq: "아침 식사 빈도",
+  anemia: "빈혈 여부",
+  is_menopause: "폐경 여부",
+  ocp_total_months: "호르몬제 복용 기간",
+};

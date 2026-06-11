@@ -15,6 +15,7 @@ import type {
   PredictionDetailResponse,
   RiskRecommendationResponse,
   MonthlyReportResponse,
+  ProfileCompleteness,
 } from "@/types/health";
 import type { DiseaseType } from "@/types/api";
 
@@ -62,6 +63,20 @@ export async function upsertHealthProfile(
     { params: { recordType: "profile" } }
   );
   return data;
+}
+
+/* ── 프로필 완성도 조회 ─────────────────── */
+
+export async function fetchProfileCompleteness(): Promise<ProfileCompleteness | null> {
+  try {
+    const { data } = await apiClient.get<{ completeness?: ProfileCompleteness }>(
+      "/api/v1/health-records",
+      { params: { recordType: "profile" } }
+    );
+    return data?.completeness ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /* ── 건강 기록 생성 ─────────────────────── */

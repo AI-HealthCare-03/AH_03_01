@@ -191,6 +191,21 @@ export interface HealthStatisticsResponse {
   } | null;
 }
 
+/* ── 프로필 완성도 ──────────────────────────── */
+
+export interface ProfileCompleteness {
+  percent: number;
+  filled: number;
+  total: number;
+  missing_fields: string[];
+  complete: boolean;
+}
+
+/* completeness 가 포함된 프로필 응답 */
+export interface HealthProfileWithCompleteness extends HealthProfileDetail {
+  completeness?: ProfileCompleteness;
+}
+
 /* ── 예측 ────────────────────────────────────── */
 
 export interface ContributingFactor {

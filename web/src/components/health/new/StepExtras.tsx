@@ -270,12 +270,8 @@ export default function StepExtras({ gender, onSubmit, isLoading }: StepExtrasPr
         )}
       </div>
 
-      <div className="rounded-[12px] bg-[#fffbe6] border border-[#f9e000] p-3 text-xs text-[#856404]">
-        저장 후 자동으로 위험도를 계산합니다. 계산에 실패해도 기록은 저장됩니다.
-      </div>
-
       <Button type="submit" fullWidth loading={isLoading}>
-        저장 &amp; 위험도 계산
+        저장 완료
       </Button>
     </form>
   );
