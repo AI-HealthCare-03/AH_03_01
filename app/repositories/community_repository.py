@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+from datetime import date
 from uuid import UUID
 
 from tortoise.functions import Count
-
-from datetime import date
 
 from app.models.community import Comment, HealthQuiz, Post, PostCategory, QuizAttempt, QuizOption, Report, ReportReason, ReportTargetType
 
