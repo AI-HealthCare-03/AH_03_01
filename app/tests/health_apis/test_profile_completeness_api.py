@@ -126,6 +126,51 @@ class TestProfileCompletenessApi(TestCase):
             assert comp2["complete"] is True
             assert comp2["missing_fields"] == []
 
+    async def test_completeness_record_fallback(self):
+        """혈압·혈당·체중·허리는 profile 이 비어도 최신 일별 레코드가 있으면 채움으로 인정(L-1)."""
+        record_fields = {"weight_kg", "waist_cm", "systolic_bp", "diastolic_bp", "fasting_blood_sugar"}
+        async with make_client() as client:
+            token = await signup_and_login(client, email="comp_recfb@example.com", phone_number="01033330009")
+            headers = {"Authorization": f"Bearer {token}"}
+            # profile: 레코드 폴백 5필드를 뺀 19개만 입력 → 5개 누락 상태.
+            profile_wo_records = {k: v for k, v in _FULL_MALE_PROFILE_PAYLOAD.items() if k not in record_fields}
+            await client.post("/api/v1/health-records?recordType=profile", headers=headers, json=profile_wo_records)
+            body = await self._get_profile(client, headers)
+            assert set(body["completeness"]["missing_fields"]) == record_fields
+            assert body["completeness"]["complete"] is False
+
+            # 일별 레코드로 5필드를 채운다 (profile 은 그대로 비어 있음).
+            measured = "2026-05-10T08:00:00+09:00"
+            for payload in (
+                {"record_type": "WEIGHT", "primary_value": 78, "unit": "kg", "measured_at": measured},
+                {"record_type": "WAIST", "primary_value": 92, "unit": "cm", "measured_at": measured},
+                {
+                    "record_type": "BLOOD_PRESSURE",
+                    "sub_type": "HOSPITAL",
+                    "primary_value": 120,
+                    "secondary_value": 80,
+                    "unit": "mmHg",
+                    "measured_at": measured,
+                },
+                {
+                    "record_type": "BLOOD_GLUCOSE",
+                    "sub_type": "FASTING",
+                    "primary_value": 95,
+                    "unit": "mg/dL",
+                    "measured_at": measured,
+                },
+            ):
+                r = await client.post("/api/v1/health-records", headers=headers, json=payload)
+                assert r.status_code in (200, 201), r.json()
+
+            # 이제 레코드 폴백으로 완성 → 게이트 통과.
+            body2 = await self._get_profile(client, headers)
+            comp2 = body2["completeness"]
+            assert comp2["missing_fields"] == [], comp2
+            assert comp2["complete"] is True
+            res = await client.post("/api/v1/predictions?diseaseType=HYPERTENSION", headers=headers, json={})
+            assert res.status_code == status.HTTP_201_CREATED, res.json()
+
     async def test_completeness_male_excludes_female_fields(self):
         async with make_client() as client:
             token = await signup_and_login(
