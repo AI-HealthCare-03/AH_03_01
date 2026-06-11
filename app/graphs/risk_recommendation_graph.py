@@ -474,7 +474,8 @@ async def ml_inference(state: RiskState) -> dict[str, Any]:
             request_ids.append(request.id)
             predictions.append(result_dict)
         except Exception as e:  # noqa: BLE001
-            _logger.warning("ml_inference (%s) 실패: %s", dt.value, _safe_err_repr(e))
+            _logger.warning("ml_inference (%s) 실패: %s", dt.value, type(e).__name__)
+            _logger.debug("ml_inference (%s) 실패 상세: %s", dt.value, _safe_err_repr(e))
             request.status = MLInferenceStatus.FAILED
             request.error_message = _safe_err_repr(e)
             request.completed_at = datetime.now(tz=UTC)
@@ -705,7 +706,7 @@ def _parse_recommendation_json(draft: str) -> tuple[str, list[dict[str, Any]]]:
     import re
 
     pattern = r"<!--RECS:(\[.*?\])-->"
-    m = re.search(pattern, draft, re.DOTALL)
+    m = re.search(pattern, draft)
     if not m:
         return draft, []
     json_str = m.group(1)
