@@ -28,8 +28,13 @@ class HealthQuizService:
         assignments = await assignment_repo.get_today_assignments(user_id, today)
 
         if not assignments:
-            # 오늘 첫 요청 — 랜덤으로 DAILY_LIMIT개 배정
-            candidates = await self.repo.list_unanswered_quizzes(user_id, DAILY_LIMIT)
+            # 오늘 이미 답한 수를 제외한 나머지 슬롯만 배정
+            today_start = datetime.combine(today, datetime.min.time()).replace(tzinfo=SEOUL)
+            today_answered_count = await QuizAttempt.filter(
+                user_id=user_id, attempted_at__gte=today_start
+            ).count()
+            remaining_slots = DAILY_LIMIT - today_answered_count
+            candidates = await self.repo.list_unanswered_quizzes(user_id, remaining_slots) if remaining_slots > 0 else []
             if candidates:
                 await assignment_repo.create_assignments(user_id, [q.id for q in candidates], today)
                 assignments = await assignment_repo.get_today_assignments(user_id, today)
