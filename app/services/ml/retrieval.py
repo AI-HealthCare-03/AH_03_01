@@ -224,9 +224,9 @@ def _build_filter_sql(
         # service 카테고리는 disease 필터 비활성 (질환 횡단)
         return ("".join(clauses), args)
 
-    if diseases and source_type not in ("service", "all"):
-        # metadata 는 jsonb. ->> 'disease' 텍스트 추출 후 IN 매치. 수백 청크 규모에서
-        # 인덱스 안 타도 비용 무시.
+    if diseases and source_type == "medical":
+        # medical(GUIDELINE) 전용 필터. source_type="all" 이면 CHALLENGE_CATALOG(disease=chronic_disease)가
+        # 걸러지므로 의도적으로 비활성.
         disease_placeholders = ", ".join(f"${next_idx + i}" for i in range(len(diseases)))
         clauses.append(f" AND (\"metadata\" ->> 'disease') IN ({disease_placeholders}) ")
         args.extend(diseases)
@@ -316,8 +316,8 @@ def _sparse_search(  # noqa: C901
             elif source_type == "service" and not (dt == "OTHER" and bm.sources[i] in SERVICE_SOURCES):
                 scores[i] = mask_value
 
-    # disease 필터 (medical/all 케이스에만 — service 는 횡단). list 면 OR 매치.
-    if diseases and source_type not in ("service", "all"):
+    # disease 필터 (medical 전용 — service/all 은 횡단). list 면 OR 매치.
+    if diseases and source_type == "medical":
         disease_set = set(diseases)
         for i, d in enumerate(bm.diseases):
             if d not in disease_set:
