@@ -34,6 +34,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import json
 import logging
@@ -49,6 +50,7 @@ from openai import AsyncOpenAI
 from tortoise.transactions import in_transaction
 
 from app.core import config
+from app.core.queue import enqueue_risk_inference
 from app.graphs._shared.medical_evaluator import (
     EvalInput,
     EvalResultLiteral,
@@ -78,6 +80,7 @@ from app.services.ml.risk_predictor import (
     PredictionInput,
     PredictionOutput,
     RiskPredictor,
+    RuleBasedRiskCalculator,
 )
 
 _logger = logging.getLogger(__name__)
@@ -394,7 +397,10 @@ async def preprocess(state: RiskState) -> dict[str, Any]:
 
 
 # ─────────────────────────────────────────────
-# 노드 3: ml_inference (P1 동기 — RiskPredictor 룰 stub + ml_inference_requests row)
+# 노드 3: ml_inference
+#   - sync 모드(RISK_INFERENCE_ASYNC=False, 기본): 노드 안에서 RiskPredictor 직접 호출(P1).
+#   - async 모드(True): ml_inference_requests row(PENDING) + Redis 큐 push → risk-worker 가
+#     처리 → 노드는 결과 row 를 폴링. 타임아웃/실패 시 인라인 룰 폴백.
 # ─────────────────────────────────────────────
 _predictor = RiskPredictor()
 
@@ -431,12 +437,28 @@ def _build_prediction_input(disease_type: DiseaseType, snapshot: dict[str, Any])
     )
 
 
-async def ml_inference(state: RiskState) -> dict[str, Any]:
-    """3개 질환 (당뇨/고혈압/심혈관) 위험도 산출.
+_RISK_DISEASES = (DiseaseType.DIABETES, DiseaseType.HYPERTENSION, DiseaseType.CARDIOVASCULAR)
 
-    각 질환마다 ml_inference_requests row 1개 생성 + RiskPredictor 동기 호출 +
-    결과 row 채움. P1 패턴 — 미래 ML 학습 완료 시 dispatch 부분만 Redis 큐로 교체.
-    """
+
+def _output_to_result(output: PredictionOutput) -> dict[str, Any]:
+    return {
+        "disease_type": output.disease_type.value,
+        "risk_score": float(output.risk_score),
+        "risk_level": output.risk_level.value,
+        "contributing_factors": [f.to_dict() for f in output.contributing_factors],
+        "model_version": output.model_version,
+    }
+
+
+async def ml_inference(state: RiskState) -> dict[str, Any]:
+    """3개 질환(당뇨/고혈압/심혈관) 위험도 산출. dispatch 모드는 RISK_INFERENCE_ASYNC 로 분기."""
+    if config.RISK_INFERENCE_ASYNC:
+        return await _ml_inference_async(state)
+    return await _ml_inference_sync(state)
+
+
+async def _ml_inference_sync(state: RiskState) -> dict[str, Any]:
+    """P1 동기: 노드 안에서 RiskPredictor 직접 호출 + ml_inference_requests row 채움."""
     user_id = state.get("user_id")
     thread_id = state.get("thread_id")
     snapshot = state.get("feature_snapshot") or {}
@@ -444,7 +466,7 @@ async def ml_inference(state: RiskState) -> dict[str, Any]:
     request_ids: list[int] = []
     predictions: list[dict[str, Any]] = []
 
-    for dt in (DiseaseType.DIABETES, DiseaseType.HYPERTENSION, DiseaseType.CARDIOVASCULAR):
+    for dt in _RISK_DISEASES:
         t_start = time.perf_counter()
         payload = _build_prediction_input(dt, snapshot)
         request = await MLInferenceRequest.create(
@@ -459,13 +481,7 @@ async def ml_inference(state: RiskState) -> dict[str, Any]:
         try:
             output: PredictionOutput = await _predictor.predict(payload)
             duration_ms = int((time.perf_counter() - t_start) * 1000)
-            result_dict = {
-                "disease_type": output.disease_type.value,
-                "risk_score": float(output.risk_score),
-                "risk_level": output.risk_level.value,
-                "contributing_factors": [f.to_dict() for f in output.contributing_factors],
-                "model_version": output.model_version,
-            }
+            result_dict = _output_to_result(output)
             request.status = MLInferenceStatus.SUCCESS
             request.prediction_result = result_dict
             request.duration_ms = duration_ms
@@ -481,6 +497,73 @@ async def ml_inference(state: RiskState) -> dict[str, Any]:
             request.completed_at = datetime.now(tz=UTC)
             await request.save()
             # 부분 실패 — 해당 질환만 skip, 다른 질환 계속
+
+    return {"ml_request_ids": request_ids, "predictions": predictions}
+
+
+async def _await_inference_result(request_id: int, deadline: float) -> dict[str, Any] | None:
+    """워커가 채운 결과 row 를 폴링. SUCCESS면 prediction_result, FAILED/타임아웃이면 None."""
+    loop = asyncio.get_running_loop()
+    while loop.time() < deadline:
+        row = await MLInferenceRequest.filter(id=request_id).first()
+        if row is not None:
+            if row.status == MLInferenceStatus.SUCCESS and row.prediction_result:
+                return row.prediction_result
+            if row.status == MLInferenceStatus.FAILED:
+                return None
+        await asyncio.sleep(config.RISK_INFERENCE_POLL_INTERVAL)
+    return None
+
+
+async def _ml_inference_async(state: RiskState) -> dict[str, Any]:
+    """비동기: PENDING row + Redis 큐 push → risk-worker 처리 → 결과 폴링.
+
+    타임아웃/실패/큐 장애 시 인라인 룰 폴백(RuleBasedRiskCalculator)으로 graceful degrade.
+    """
+    user_id = state.get("user_id")
+    thread_id = state.get("thread_id")
+    snapshot = state.get("feature_snapshot") or {}
+
+    request_ids: list[int] = []
+    predictions: list[dict[str, Any]] = []
+
+    # 1) 질환별 PENDING row 생성 + 큐 push
+    dispatched: list[tuple[int, DiseaseType, PredictionInput]] = []
+    for dt in _RISK_DISEASES:
+        payload = _build_prediction_input(dt, snapshot)
+        request = await MLInferenceRequest.create(
+            user_id=user_id,
+            thread_id=thread_id,
+            kind=MLInferenceKind.RISK_PREDICTION,
+            status=MLInferenceStatus.PENDING,
+            input_features=payload.snapshot(),
+        )
+        try:
+            await enqueue_risk_inference(
+                {
+                    "request_id": request.id,
+                    "user_id": str(user_id) if user_id else None,
+                    "thread_id": thread_id,
+                    "kind": MLInferenceKind.RISK_PREDICTION.value,
+                    "input_features": payload.snapshot(),
+                }
+            )
+        except Exception as e:  # noqa: BLE001
+            _logger.warning(
+                "risk enqueue 실패(%s, req=%s) — 폴링 타임아웃 후 룰 폴백: %s", dt.value, request.id, _safe_err_repr(e)
+            )
+        dispatched.append((request.id, dt, payload))
+
+    # 2) 결과 폴링 (질환 3종 공유 deadline — 워커가 직렬 처리해도 총 대기 ≤ 타임아웃)
+    deadline = asyncio.get_running_loop().time() + config.RISK_INFERENCE_POLL_TIMEOUT
+    for request_id, dt, payload in dispatched:
+        result_dict = await _await_inference_result(request_id, deadline)
+        if result_dict is None:
+            _logger.warning("risk async 결과 미수신(%s, req=%s) — 인라인 룰 폴백", dt.value, request_id)
+            result_dict = _output_to_result(RuleBasedRiskCalculator().calculate(payload))
+        else:
+            request_ids.append(request_id)
+        predictions.append(result_dict)
 
     return {"ml_request_ids": request_ids, "predictions": predictions}
 
@@ -697,7 +780,9 @@ def _format_eligible_templates_block(eligible: list[EligibleTemplate]) -> str:
     lines = ["[추천 가능 챌린지 템플릿 — 이 목록에 있는 template_id 만 추천 가능]"]
     for t in eligible:
         sub = f" / {t.sub_category}" if t.sub_category else ""
-        lines.append(f"- id={t.template_id}  {t.title}  ({t.category}{sub}, {t.difficulty}, 우선도 힌트: {t.priority_hint})")
+        lines.append(
+            f"- id={t.template_id}  {t.title}  ({t.category}{sub}, {t.difficulty}, 우선도 힌트: {t.priority_hint})"
+        )
     return "\n".join(lines) + "\n\n"
 
 
@@ -710,7 +795,7 @@ def _parse_recommendation_json(draft: str) -> tuple[str, list[dict[str, Any]]]:
     if not m:
         return draft, []
     json_str = m.group(1)
-    clean = draft[: m.start()].rstrip() + draft[m.end():]
+    clean = draft[: m.start()].rstrip() + draft[m.end() :]
     try:
         items = json.loads(json_str)
         if not isinstance(items, list):
@@ -739,10 +824,14 @@ async def generate_recommendation(state: RiskState) -> dict[str, Any]:
 
     allowed_ids = {t.template_id for t in eligible}
     json_instruction = (
-        "\n\n답변 본문 작성 후, 아래 형식으로 추천 챌린지 JSON 블록을 **반드시** 본문 끝에 붙이세요 "
-        "(템플릿 목록의 id 만 사용, 최대 3개):\n"
-        '<!--RECS:[{"template_id": <id>, "priority": "TOP"|"RECOMMENDED"|"OPTIONAL", "reason": "한국어 한 줄 이유"}]-->'
-    ) if allowed_ids else ""
+        (
+            "\n\n답변 본문 작성 후, 아래 형식으로 추천 챌린지 JSON 블록을 **반드시** 본문 끝에 붙이세요 "
+            "(템플릿 목록의 id 만 사용, 최대 3개):\n"
+            '<!--RECS:[{"template_id": <id>, "priority": "TOP"|"RECOMMENDED"|"OPTIONAL", "reason": "한국어 한 줄 이유"}]-->'
+        )
+        if allowed_ids
+        else ""
+    )
 
     user_prompt = (
         f"{_format_predictions_block(predictions)}"
