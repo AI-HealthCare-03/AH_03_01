@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       redis:
-        image: redis:7
+        image: redis:7-alpine
         ports:
           - 6379:6379
         options: >-
@@ -75,6 +75,7 @@ jobs:
       DB_USER: postgres
       DB_PASSWORD: pw1234
       DB_NAME: ai_health
+      REDIS_HOST: localhost
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
