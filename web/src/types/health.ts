@@ -202,6 +202,8 @@ export interface ContributingFactor {
   factor: string;
   weight: number;
   description?: string;
+  name_kor?: string;
+  direction?: string;
 }
 
 export interface PredictionDetail {

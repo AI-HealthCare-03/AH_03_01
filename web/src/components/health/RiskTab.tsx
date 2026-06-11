@@ -108,7 +108,7 @@ const FACTOR_TOOLTIP: Record<string, string> = {
 /* ── 기여 인자 바 ───────────────────── */
 
 interface ContributingBarsProps {
-  factors: { factor: string; weight: number; description?: string }[];
+  factors: { factor: string; weight: number; description?: string; name_kor?: string }[];
 }
 
 function ContributingBars({ factors }: ContributingBarsProps) {
@@ -129,30 +129,23 @@ function ContributingBars({ factors }: ContributingBarsProps) {
     <div className="space-y-3">
       {factors.map((f) => {
         const pct = Math.min(Math.round((Math.abs(f.weight) / maxWeight) * 100), 100);
-        const label = f.description
-          ? f.description.replace(/\s*(위험\s*(증가|감소)[↑↓]?)?\s*$/, "").trim()
-          : f.factor;
         const isRisk = f.weight > 0;
-        const direction = isRisk ? "위험 증가↑" : "위험 감소↓";
         const barColor = isRisk ? "bg-status-danger" : "bg-blue-400";
-        const tooltip = FACTOR_TOOLTIP[f.factor];
+        const friendlyDir = isRisk ? "위험도를 높이는 요인입니다" : "위험도를 낮추는 요인입니다";
+        // name_kor 있으면(ML) 그대로 라벨 사용, 없으면(rule-based) description에서 방향 suffix 제거
+        const label = f.name_kor
+          ?? (f.description
+            ? f.description.replace(/\s*(위험\s*(증가|감소)[↑↓]?)?\s*$/, "").trim()
+            : f.factor);
+        // ML 경로는 description이 user-friendly 문장, rule-based는 짧은 이름이므로 방향 텍스트로 보완
+        const userDesc = f.name_kor
+          ? (f.description ?? friendlyDir)
+          : friendlyDir;
 
         return (
           <div key={f.factor}>
             <div className="flex justify-between mb-1">
-              <span className="text-sm text-text-primary font-medium flex items-center gap-1">
-                {label}
-                {tooltip && (
-                  <span className="relative group inline-flex">
-                    <span className="text-[10px] text-text-tertiary border border-border rounded-full w-4 h-4 flex items-center justify-center cursor-help leading-none select-none">
-                      ?
-                    </span>
-                    <span className="absolute left-0 bottom-5 z-10 hidden group-hover:block w-60 bg-gray-800 text-white text-[11px] rounded-[8px] px-3 py-2 shadow-lg leading-relaxed pointer-events-none">
-                      {tooltip}
-                    </span>
-                  </span>
-                )}
-              </span>
+              <span className="text-sm text-text-primary font-medium">{label}</span>
               <span className="text-xs font-bold text-text-secondary">{pct}점</span>
             </div>
             <div className="h-2 bg-surface rounded-full overflow-hidden">
@@ -166,7 +159,7 @@ function ContributingBars({ factors }: ContributingBarsProps) {
                 aria-label={`${label} 기여도`}
               />
             </div>
-            <p className="text-xs text-text-tertiary mt-0.5">{direction}</p>
+            <p className="text-xs text-text-tertiary mt-0.5">{userDesc}</p>
           </div>
         );
       })}
@@ -508,9 +501,12 @@ export default function RiskTab() {
   const topFactor = highestDetail?.contributing_factors?.[0]
     ? (() => {
         const f = highestDetail.contributing_factors[0];
-        return f.description
-          ? f.description.replace(/\s*(위험\s*(증가|감소)[↑↓]?)?\s*$/, "").trim()
-          : f.factor;
+        return (
+          f.name_kor ??
+          (f.description
+            ? f.description.replace(/\s*(위험\s*(증가|감소)[↑↓]?)?\s*$/, "").trim()
+            : f.factor)
+        );
       })()
     : null;
 
