@@ -214,6 +214,74 @@ _PERSONAL_INFO_PREFILTER_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# ── 코드 기반 분류 패턴 (LLM 판단 대체) ───────────────────────────────────
+# 1인칭 건강 질문 감지 — needs_health_data=True 결정에 사용.
+# "내일"·"내용"·"내과" 등 오탐 방지: (내|제) 뒤에 조사·공백만 허용.
+_FIRST_PERSON_PATTERN = re.compile(
+    r"(나|저)(는|도|의|가|에게|한테|를|을|\s)"
+    r"|(내|제)(가|는|도|의|\s)"
+    r"|본인"
+)
+
+# 챌린지 추천 감지 — needs_challenge_catalog=True 결정에 사용.
+_CHALLENGE_CATALOG_PATTERN = re.compile(
+    r"(챌린지|운동\s*프로그램|생활습관\s*프로그램).{0,20}(추천|맞는|적합|좋은|어떤|골라|알려)"
+    r"|(추천|맞는|적합|어떤).{0,20}(챌린지|운동\s*프로그램)"
+    r"|챌린지\s*(추천|맞는|골라|알려줘|알려주)"
+)
+
+# 질환 감지 — diseases 결정에 사용.
+_DISEASE_PATTERNS: dict[str, re.Pattern[str]] = {
+    "diabetes": re.compile(
+        r"당뇨|혈당|HbA1c|당화혈색소|인슐린|저혈당|고혈당|공복혈당|식후혈당"
+    ),
+    "hypertension": re.compile(
+        r"고혈압|혈압|수축기|이완기|DASH\s*식단"
+    ),
+    "dyslipidemia": re.compile(
+        r"이상지질혈증|고지혈증|콜레스테롤|LDL|HDL|중성지방|TG\b|스타틴|동맥경화"
+    ),
+}
+
+# 토픽 감지 — topics 결정에 사용. 순서 무관, 모두 매칭.
+_TOPIC_PATTERNS: dict[str, re.Pattern[str]] = {
+    "medication": re.compile(
+        r"약|복용|처방|부작용|이상반응|보관|용법|용량|인슐린|스타틴|와파린|메트포르민"
+        r"|티카그렐러|아스피린|이뇨제|베타차단제|혈압약|당뇨약|고지혈증약"
+    ),
+    "exercise": re.compile(r"운동|신체활동|유산소|근력|걷기|달리기|조깅|스트레칭"),
+    "diet": re.compile(r"식단|식이|식사|영양|저염|저지방|저당|음식|먹|섭취|칼로리|DASH"),
+    "weight": re.compile(r"체중|비만|BMI|살|다이어트|허리둘레|과체중"),
+    "smoking": re.compile(r"금연|흡연|담배"),
+    "alcohol": re.compile(r"음주|절주|술"),
+    "complication": re.compile(
+        r"합병증|신장|망막|신경병증|알부민뇨|단백뇨|뇌졸중|심근경색|심부전|말초혈관"
+    ),
+    "risk": re.compile(r"위험도|위험인자|위험군|심혈관\s*위험|위험\s*평가|위험\s*분석"),
+    "monitoring": re.compile(
+        r"측정|모니터링|목표\s*수치|추적|자가\s*측정|혈압\s*재|혈당\s*재|관리\s*목표"
+    ),
+    "diagnosis": re.compile(r"진단|기준|분류|선별|검사|수치\s*해석|정상\s*범위"),
+    "lifestyle": re.compile(r"생활습관|수면|스트레스|자기관리|일상|관리\s*(방법|전략|개선|지침)"),
+    "challenge": re.compile(r"챌린지|챌린지\s*참여|챌린지\s*인증"),
+    "service": re.compile(
+        r"사용법|기능|포인트|인증|로그인|회원|알림|앱|서비스\s*안내|이용\s*방법"
+        r"|비밀번호|아이디|패스워드|탈퇴|가입"
+    ),
+}
+
+
+def _detect_diseases(question: str) -> list[str]:
+    """질문에서 관련 질환을 코드로 감지."""
+    return [d for d, pat in _DISEASE_PATTERNS.items() if pat.search(question)]
+
+
+def _detect_topics(question: str, intent: str) -> list[str]:
+    """질문에서 관련 토픽을 코드로 감지."""
+    if intent == "general":
+        return []
+    return [t for t, pat in _TOPIC_PATTERNS.items() if pat.search(question)]
+
 
 def _looks_like_personal_status_question(text: str) -> bool:
     """LLM 분류 보강 — 명백한 본인 상태 평가 요청 여부 (휴리스틱)."""
@@ -367,10 +435,6 @@ _CLASSIFY_PROMPT = """당신은 만성질환(고혈압·당뇨·이상지질혈�
 
 {{
   "intent": "medical_inquiry" | "service_guide" | "general",
-  "diseases": ["diabetes" | "hypertension" | "dyslipidemia"],
-  "topics": ["diagnosis" | "medication" | "lifestyle" | "exercise" | "diet" | "weight" | "smoking" | "alcohol" | "complication" | "risk" | "monitoring" | "service" | "challenge"],  "needs_health_data": true | false,
-  "needs_challenge_catalog": true | false,
-  "missing_fields": [],
   "rationale": "한 줄 설명"
 }}
 
@@ -380,106 +444,11 @@ _CLASSIFY_PROMPT = """당신은 만성질환(고혈압·당뇨·이상지질혈�
 - "general": 위 둘에 명확히 안 맞거나 인사·잡담
 - 둘 다 관련된 혼합형(예: "내 상태에 맞는 식단·챌린지")은 medical_inquiry 우선.
 
-== topics (list) ==
-질문이 해당하는 의료 주제 카테고리. intent=medical_inquiry 일 때 retrieve 필터로 사용.
-- "diagnosis"   : 진단 기준·선별검사·분류·수치 해석
-- "medication"  : 약물치료·처방·부작용·약물 상호작용·보관·용법·용량
-- "lifestyle"   : 복합 생활습관 (자기관리·수면·스트레스·환자중심치료 등 단일 서브토픽으로 분류 불가한 경우)
-- "exercise"    : 운동요법 (유산소·근력·신체활동 권고)
-- "diet"        : 식사요법·영양 (저염·저지방·저당·식이패턴 포함)
-- "weight"      : 체중/비만 관리
-- "smoking"     : 금연
-- "alcohol"     : 절주
-- "complication": 합병증·동반질환·장기 손상
-- "risk"        : 위험도 평가·위험인자·심혈관 위험
-- "monitoring"  : 혈압/혈당 측정·추적관리·목표 수치·모니터링
-- "service"     : 서비스 이용안내·기능설명 (intent=service_guide 일 때)
-- "challenge"   : 챌린지 참여·인증·추천 (needs_challenge_catalog=true 일 때)
-예시:
-- "당뇨 식단 어떻게 해야 해?" → ["diet"]
-- "스타틴 자몽이랑 먹어도 돼?" → ["medication"]
-- "인슐린 펜 보관 방법" → ["medication"]
-- "당뇨 합병증 예방" → ["complication", "exercise", "diet"]
-- "혈압 목표 수치" → ["monitoring", "diagnosis"]
-- "챌린지 추천해줘" → ["challenge", "service"]
-- "비밀번호 변경" → ["service"]
-- "금연하면 혈압에 좋나요?" → ["smoking", "risk"]
-- "고혈압 운동 추천" → ["exercise"]
-- "비만인데 혈당 관리" → ["weight", "diet"]
-intent=general 이면 [].
-
-== needs_challenge_catalog ==
-질문이 **챌린지/운동 프로그램/생활습관 챌린지 추천**을 요구하는지.
-- true: "어떤 챌린지", "챌린지 추천", "운동 프로그램 추천", "식단·챌린지", "생활습관 챌린지" 등
-- false: 챌린지와 무관한 일반 의학 질문 / 서비스 사용법 질문
-true 면 retrieve 가 의료 진료지침과 함께 CHALLENGE_CATALOG 도 함께 검색해 답변 근거로 사용.
-
-== diseases (list) ==
-질문이 관련된 질환들을 list 로 (1개 또는 여러 개). 빈 list 면 질환 비특화 / 서비스 질문.
-- "diabetes": 당뇨·혈당·HbA1c·당화혈색소·인슐린·당뇨병 합병증
-- "hypertension": 고혈압·혈압 (수축기/이완기)·DASH 식단
-- "dyslipidemia": 이상지질혈증·콜레스테롤·LDL·HDL·중성지방·스타틴·동맥경화
-예시:
-- "당뇨병 진단 기준" → ["diabetes"]
-- "당뇨병 환자의 이상지질혈증 관리" → ["diabetes", "dyslipidemia"] (multi-disease 라우팅)
-- "운동 권고" → [] (질환 비특화)
-- "챌린지 인증 방법" → [] (서비스 질문)
-- "인슐린 펜 보관 방법" → ["diabetes"] (의약품 보관·관리는 medical_inquiry)
-- "고혈압인데 어떤 병원 가야 하나요" → ["hypertension"] (진료 안내도 medical_inquiry)
-
 == intent 혼동 방지 ==
 다음은 반드시 medical_inquiry (service_guide 아님):
 - 약품명·의약품이 포함된 보관/용법/복용 질문: "인슐린", "스타틴", "와파린", "메트포르민" 등
 - 병원·진료·처방 안내 질문: "어느 병원", "진료과", "처방"
 - 증상·진단·합병증 질문 (service_guide 로 분류 절대 금지)
-
-== needs_health_data ==
-다음 조건 중 하나라도 해당하면 **true** (보수적으로 풀게 분류 — 본인 상태 의심되면 true):
-- (a) 1인칭 표현 + 본인 상태/수치 평가: "내", "제", "나는", "나에게", "본인", "나의", "내가"
-  등이 본인의 건강 상태/측정값/위험도/추천에 결부됨
-- (b) 본인 데이터 해석/판단 요청: "내가 위험한지", "나에게 맞는 ~", "내 수치 어때"
-- (c) 본인 측정값을 보고 답해야 하는 질문: "내 혈압이 정상?", "내 BMI 어때?"
-- (d) **짧고 모호한 1인칭 상태 질문도 true** — "나 어때?", "내 상태?", "나는?",
-  "나 괜찮아?", "어떤가요 저는?", "지금 저 어때?" 같이 본인 데이터를 전제로 한
-  포괄적 평가 요청. 의도가 모호해도 **본인 평가/추천을 묻는 뉘앙스면 true**.
-
-다음은 **false**:
-- 일반 의학 정보 질문 ("DASH 식단이란?", "당뇨병 진단 기준은?", "고혈압 약 부작용은?")
-- 일반 권고 질문 ("고혈압 환자는 어떤 운동?") — 본인이 명시되지 않음
-- 인사/잡담 ("안녕", "고마워")
-- **질문 본문에 수치가 직접 포함된 경우** — 시스템이 해석 가능한 수치이므로 false:
-  예: "LDL 95, TG 650이면 어떻게 해석하나요?" → false
-  예: "공복혈당 185 mg/dL인데 당뇨인가요?" → false
-  예: "HbA1c 7.1%, 혈압 130/85이면?" → false
-  예: "LDL 145, HDL 48, TG 380 mg/dL이면 어떻게 해석하나요?" → false
-  예: "혈압이 138/88 mmHg인데 어느 단계인가요?" → false
-  예: "HDL 35 mg/dL인데 위험한가요?" → false
-  예: "당뇨 위험도 0.12, 공복혈당 145, HbA1c 7.8%인데 식단 어떻게 해야 하나요?" → false
-  예: "위험도 점수 0.35, 혈압 142/91이면 어떤 관리가 필요한가요?" → false
-  단, "내 LDL이 95인데" 처럼 1인칭 + DB 조회 의도가 명확하면 true 유지.
-  단, "나이가 있는 여성인데 LDL이 145인데" 처럼 3인칭 환자 설명 형태도 false.
-
-같은 주제도 1인칭이 붙으면 true 로 전환:
-- "고혈압 식단" → false / "내 고혈압 식단" → true
-- "당뇨 위험" → false / "내가 당뇨 위험군인지" → true
-- "건강 상태 평가법" → false / "나 어때" → **true** (본인 평가 요청)
-
-단, 다음은 질환명이 포함돼도 **false** (일반 정보 질문):
-- "당뇨가 있는데 OO 해도 되나요?" → false (안전 여부·가능 여부 일반 질문)
-- "고혈압인데 OO 먹어도 되나요?" → false (일반 식이 정보)
-- "당뇨 환자인데 OO 운동은?" → false (일반 운동 정보)
-- "당뇨 환자가 OO 먹어도 되나요?" → false (질환 환자 일반 식이 질문)
-- "고혈압 환자가 OO 해도 되나요?" → false (질환 환자 일반 생활 질문)
-- 본인 수치/상태 평가가 아니라 "OO 질환 환자에게 일반적으로 가능한지" 묻는 경우
-
-== missing_fields ==
-needs_health_data=true 일 때 필요한 데이터 필드명을 한국어 키워드 또는 표준 영문 키 중 알아보기 쉬운 쪽으로:
-- 혈압 관련: ["blood_pressure"]
-- 혈당 관련: ["blood_glucose"] (HbA1c 면 ["hba1c"])
-- 체중/BMI: ["weight_kg", "height_cm"]
-- 콜레스테롤: ["cholesterol"]
-- 종합/추천형: ["profile"] 또는 위 필드 조합
-needs_health_data=false 면 missing_fields=[].
 
 질문: {question}
 """
@@ -591,53 +560,6 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:  # noqa: C901
     if intent not in ("medical_inquiry", "service_guide", "general"):
         intent = "general"
 
-    # diseases — list 로 수신. 단일 문자열로 들어오는 백워드 케이스도 흡수.
-    raw_diseases = data.get("diseases")
-    if raw_diseases is None:
-        # 옛 single-field 케이스 대비
-        legacy_disease = data.get("disease")
-        raw_diseases = [legacy_disease] if legacy_disease else []
-    if not isinstance(raw_diseases, list):
-        raw_diseases = [raw_diseases]
-    diseases = [str(d) for d in raw_diseases if d in ("diabetes", "hypertension", "dyslipidemia")][:3]
-
-    # topics 파싱 — 허용 값만 필터링
-    _valid_topics = {
-        "diagnosis",
-        "medication",
-        "lifestyle",
-        "complication",
-        "risk",
-        "monitoring",
-        "service",
-        "challenge",
-        "exercise",
-        "diet",
-        "weight",
-        "smoking",
-        "alcohol",
-    }
-    raw_topics = data.get("topics") or []
-    if not isinstance(raw_topics, list):
-        raw_topics = []
-    topics = [str(t) for t in raw_topics if t in _valid_topics]
-
-    needs = bool(data.get("needs_health_data", False))
-    needs_challenge = bool(data.get("needs_challenge_catalog", False))
-    missing = data.get("missing_fields") or []
-    if not isinstance(missing, list):
-        missing = []
-    missing = [str(x) for x in missing][:8]
-
-    # N1 가드: 명백한 본인 상태 평가 요청("나 어때?", "내 상태")은 LLM 결과가 false 여도
-    # 강제 true 로 끌어올려 fetch_health_data 경로로. intent 도 medical_inquiry 로 정규화.
-    if not needs and _looks_like_personal_status_question(state["original_question"]):
-        _logger.info("classify_intent N1 guard hit — 본인 상태 질문 강제 분류")
-        needs = True
-        intent = "medical_inquiry"
-        if not missing:
-            missing = ["profile"]
-
     # N2 가드: 약품명/보관/용법/병원 키워드 → 무조건 medical_inquiry 강제.
     # LLM 이 diseases=[] 를 근거로 service_guide 로 오분류하는 케이스 사후 교정.
     # (예: "인슐린 펜 보관 방법", "고혈압인데 어느 병원 가야 하나요")
@@ -648,24 +570,22 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:  # noqa: C901
         _logger.info("classify_intent N2 guard hit — 약품/병원 질문 강제 medical_inquiry")
         intent = "medical_inquiry"
 
-    # N3 가드: 쿼리 내 인라인 수치 감지 → needs_health_data 강제 False.
-    # "당뇨 위험도 0.12, 공복혈당 145, HbA1c 7.8%" 처럼 사용자가 수치를 직접 쿼리에
-    # 포함한 경우, LLM 이 needs_health_data=True 로 오분류해
-    # fetch_health_data → has_health_data=False → final_missing_info 로 빠지는 문제 차단.
-    # 인라인 수치가 있으면 쿼리 자체가 컨텍스트이므로 DB 조회 불필요.
-    # 단, 1인칭 본인 상태 질문("나 어때?")은 N1 가드가 먼저 처리하므로 여기선 건드리지 않음.
-    if needs and not _looks_like_personal_status_question(state["original_question"]):
-        if _INLINE_NUMERIC_PATTERN.search(state["original_question"]):
-            _logger.info("classify_intent N3 guard hit — 인라인 수치 감지, needs_health_data 강제 False")
-            needs = False
-            missing = []
-    # N4 가드: 약물 일반 정보 질문 (부작용·효능·복약법 등) → needs_health_data 강제 False.
-    # 약품명이 포함돼도 본인 수치 없이 답할 수 있는 케이스.
-    # 예: "스타틴 먹은 후 근육통이 심해요. 끊어도 되나요?"
-    if needs and _DRUG_GENERAL_INFO_PATTERN.search(state["original_question"]):
-        _logger.info("classify_intent N4 guard hit — 약물 일반정보 질문, needs_health_data 강제 False")
-        needs = False
-        missing = []
+    # 코드 기반: needs_challenge_catalog — 챌린지/운동 프로그램 추천 키워드로 결정.
+    needs_challenge = bool(_CHALLENGE_CATALOG_PATTERN.search(state["original_question"]))
+
+    # 1인칭 + 챌린지 추천 조합 → 반드시 medical_inquiry.
+    # LLM 이 "챌린지 = 서비스 기능" 으로 service_guide 분류하는 오류를 코드로 보정.
+    if needs_challenge and bool(_FIRST_PERSON_PATTERN.search(state["original_question"])):
+        intent = "medical_inquiry"
+
+    # 코드 기반: needs_health_data — intent=medical_inquiry + 1인칭 표현 조합으로 결정.
+    # LLM 판단 대신 코드로 결정하여 비결정성 제거.
+    needs = intent == "medical_inquiry" and bool(_FIRST_PERSON_PATTERN.search(state["original_question"]))
+    missing = ["profile"] if needs else []
+
+    # 코드 기반: diseases · topics — 키워드 패턴으로 결정.
+    diseases = _detect_diseases(state["original_question"])
+    topics = _detect_topics(state["original_question"], intent)
 
     is_pediatric = bool(_PEDIATRIC_PATTERN.search(state["original_question"]))
 
