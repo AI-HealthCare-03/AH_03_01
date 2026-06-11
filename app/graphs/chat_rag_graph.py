@@ -210,7 +210,7 @@ _PEDIATRIC_PATTERN = re.compile(
 
 # prefilter 확장: 명백한 개인정보 질문 — 범위 외로 즉시 처리
 _PERSONAL_INFO_PREFILTER_PATTERN = re.compile(
-    r"^(내|제|나의|저의)?\s*(이름|나이|생년월일|전화번호|주소|성별)\s*(이?뭐야|이?뭐에요|알아요?\??|알려줘|뭔가요\??|뭐예요\??)\s*\??$",
+    r"^(내|제|나의|저의)?\s*(이름|나이|생년월일|전화번호|주소|성별)\s*(이\s*뭐야|이\s*뭐에요|뭐야|뭐에요|알아요?\??|알려줘|뭔가요\??|뭐예요\??)\s*\??$",
     re.IGNORECASE,
 )
 
@@ -376,7 +376,7 @@ _CLASSIFY_PROMPT = """당신은 만성질환(고혈압·당뇨·이상지질혈�
 
 == intent ==
 - "medical_inquiry": 의학 정보 질문 (증상·진단 기준·약물·식이·운동·합병증·검사 등)
-- "service_guide": 앱 사용법·챌린지·포인트·인증·로그인 등 기능 안내 질문
+- "service_guide": 앱 사용법·챌린지·포인트·인증·로그인 등 기능 안내 질문. AI 위험도 예측 기능·결과 의미·예측 대상 질환·예측 방식 등 서비스 AI 기능 설명도 포함. 이름·나이·전화번호·주소·생년월일·성별 등 본인 개인정보를 챗봇에 직접 묻는 질문도 포함 (예: "내 이름이 뭐야?", "내 전화번호 알려줘", "나이 몇살이야?", "내 정보 보여줘").
 - "general": 위 둘에 명확히 안 맞거나 인사·잡담
 - 둘 다 관련된 혼합형(예: "내 상태에 맞는 식단·챌린지")은 medical_inquiry 우선.
 
@@ -513,18 +513,10 @@ def _heuristic_prefilter(question: str) -> dict[str, Any] | None:
                 "action_hint": None,
             }
 
-    # B. 명백한 개인정보 질문 → 범위 외 general 즉시 반환
-    if _PERSONAL_INFO_PREFILTER_PATTERN.match(stripped):
-        _logger.info("classify_intent prefilter PERSONAL_INFO hit: %s", stripped[:30])
-        return {
-            "intent": "general",
-            "diseases": [],
-            "topics": [],
-            "needs_health_data": False,
-            "needs_challenge_catalog": False,
-            "missing_fields": [],
-            "action_hint": None,
-        }
+    # B. 명백한 개인정보 질문은 classify_intent 에서 직접 처리 (is_greeting=False 필요)
+    # → _heuristic_prefilter 에서 None 을 반환해 LLM 위임처럼 동작하지만,
+    #   classify_intent 에서 별도 분기로 service_guide 즉시 반환.
+    # (이 함수에서는 None 반환 — classify_intent 에서 잡음)
 
     # C. 인사·감사·작별 (기존 로직 유지)
     if len(stripped) > _PREFILTER_MAX_LEN:
@@ -551,6 +543,21 @@ def _heuristic_prefilter(question: str) -> dict[str, Any] | None:
 
 
 async def classify_intent(state: ChatState) -> dict[str, Any]:  # noqa: C901
+    # 개인정보 질문 (이름/나이 등) → service_guide 로 라우팅해 service_system.txt 규칙 5 적용.
+    # is_greeting=False 이므로 retrieve/generate 흐름을 타게 됨.
+    if _PERSONAL_INFO_PREFILTER_PATTERN.match(state["original_question"].strip()):
+        _logger.info("classify_intent prefilter PERSONAL_INFO hit: %s", state["original_question"][:30])
+        return {
+            "intent": "service_guide",
+            "diseases": [],
+            "topics": ["service"],
+            "needs_health_data": False,
+            "needs_challenge_catalog": False,
+            "missing_fields": [],
+            "action_hint": None,
+            "is_greeting": False,
+        }
+
     # 보수적 휴리스틱으로 명백한 인사·단답은 LLM 호출 없이 즉시 결정.
     # is_greeting=True 면 decide_after_classify 가 final_greeting 로 곧장 분기해 retrieve/generate 모두 스킵.
     prefilter = _heuristic_prefilter(state["original_question"])
@@ -1080,7 +1087,8 @@ async def generate_node(state: ChatState) -> dict[str, Any]:
     docs = state.get("retrieved_docs", [])
     # H-5: 빈 컨텍스트로 LLM 호출하면 hallucination + 무의미 토큰 비용. evaluator R1
     # (retrieval_problem) 이 다음 노드에서 라우팅을 잡아주므로 빈 draft 만 반환.
-    if not docs:
+    # 단, service_guide 는 개인정보 질문 등 컨텍스트 없이 시스템 프롬프트 규칙만으로 답하는 경우가 있음.
+    if not docs and intent != "service_guide":
         _logger.info("generate skip — retrieved_docs 비어있음 (evaluator R1 위임)")
         return {"draft_answer": ""}
     system = _SERVICE_SYSTEM if intent == "service_guide" else _MEDICAL_SYSTEM
@@ -1133,6 +1141,14 @@ async def evaluate_node(state: ChatState) -> dict[str, Any]:
         revision_count=int(state.get("eval_revision_count", 0)),
     )
     out = await run_evaluator(inp)
+    if out.eval_result != "pass":
+        _logger.info(
+            "evaluate fail — stage=%s result=%s rev=%d feedback=%s",
+            out.eval_stage,
+            out.eval_result,
+            out.eval_revision_count,
+            out.eval_feedback,
+        )
     return {
         "eval_result": out.eval_result,
         "eval_stage": out.eval_stage,
