@@ -253,6 +253,12 @@ _QUIZ_ERRORS: dict[str, tuple[int, str]] = {
 }
 
 
+@quiz_router.get("/available", response_model=list[QuizResponse])
+async def get_available_quizzes(current_user: User = Depends(get_request_user)) -> list[QuizResponse]:  # noqa: B008
+    quizzes = await HealthQuizService().get_available_quizzes(current_user.id)
+    return [QuizResponse.model_validate(q) for q in quizzes]
+
+
 @quiz_router.get("/today")
 async def get_today_quiz(current_user: User = Depends(get_request_user)) -> dict:  # noqa: B008
     try:
