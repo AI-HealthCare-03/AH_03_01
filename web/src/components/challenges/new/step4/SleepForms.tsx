@@ -32,6 +32,12 @@ const WAKE_TIME_OPTIONS = [
   { value: "08:00", label: "아침 8시" },
 ];
 
+const GROUP_SLEEP_MODE_OPTIONS: { value: "BED_TIME" | "SLEEP_DURATION" | "WAKE_TIME"; title: string }[] = [
+  { value: "BED_TIME", title: "취침 시간" },
+  { value: "SLEEP_DURATION", title: "수면 시간" },
+  { value: "WAKE_TIME", title: "기상 시간" },
+];
+
 /* ─── 개인 BED_TIME ─── */
 export function SleepBedTimeForm({
   form,

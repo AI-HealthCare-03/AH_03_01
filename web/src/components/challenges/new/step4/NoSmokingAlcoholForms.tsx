@@ -174,7 +174,7 @@ export function NoAlcoholForm({
   return (
     <div className="space-y-6">
       <Step4Header />
-      <CheckNote label="금주" />
+      <PhotoNote label="금주" />
       <DurationPicker
         value={form.duration_days}
         onChange={(v) => onChange({ duration_days: v })}
@@ -196,7 +196,7 @@ export function NoAlcoholWeeklyForm({
   return (
     <div className="space-y-6">
       <Step4Header />
-      <CheckNote label="금주" />
+      <PhotoNote label="금주" />
       <Chips
         label="주간 금주 목표 일수"
         options={WEEKLY_NOSMOKING_OPTIONS}
@@ -223,7 +223,7 @@ export function NoAlcoholGroupForm({
   return (
     <div className="space-y-6">
       <Step4Header />
-      <CheckNote label="금주" />
+      <PhotoNote label="금주" />
       <Chips
         label="그룹 달성 목표 인원"
         options={GROUP_MEMBERS_OPTIONS}

@@ -66,7 +66,7 @@ function ChallengeDetailContent({
   /* 오늘 체크 인증 실패 여부 (CHECK + checked=false → REJECTED) */
   const rejectedToday =
     verificationsData?.items.some(
-      (v) => v.status === "REJECTED" && v.verified_date === new Date().toLocaleDateString("sv")
+      (v) => v.status === "REJECTED" && v.verified_at?.split("T")[0] === new Date().toLocaleDateString("sv")
     ) ?? false;
 
   /* 사진 인증 결과(완료/실패) 알림.

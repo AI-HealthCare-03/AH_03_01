@@ -21,17 +21,19 @@ function CommentItem({
   comment,
   verificationId,
   onReplySuccess,
+  onReport,
 }: {
   comment: ReactionWithReplies;
   verificationId: number;
   onReplySuccess: () => void;
+  onReport: (id: number) => void;
 }) {
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const { showToast } = useToast();
 
-  const handleReport = (id: number) => setReportId(id);
+  const handleReport = (id: number) => onReport(id);
 
   const handleReply = async () => {
     if (!replyText.trim()) return;
@@ -249,6 +251,7 @@ export default function CommentSheet({ post, onClose }: CommentSheetProps) {
                 onReplySuccess={() =>
                   qc.invalidateQueries({ queryKey: [COMMENTS_KEY, post.id] })
                 }
+                onReport={setReportId}
               />
             ))
           )}
