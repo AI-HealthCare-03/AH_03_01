@@ -5,7 +5,17 @@ from uuid import UUID
 
 from tortoise.functions import Count
 
-from app.models.community import Comment, HealthQuiz, Post, PostCategory, QuizAttempt, QuizOption, Report, ReportReason, ReportTargetType
+from app.models.community import (
+    Comment,
+    HealthQuiz,
+    Post,
+    PostCategory,
+    QuizAttempt,
+    QuizOption,
+    Report,
+    ReportReason,
+    ReportTargetType,
+)
 
 
 class PostRepository:

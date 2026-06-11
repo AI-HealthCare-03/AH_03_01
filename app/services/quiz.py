@@ -43,9 +43,7 @@ class HealthQuizService:
 
         # 일일 제한 확인
         today_start = datetime.combine(_today(), datetime.min.time()).replace(tzinfo=SEOUL)
-        daily_count = await QuizAttempt.filter(
-            user_id=user_id, attempted_at__gte=today_start
-        ).count()
+        daily_count = await QuizAttempt.filter(user_id=user_id, attempted_at__gte=today_start).count()
         if daily_count >= DAILY_LIMIT:
             raise ValueError("daily_limit_exceeded")
 
@@ -56,9 +54,7 @@ class HealthQuizService:
         is_correct = selected_option == quiz.correct_option
         points_earned = 0
         if is_correct:
-            result = await self.reward_service.grant_quiz_correct(
-                user_id=user_id, quiz_id=quiz_id
-            )
+            result = await self.reward_service.grant_quiz_correct(user_id=user_id, quiz_id=quiz_id)
             points_earned = result.amount
 
         await self.repo.create_attempt(
