@@ -7,15 +7,43 @@ from tortoise.functions import Count
 
 from app.models.community import (
     Comment,
+    CommentLike,
     HealthQuiz,
     Post,
     PostCategory,
+    PostLike,
     QuizAttempt,
     QuizOption,
     Report,
     ReportReason,
     ReportTargetType,
 )
+
+
+class LikeRepository:
+    async def get_post_like_count(self, post_id: int) -> int:
+        return await PostLike.filter(post_id=post_id).count()
+
+    async def is_post_liked(self, post_id: int, user_id: UUID) -> bool:
+        return await PostLike.filter(post_id=post_id, user_id=user_id).exists()
+
+    async def like_post(self, post_id: int, user_id: UUID) -> None:
+        await PostLike.get_or_create(post_id=post_id, user_id=user_id)
+
+    async def unlike_post(self, post_id: int, user_id: UUID) -> None:
+        await PostLike.filter(post_id=post_id, user_id=user_id).delete()
+
+    async def get_comment_like_count(self, comment_id: int) -> int:
+        return await CommentLike.filter(comment_id=comment_id).count()
+
+    async def is_comment_liked(self, comment_id: int, user_id: UUID) -> bool:
+        return await CommentLike.filter(comment_id=comment_id, user_id=user_id).exists()
+
+    async def like_comment(self, comment_id: int, user_id: UUID) -> None:
+        await CommentLike.get_or_create(comment_id=comment_id, user_id=user_id)
+
+    async def unlike_comment(self, comment_id: int, user_id: UUID) -> None:
+        await CommentLike.filter(comment_id=comment_id, user_id=user_id).delete()
 
 
 class PostRepository:

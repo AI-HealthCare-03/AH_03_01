@@ -131,3 +131,33 @@ class QuizAttempt(models.Model):
     class Meta:
         table = "quiz_attempts"
         unique_together = (("user", "quiz"),)
+
+
+class PostLike(models.Model):
+    id = fields.BigIntField(primary_key=True)
+    post: fields.ForeignKeyRelation["Post"] = fields.ForeignKeyField(
+        "models.Post", related_name="likes", on_delete=fields.CASCADE
+    )
+    user: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(
+        "models.User", related_name="post_likes", on_delete=fields.CASCADE
+    )
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "community_post_likes"
+        unique_together = (("post", "user"),)
+
+
+class CommentLike(models.Model):
+    id = fields.BigIntField(primary_key=True)
+    comment: fields.ForeignKeyRelation["Comment"] = fields.ForeignKeyField(
+        "models.Comment", related_name="likes", on_delete=fields.CASCADE
+    )
+    user: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(
+        "models.User", related_name="comment_likes", on_delete=fields.CASCADE
+    )
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "community_comment_likes"
+        unique_together = (("comment", "user"),)
