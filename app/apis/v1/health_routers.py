@@ -72,8 +72,12 @@ async def list_health_records(
 ) -> Response:
     if record_type == "profile":
         profile = await profile_service.get_or_init(user)
+        completeness = profile_service.compute_completeness(profile, user)
+        profile_payload = HealthProfileResponse.model_validate(profile).model_copy(
+            update={"completeness": completeness}
+        )
         return Response(
-            HealthProfileResponse.model_validate(profile).model_dump(),
+            profile_payload.model_dump(),
             status_code=status.HTTP_200_OK,
         )
 
@@ -233,6 +237,7 @@ async def get_health_report(
 async def create_prediction(
     user: Annotated[User, Depends(get_request_user)],
     service: Annotated[DiseaseRiskService, Depends(DiseaseRiskService)],
+    profile_service: Annotated[HealthProfileService, Depends(HealthProfileService)],
     disease_type: Annotated[DiseaseType, Query(alias="diseaseType")],
     body: PredictionCreateRequest | None = None,
     mode: Annotated[str, Query()] = "sync",
@@ -242,6 +247,17 @@ async def create_prediction(
     if mode == "stream":
         # SSE 는 추후 지원
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="stream 모드는 추후 지원 예정입니다.")
+    # 예측 게이트: 모델입력 필드가 모두 채워져야 예측 가능. 미충족이면 422 + 누락 항목 안내.
+    profile = await profile_service.repo.get_by_user(user.id)
+    completeness = profile_service.compute_completeness(profile, user)
+    if not completeness.complete:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "건강 데이터를 모두 입력해야 위험도 예측을 이용할 수 있습니다.",
+                "missing_fields": completeness.missing_fields,
+            },
+        )
     snapshot = body.input_snapshot if body and body.input_snapshot else None
     risk = await service.create(user, disease_type, snapshot)
     return Response(

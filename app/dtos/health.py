@@ -62,6 +62,14 @@ class HealthProfileUpsertRequest(BaseModel):
     bp_measure_env: BpMeasureEnv | None = None
 
 
+class ProfileCompleteness(BaseModel):
+    percent: int
+    filled: int
+    total: int
+    missing_fields: list[str]
+    complete: bool
+
+
 class HealthProfileResponse(BaseSerializerModel):
     height_cm: Decimal | None
     weight_kg: Decimal | None
@@ -94,6 +102,7 @@ class HealthProfileResponse(BaseSerializerModel):
     pregnancy_status: PregnancyStatus | None
     bp_measure_env: BpMeasureEnv | None
     updated_at: datetime
+    completeness: ProfileCompleteness | None = None
 
 
 # ---------------------------------------------------------------------------

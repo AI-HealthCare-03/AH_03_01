@@ -13,6 +13,7 @@ from app.dtos.health import (
     HealthProfileUpsertRequest,
     HealthRecordCreateRequest,
     HealthRecordUpdateRequest,
+    ProfileCompleteness,
     ReferenceRange,
     StatisticsPoint,
     StatisticsResponse,
@@ -26,7 +27,7 @@ from app.models.health import (
     RecordType,
     UserHealthInfo,
 )
-from app.models.users import User
+from app.models.users import Gender, User
 from app.repositories.health_repository import (
     DiseaseRiskGuidelineRepository,
     DiseaseRiskRepository,
@@ -42,6 +43,43 @@ HOME_BP_CORRECTION = Decimal("5")  # 가정 측정치 보정 (+5/+5)
 # input_snapshot override 로 덮어쓸 수 없는 서버측 신뢰 필드 (요청 파라미터·User 에서 도출)
 _SNAPSHOT_OVERRIDE_PROTECTED = frozenset({"disease_type", "age", "gender", "extra"})
 
+# 위험도 예측 모델입력 필수 필드셋 (완성도 계산 + 예측 게이트 공용).
+# "채워짐" = 값이 None 이 아님 (가족력 -1=모름도 채워진 것으로 인정).
+# HealthProfileUpsertRequest / PredictionInput.snapshot() 의 모델입력 키와 정합.
+# chronic_diseases/medications/pregnancy_status/bp_measure_env 는 모델입력이 아니므로 제외.
+# age/gender 는 User(가입 시 존재)라 게이트 대상이 아님.
+REQUIRED_PROFILE_FIELDS = (
+    "height_cm",
+    "weight_kg",
+    "waist_cm",
+    "systolic_bp",
+    "diastolic_bp",
+    "fasting_blood_sugar",
+    "sleep_weekday",
+    "sleep_weekend",
+    "moderate_exercise_hour",
+    "smoking_risk",
+    "current_smoker",
+    "mid_act_day",
+    "walk_day",
+    "water_count",
+    "family_dm",
+    "family_hp",
+    "family_hl",
+    "alcohol_freq_y",
+    "alcohol_cup",
+    "fruit_freq",
+    "veg_freq_1",
+    "out_meal_freq",
+    "breakfast_freq",
+    "anemia",
+)
+# user.gender == FEMALE 일 때만 필수에 포함. 남성/비해당이면 total·missing 에서 제외.
+FEMALE_ONLY_PROFILE_FIELDS = (
+    "is_menopause",
+    "ocp_total_months",
+)
+
 
 class HealthProfileService:
     def __init__(self) -> None:
@@ -52,6 +90,41 @@ class HealthProfileService:
         if profile is None:
             profile = await self.repo.create(user.id, data={})
         return profile
+
+    @staticmethod
+    def required_fields_for(user: User) -> tuple[str, ...]:
+        """성별 조건을 반영한 필수 필드셋."""
+        if user.gender == Gender.FEMALE:
+            return REQUIRED_PROFILE_FIELDS + FEMALE_ONLY_PROFILE_FIELDS
+        return REQUIRED_PROFILE_FIELDS
+
+    def compute_completeness(self, profile: UserHealthInfo | None, user: User) -> ProfileCompleteness:
+        """위험도 예측 모델입력 필드 기준 완성도 계산.
+
+        - "채워짐" = 값이 None 이 아님 (가족력 -1=모름도 채워진 것으로 인정).
+        - 여성은 is_menopause/ocp_total_months 를 필수에 포함, 남성/비해당은 제외.
+        - profile 이 None 이면 전부 미충족.
+        """
+        required = self.required_fields_for(user)
+        total = len(required)
+        if profile is None:
+            return ProfileCompleteness(
+                percent=0,
+                filled=0,
+                total=total,
+                missing_fields=list(required),
+                complete=False,
+            )
+        missing = [field_name for field_name in required if getattr(profile, field_name, None) is None]
+        filled = total - len(missing)
+        percent = round(filled / total * 100) if total else 100
+        return ProfileCompleteness(
+            percent=percent,
+            filled=filled,
+            total=total,
+            missing_fields=missing,
+            complete=not missing,
+        )
 
     async def upsert(self, user: User, data: HealthProfileUpsertRequest) -> UserHealthInfo:
         profile = await self.repo.get_by_user(user.id)
