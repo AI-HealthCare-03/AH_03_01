@@ -36,7 +36,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import signal
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -60,8 +59,8 @@ from app.services.ml.risk_predictor import (
 
 logger = logging.getLogger("ai_worker.risk_inference")
 
-# Redis 큐 키 — config 에 추가될 예정. 지금은 디폴트만 (활성화 시점에 config 정식 등록).
-QUEUE_KEY = os.environ.get("RISK_INFERENCE_QUEUE", "queue:ml-inference")
+# Redis 큐 키 — config 단일 출처(.env 의 RISK_INFERENCE_QUEUE 로 오버라이드 가능).
+QUEUE_KEY = config.RISK_INFERENCE_QUEUE
 # BRPOP 타임아웃(초). 종료 신호를 짧은 간격으로 확인.
 BRPOP_TIMEOUT = 5
 
