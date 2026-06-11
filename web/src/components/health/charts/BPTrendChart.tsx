@@ -34,11 +34,14 @@ export default function BPTrendChart({ series }: BPTrendChartProps) {
         margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
       >
         {/* 위험 구간 배경 (수축기 기준) */}
-        <ReferenceArea y1={140} y2={200} fill="#ffeaea" fillOpacity={0.4} />
+        <ReferenceArea y1={140} y2={200} fill="#ffeaea" fillOpacity={0.4}
+          label={{ value: "위험", position: "insideTopRight", fill: "#e53935", fontSize: 10, fontWeight: 600 }} />
         {/* 주의 구간 배경 */}
-        <ReferenceArea y1={120} y2={140} fill="#fffbe6" fillOpacity={0.5} />
+        <ReferenceArea y1={120} y2={140} fill="#fffbe6" fillOpacity={0.5}
+          label={{ value: "주의", position: "insideTopRight", fill: "#856404", fontSize: 10, fontWeight: 600 }} />
         {/* 정상 구간 배경 */}
-        <ReferenceArea y1={60} y2={120} fill="#e8f5e9" fillOpacity={0.3} />
+        <ReferenceArea y1={60} y2={120} fill="#e8f5e9" fillOpacity={0.3}
+          label={{ value: "정상", position: "insideTopRight", fill: "#2e7d32", fontSize: 10, fontWeight: 600 }} />
 
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
         <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#999" }} />
