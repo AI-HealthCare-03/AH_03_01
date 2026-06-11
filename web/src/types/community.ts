@@ -7,6 +7,7 @@ export interface PostListItem {
   is_pinned: boolean;
   view_count: number;
   comment_count: number;
+  like_count: number;
   author_id: string;
   author_nickname: string | null;
   created_at: string;
@@ -15,6 +16,7 @@ export interface PostListItem {
 export interface PostDetail extends PostListItem {
   content: string;
   updated_at: string;
+  is_liked: boolean;
 }
 
 export interface PostListResponse {
@@ -44,7 +46,14 @@ export interface Comment {
   parent_id: number | null;
   created_at: string;
   updated_at: string;
+  like_count: number;
+  is_liked: boolean;
   replies: Comment[];
+}
+
+export interface LikeResponse {
+  like_count: number;
+  is_liked: boolean;
 }
 
 export interface CommentCreateRequest {

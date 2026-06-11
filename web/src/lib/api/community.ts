@@ -8,6 +8,7 @@ import type {
   PostCategory,
   Comment,
   CommentCreateRequest,
+  LikeResponse,
   ReportCreateRequest,
   TodayQuizResponse,
   QuizResponse,
@@ -61,6 +62,26 @@ export async function updateComment(postId: number, commentId: number, data: { c
 
 export async function deleteComment(postId: number, commentId: number): Promise<void> {
   await apiClient.delete(`/api/v1/posts/${postId}/comments/${commentId}`);
+}
+
+export async function likePost(postId: number): Promise<LikeResponse> {
+  const res = await apiClient.post<LikeResponse>(`/api/v1/posts/${postId}/like`);
+  return res.data;
+}
+
+export async function unlikePost(postId: number): Promise<LikeResponse> {
+  const res = await apiClient.delete<LikeResponse>(`/api/v1/posts/${postId}/like`);
+  return res.data;
+}
+
+export async function likeComment(postId: number, commentId: number): Promise<LikeResponse> {
+  const res = await apiClient.post<LikeResponse>(`/api/v1/posts/${postId}/comments/${commentId}/like`);
+  return res.data;
+}
+
+export async function unlikeComment(postId: number, commentId: number): Promise<LikeResponse> {
+  const res = await apiClient.delete<LikeResponse>(`/api/v1/posts/${postId}/comments/${commentId}/like`);
+  return res.data;
 }
 
 export async function createReport(data: ReportCreateRequest): Promise<{ message: string }> {

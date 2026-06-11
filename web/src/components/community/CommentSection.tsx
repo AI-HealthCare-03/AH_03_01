@@ -2,13 +2,67 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { listComments, createComment, updateComment, deleteComment } from "@/lib/api/community";
+import { listComments, createComment, updateComment, deleteComment, likeComment, unlikeComment } from "@/lib/api/community";
 import { useMe } from "@/hooks/queries/useMe";
 import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
 import ReportModal from "@/components/community/ReportModal";
 import type { Comment } from "@/types/community";
 
+// ── 답글 아이템 ─────────────────────────────────────────────────────────────────
+interface ReplyItemProps {
+  reply: Comment;
+  myId: string | undefined;
+  postId: number;
+  parentId: number;
+}
+
+function ReplyItem({ reply, myId, postId, parentId }: ReplyItemProps) {
+  const qc = useQueryClient();
+  const { showToast } = useToast();
+
+  const updateReplyLike = (data: { like_count: number; is_liked: boolean }) => {
+    qc.setQueryData<Comment[]>(["comments", postId], (old) =>
+      old?.map((c) =>
+        c.id === parentId
+          ? { ...c, replies: c.replies.map((r) => (r.id === reply.id ? { ...r, ...data } : r)) }
+          : c
+      ) ?? []
+    );
+  };
+
+  const { mutate: like, isPending: liking } = useMutation({
+    mutationFn: () => likeComment(postId, reply.id),
+    onSuccess: updateReplyLike,
+    onError: (err) => showToast(extractErrorMessage(err), "error"),
+  });
+
+  const { mutate: unlike, isPending: unliking } = useMutation({
+    mutationFn: () => unlikeComment(postId, reply.id),
+    onSuccess: updateReplyLike,
+    onError: (err) => showToast(extractErrorMessage(err), "error"),
+  });
+
+  return (
+    <div>
+      <p className="text-xs text-text-tertiary mb-0.5">
+        {reply.author_nickname ?? "익명"} · {new Date(reply.created_at).toLocaleDateString("ko-KR")}
+      </p>
+      <p className="text-sm text-text-primary whitespace-pre-wrap">{reply.content}</p>
+      <button
+        type="button"
+        disabled={!myId || liking || unliking}
+        onClick={() => (reply.is_liked ? unlike() : like())}
+        className="flex items-center gap-1 mt-1 text-xs text-text-secondary hover:text-red-500 disabled:cursor-default transition-colors"
+      >
+        <span className={reply.is_liked ? "text-red-500" : ""}>{reply.is_liked ? "❤️" : "🤍"}</span>
+        <span className={reply.is_liked ? "text-red-500" : ""}>{reply.like_count}</span>
+      </button>
+    </div>
+  );
+}
+
+// ── 댓글 아이템 ─────────────────────────────────────────────────────────────────
 interface CommentItemProps {
   comment: Comment;
   myId: string | undefined;
@@ -18,6 +72,7 @@ interface CommentItemProps {
 }
 
 function CommentItem({ comment, myId, postId, onMutated, onReport }: CommentItemProps) {
+  const qc = useQueryClient();
   const { showToast } = useToast();
   const isAuthor = myId === comment.author_id;
   const [editing, setEditing] = useState(false);
@@ -43,8 +98,27 @@ function CommentItem({ comment, myId, postId, onMutated, onReport }: CommentItem
     onError: (err) => showToast(extractErrorMessage(err), "error"),
   });
 
+  const updateCommentLike = (data: { like_count: number; is_liked: boolean }) => {
+    qc.setQueryData<Comment[]>(["comments", postId], (old) =>
+      old?.map((c) => (c.id === comment.id ? { ...c, ...data } : c)) ?? []
+    );
+  };
+
+  const { mutate: like, isPending: liking } = useMutation({
+    mutationFn: () => likeComment(postId, comment.id),
+    onSuccess: updateCommentLike,
+    onError: (err) => showToast(extractErrorMessage(err), "error"),
+  });
+
+  const { mutate: unlike, isPending: unliking } = useMutation({
+    mutationFn: () => unlikeComment(postId, comment.id),
+    onSuccess: updateCommentLike,
+    onError: (err) => showToast(extractErrorMessage(err), "error"),
+  });
+
   return (
     <div className="py-3 border-b border-border last:border-none">
+      {/* 헤더 */}
       <div className="flex items-center justify-between mb-1">
         <p className="text-xs text-text-tertiary">
           {comment.author_nickname ?? "익명"} · {new Date(comment.created_at).toLocaleDateString("ko-KR")}
@@ -66,6 +140,7 @@ function CommentItem({ comment, myId, postId, onMutated, onReport }: CommentItem
         </div>
       </div>
 
+      {/* 본문 */}
       {editing ? (
         <div className="flex gap-2 mt-1">
           <textarea
@@ -83,19 +158,27 @@ function CommentItem({ comment, myId, postId, onMutated, onReport }: CommentItem
         <p className="text-sm text-text-primary whitespace-pre-wrap">{comment.content}</p>
       )}
 
+      {/* 댓글 좋아요 — 본문 바로 아래 */}
+      <button
+        type="button"
+        disabled={!myId || liking || unliking}
+        onClick={() => (comment.is_liked ? unlike() : like())}
+        className="flex items-center gap-1 mt-1.5 text-xs text-text-secondary hover:text-red-500 disabled:cursor-default transition-colors"
+      >
+        <span className={comment.is_liked ? "text-red-500" : ""}>{comment.is_liked ? "❤️" : "🤍"}</span>
+        <span className={comment.is_liked ? "text-red-500" : ""}>{comment.like_count}</span>
+      </button>
+
+      {/* 답글 목록 */}
       {comment.replies.length > 0 && (
         <div className="mt-2 pl-4 border-l-2 border-border space-y-2">
           {comment.replies.map((r) => (
-            <div key={r.id}>
-              <p className="text-xs text-text-tertiary mb-0.5">
-                {r.author_nickname ?? "익명"} · {new Date(r.created_at).toLocaleDateString("ko-KR")}
-              </p>
-              <p className="text-sm text-text-primary whitespace-pre-wrap">{r.content}</p>
-            </div>
+            <ReplyItem key={r.id} reply={r} myId={myId} postId={postId} parentId={comment.id} />
           ))}
         </div>
       )}
 
+      {/* 답글 입력 */}
       {replyOpen && (
         <div className="mt-2 pl-4 flex gap-2">
           <textarea
@@ -119,6 +202,7 @@ function CommentItem({ comment, myId, postId, onMutated, onReport }: CommentItem
   );
 }
 
+// ── 댓글 섹션 ───────────────────────────────────────────────────────────────────
 export default function CommentSection({ postId }: { postId: number }) {
   const qc = useQueryClient();
   const { data: me } = useMe();
