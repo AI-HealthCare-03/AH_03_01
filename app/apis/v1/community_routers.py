@@ -8,24 +8,24 @@ from app.dependencies.security import get_request_user
 from app.dtos.community import (
     CommentCreateRequest,
     CommentResponse,
-    QuizAnswerRequest,
-    QuizAnswerResponse,
-    QuizAttemptHistoryItem,
-    QuizResponse,
     CommentUpdateRequest,
     PostCreateRequest,
     PostDetailResponse,
     PostListItem,
     PostListResponse,
     PostUpdateRequest,
+    QuizAnswerRequest,
+    QuizAnswerResponse,
+    QuizAttemptHistoryItem,
+    QuizResponse,
     ReportCreateRequest,
 )
 from app.models.community import Comment, Post, PostCategory
-from app.services.quiz import HealthQuizService
 from app.models.notifications import NotificationType
 from app.models.users import User
 from app.repositories.community_repository import CommentRepository, PostRepository, ReportRepository
 from app.repositories.notification_repository import NotificationRepository
+from app.services.quiz import HealthQuizService
 
 posts_router = APIRouter(prefix="/posts", tags=["community"])
 
@@ -259,7 +259,7 @@ async def get_today_quiz(current_user: User = Depends(get_request_user)) -> dict
         data = await HealthQuizService().get_today_quiz(current_user.id)
     except ValueError as e:
         code, detail = _QUIZ_ERRORS.get(str(e), (status.HTTP_400_BAD_REQUEST, str(e)))
-        raise HTTPException(status_code=code, detail=detail)
+        raise HTTPException(status_code=code, detail=detail) from e
     quiz = data["quiz"]
     return {
         "quiz": QuizResponse.model_validate(quiz),
@@ -277,7 +277,7 @@ async def answer_quiz(
         result = await HealthQuizService().answer_quiz(current_user.id, quiz_id, body.selected_option)
     except ValueError as e:
         code, detail = _QUIZ_ERRORS.get(str(e), (status.HTTP_400_BAD_REQUEST, str(e)))
-        raise HTTPException(status_code=code, detail=detail)
+        raise HTTPException(status_code=code, detail=detail) from e
     return QuizAnswerResponse(**result)
 
 
