@@ -1098,12 +1098,15 @@ async def generate_node(state: ChatState) -> dict[str, Any]:
     feedback = state.get("eval_feedback", "")
     feedback_hint = f"\n\n[Evaluator 피드백] 이전 답변에서 보완할 점: {feedback}" if feedback else ""
 
+    no_context_hint = "컨텍스트에 답이 없으면 솔직히 모른다고 말하세요."
+    if intent == "medical_inquiry":
+        no_context_hint += " 의료 전문가와 상담을 권하세요."
     user_prompt = (
         f"질문: {state['original_question']}\n\n"
         f"{health_block}"
         f"컨텍스트:\n{context}\n\n"
         f"위 정보(사용자 건강 정보가 있다면 그것 포함)를 사용해 한국어로 답변하세요. "
-        f"컨텍스트에 답이 없으면 솔직히 모른다고 말하고 의료 전문가와 상담을 권하세요."
+        f"{no_context_hint}"
         f"{feedback_hint}"
     )
 
@@ -1143,12 +1146,12 @@ async def evaluate_node(state: ChatState) -> dict[str, Any]:
     out = await run_evaluator(inp)
     if out.eval_result != "pass":
         _logger.info(
-            "evaluate fail — stage=%s result=%s rev=%d feedback=%s",
+            "evaluate fail — stage=%s result=%s rev=%d",
             out.eval_stage,
             out.eval_result,
             out.eval_revision_count,
-            out.eval_feedback,
         )
+        _logger.debug("evaluate fail — feedback=%s", out.eval_feedback)
     return {
         "eval_result": out.eval_result,
         "eval_stage": out.eval_stage,
