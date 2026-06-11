@@ -4,12 +4,17 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import WizardShell from "@/components/health/new/WizardShell";
-import StepBasic from "@/components/health/new/StepBasic";
-import StepBP from "@/components/health/new/StepBP";
-import StepGlucose from "@/components/health/new/StepGlucose";
+import StepMeasure from "@/components/health/new/StepMeasure";
+import StepVitals from "@/components/health/new/StepVitals";
+import StepFamily from "@/components/health/new/StepFamily";
+import StepSmokingDrinking from "@/components/health/new/StepSmokingDrinking";
+import StepActivity from "@/components/health/new/StepActivity";
+import StepDiet from "@/components/health/new/StepDiet";
+import StepExtras from "@/components/health/new/StepExtras";
 import { useCreateProfile } from "@/hooks/queries/useCreateProfile";
 import { useCreateHealthRecord } from "@/hooks/queries/useCreateHealthRecord";
 import { useCreatePrediction } from "@/hooks/queries/useCreatePrediction";
+import { useMe } from "@/hooks/queries/useMe";
 import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
 import { pushNotification } from "@/components/layout/NotificationDropdown";
@@ -17,44 +22,45 @@ import type {
   WizardFormStep1,
   WizardFormStep2,
   WizardFormStep3,
+  WizardFormStep4,
+  WizardFormStep5,
+  WizardFormStep6,
+  WizardFormStep7,
+  HealthProfileUpsertRequest,
 } from "@/types/health";
 
-/* 프론트 enum → 백엔드 enum/bool 변환 매핑.
-   백엔드 HealthProfileUpsertRequest 는 is_smoker(bool), alcohol_intake(NONE|LIGHT|MODERATE|HEAVY),
-   has_diabetes_family_history(bool), has_hypertension_family_history(bool), is_chronic_patient(bool),
-   pregnancy_history(NONE|PREGNANT|POSTPARTUM|NOT_APPLICABLE), diseases(string[]) 를 받는다. */
-const ALCOHOL_MAP: Record<string, "NONE" | "LIGHT" | "MODERATE" | "HEAVY"> = {
-  NONE: "NONE",
-  WEEKLY_1_2: "LIGHT",
-  WEEKLY_3_4: "MODERATE",
-  DAILY: "HEAVY",
-};
-const PREGNANCY_MAP: Record<string, "NONE" | "PREGNANT" | "POSTPARTUM" | "NOT_APPLICABLE"> = {
-  NONE: "NOT_APPLICABLE",
-  PREGNANT: "PREGNANT",
-  POSTPARTUM: "POSTPARTUM",
-};
+type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
-/* 백엔드 호환 페이로드 타입 */
-interface BackendProfilePayload {
-  height_cm?: number;
-  weight_kg?: number;
-  waist_cm?: number;
-  is_smoker?: boolean;
-  alcohol_intake?: "NONE" | "LIGHT" | "MODERATE" | "HEAVY";
-  has_diabetes_family_history?: boolean;
-  has_hypertension_family_history?: boolean;
-  is_chronic_patient?: boolean;
-  diseases?: string[];
-  pregnancy_history?: "NONE" | "PREGNANT" | "POSTPARTUM" | "NOT_APPLICABLE";
+/* 흡연 UI 선택 → current_smoker / smoking_risk 변환 */
+function smokingToFields(choice: WizardFormStep4["smoking_choice"]): {
+  current_smoker: number;
+  smoking_risk: number;
+} {
+  if (choice === "CURRENT") return { current_smoker: 1, smoking_risk: 1.0 };
+  if (choice === "QUIT") return { current_smoker: 0, smoking_risk: 0.5 };
+  return { current_smoker: 0, smoking_risk: 0.0 };
 }
 
-type Step = 1 | 2 | 3;
+/* 문자열 입력 → 숫자. 빈값/비정상(NaN·Infinity)은 undefined(미전송). */
+function toNum(s: string): number | undefined {
+  if (s.trim() === "") return undefined;
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : undefined;
+}
+/* 정수 백엔드 필드(mid_act_day/walk_day/water_count)용 — 소수 입력 방지. */
+function toInt(s: string): number | undefined {
+  if (s.trim() === "") return undefined;
+  const n = parseInt(s, 10);
+  return Number.isFinite(n) ? n : undefined;
+}
 
 export default function HealthRecordsNewPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const [step, setStep] = useState<Step>(1);
+
+  const { data: me } = useMe();
+  const gender = me?.gender;
 
   const createProfile = useCreateProfile();
   const createRecord = useCreateHealthRecord();
@@ -63,106 +69,218 @@ export default function HealthRecordsNewPage() {
   const isLoading =
     createProfile.isPending || createRecord.isPending || createPrediction.isPending;
 
-  /* ── Step 1: 기본 정보 저장 ──────── */
+  /* 스텝 간 누적 페이로드 — 각 스텝이 완료될 때마다 병합 */
+  const [accumulated, setAccumulated] = useState<HealthProfileUpsertRequest>({});
 
+  /* 프로필 upsert helper */
+  const upsert = async (patch: HealthProfileUpsertRequest) => {
+    const merged = { ...accumulated, ...patch };
+    setAccumulated(merged);
+    await createProfile.mutateAsync(merged);
+  };
+
+  /* ── Step 1: 신체계측 ──────────────────── */
   const handleStep1 = async (data: WizardFormStep1) => {
-    /* 백엔드 실제 DTO 키로 변환해서 보낸다. */
-    const diseases = data.chronic_diseases.filter((d) => d !== "NONE");
-    const body: BackendProfilePayload = {
-      height_cm: data.height_cm ? parseFloat(data.height_cm) : undefined,
-      weight_kg: data.weight_kg ? parseFloat(data.weight_kg) : undefined,
-      waist_cm: data.waist_cm ? parseFloat(data.waist_cm) : undefined,
-      is_smoker: data.smoking_status === "CURRENT",
-      alcohol_intake: ALCOHOL_MAP[data.alcohol_frequency] ?? "NONE",
-      has_diabetes_family_history: !!data.family_history_diabetes,
-      has_hypertension_family_history: !!data.family_history_hypertension,
-      is_chronic_patient: diseases.length > 0,
-      diseases,
-
-      pregnancy_history: PREGNANCY_MAP[data.pregnancy_status] ?? "NOT_APPLICABLE",
-    };
+    const patch: HealthProfileUpsertRequest = {};
+    const height = toNum(data.height_cm);
+    const weight = toNum(data.weight_kg);
+    const waist = toNum(data.waist_cm);
+    if (height !== undefined) patch.height_cm = height;
+    if (weight !== undefined) patch.weight_kg = weight;
+    if (waist !== undefined) patch.waist_cm = waist;
 
     try {
-      /* createProfile 의 타입이 프론트 키를 받지만 실제 호출은 객체 그대로 전달 */
-      await createProfile.mutateAsync(body as unknown as Parameters<typeof createProfile.mutateAsync>[0]);
+      await upsert(patch);
+
+      /* 시계열: 체중, 허리둘레 */
+      const now = format(new Date(), "yyyy-MM-dd'T'HH:mm:ssxxx");
+      const timeRecords: Promise<unknown>[] = [];
+      if (weight !== undefined) {
+        timeRecords.push(
+          createRecord.mutateAsync({
+            record_type: "WEIGHT",
+            primary_value: weight,
+            unit: "kg",
+            measured_at: now,
+          })
+        );
+      }
+      if (waist !== undefined) {
+        timeRecords.push(
+          createRecord.mutateAsync({
+            record_type: "WAIST",
+            primary_value: waist,
+            unit: "cm",
+            measured_at: now,
+          })
+        );
+      }
+      await Promise.allSettled(timeRecords);
       setStep(2);
     } catch (err) {
       showToast(extractErrorMessage(err), "error");
     }
   };
 
-  /* ── Step 2: 혈압 저장 ─────────── */
-
+  /* ── Step 2: 혈압·혈당 ─────────────────── */
   const handleStep2 = async (data: WizardFormStep2) => {
+    const patch: HealthProfileUpsertRequest = {
+      bp_measure_env: data.measurement_env,
+    };
+    const systolic = toNum(data.systolic);
+    const diastolic = toNum(data.diastolic);
+    const fasting = toNum(data.fasting_glucose);
+    if (systolic !== undefined) patch.systolic_bp = systolic;
+    if (diastolic !== undefined) patch.diastolic_bp = diastolic;
+    if (fasting !== undefined) patch.fasting_blood_sugar = fasting;
+
     try {
-      await createRecord.mutateAsync({
-        record_type: "BLOOD_PRESSURE",
-        sub_type: data.measurement_env,
-        primary_value: parseFloat(data.systolic),
-        secondary_value: parseFloat(data.diastolic),
-        unit: "mmHg",
-        measured_at: format(new Date(), "yyyy-MM-dd'T'HH:mm:ssxxx"),
-      });
+      await upsert(patch);
+
+      /* 시계열 */
+      const now = format(new Date(), "yyyy-MM-dd'T'HH:mm:ssxxx");
+      const timeRecords: Promise<unknown>[] = [];
+      if (systolic !== undefined && diastolic !== undefined) {
+        timeRecords.push(
+          createRecord.mutateAsync({
+            record_type: "BLOOD_PRESSURE",
+            sub_type: data.measurement_env,
+            primary_value: systolic,
+            secondary_value: diastolic,
+            unit: "mmHg",
+            measured_at: now,
+          })
+        );
+      }
+      if (fasting !== undefined) {
+        timeRecords.push(
+          createRecord.mutateAsync({
+            record_type: "BLOOD_GLUCOSE",
+            sub_type: "FASTING",
+            primary_value: fasting,
+            unit: "mg/dL",
+            measured_at: now,
+          })
+        );
+      }
+      await Promise.allSettled(timeRecords);
       setStep(3);
     } catch (err) {
       showToast(extractErrorMessage(err), "error");
     }
   };
 
-  /* ── Step 2 건너뛰기 ─────────────── */
+  /* ── Step 3: 가족력 ────────────────────── */
+  const handleStep3 = async (data: WizardFormStep3) => {
+    const patch: HealthProfileUpsertRequest = {
+      family_dm: data.family_dm,
+      family_hp: data.family_hp,
+      family_hl: data.family_hl,
+    };
+    try {
+      await upsert(patch);
+      setStep(4);
+    } catch (err) {
+      showToast(extractErrorMessage(err), "error");
+    }
+  };
 
-  const handleSkipBP = () => setStep(3);
+  /* ── Step 4: 흡연·음주 ─────────────────── */
+  const handleStep4 = async (data: WizardFormStep4) => {
+    const { current_smoker, smoking_risk } = smokingToFields(data.smoking_choice);
+    const patch: HealthProfileUpsertRequest = { current_smoker, smoking_risk };
 
-  /* ── Step 3: 혈당/HbA1c 저장 + 예측 ── */
-
-  const handleStep3 = async (data: WizardFormStep3, skip = false) => {
-    if (!skip) {
-      const now = format(new Date(), "yyyy-MM-dd'T'HH:mm:ssxxx");
-      const requests: Promise<unknown>[] = [];
-
-      if (data.fasting_glucose) {
-        requests.push(
-          createRecord.mutateAsync({
-            record_type: "BLOOD_GLUCOSE",
-            sub_type: "FASTING",
-            primary_value: parseFloat(data.fasting_glucose),
-            unit: "mg/dL",
-            measured_at: now,
-          })
-        );
+    if (data.alcohol_freq_y !== null) {
+      patch.alcohol_freq_y = data.alcohol_freq_y;
+      /* alcohol_freq_y=1(전혀 안 마심) 이 아닐 때만 음주량 전송 */
+      if (data.alcohol_freq_y !== 1 && data.alcohol_cup !== null) {
+        patch.alcohol_cup = data.alcohol_cup;
       }
-      if (data.postmeal_glucose) {
-        requests.push(
-          createRecord.mutateAsync({
-            record_type: "BLOOD_GLUCOSE",
-            sub_type: "POSTMEAL",
-            primary_value: parseFloat(data.postmeal_glucose),
-            unit: "mg/dL",
-            measured_at: now,
-          })
-        );
-      }
-      if (data.hba1c) {
-        requests.push(
-          createRecord.mutateAsync({
-            record_type: "HBA1C",
-            primary_value: parseFloat(data.hba1c),
-            unit: "%",
-            measured_at: now,
-          })
-        );
-      }
+    }
 
-      try {
-        await Promise.allSettled(requests);
-      } catch {
-        /* 개별 실패는 allSettled가 처리 — 예측은 계속 시도 */
+    try {
+      await upsert(patch);
+      setStep(5);
+    } catch (err) {
+      showToast(extractErrorMessage(err), "error");
+    }
+  };
+
+  /* ── Step 5: 수면·운동·수분 ─────────────── */
+  const handleStep5 = async (data: WizardFormStep5) => {
+    const patch: HealthProfileUpsertRequest = {};
+    const sleepWd = toNum(data.sleep_weekday);
+    const sleepWe = toNum(data.sleep_weekend);
+    const modHour = toNum(data.moderate_exercise_hour);
+    const midActDay = toInt(data.mid_act_day);
+    const walkDay = toInt(data.walk_day);
+    const waterCount = toInt(data.water_count);
+    if (sleepWd !== undefined) patch.sleep_weekday = sleepWd;
+    if (sleepWe !== undefined) patch.sleep_weekend = sleepWe;
+    if (modHour !== undefined) patch.moderate_exercise_hour = modHour;
+    if (midActDay !== undefined) patch.mid_act_day = midActDay;
+    if (walkDay !== undefined) patch.walk_day = walkDay;
+    if (waterCount !== undefined) patch.water_count = waterCount;
+
+    try {
+      await upsert(patch);
+      setStep(6);
+    } catch (err) {
+      showToast(extractErrorMessage(err), "error");
+    }
+  };
+
+  /* ── Step 6: 식습관 ────────────────────── */
+  const handleStep6 = async (data: WizardFormStep6) => {
+    const patch: HealthProfileUpsertRequest = {};
+    if (data.veg_freq_1 !== null) patch.veg_freq_1 = data.veg_freq_1;
+    if (data.fruit_freq !== null) patch.fruit_freq = data.fruit_freq;
+    if (data.out_meal_freq !== null) patch.out_meal_freq = data.out_meal_freq;
+    if (data.breakfast_freq !== null) patch.breakfast_freq = data.breakfast_freq;
+
+    try {
+      await upsert(patch);
+      setStep(7);
+    } catch (err) {
+      showToast(extractErrorMessage(err), "error");
+    }
+  };
+
+  /* ── Step 7: 추가 정보 + 예측 트리거 ─────── */
+  const handleStep7 = async (data: WizardFormStep7) => {
+    const patch: HealthProfileUpsertRequest = {
+      chronic_diseases: data.chronic_diseases,
+      pregnancy_status: data.pregnancy_status,
+    };
+
+    /* is_menopause: StepExtras 가 결정 (여성=선택값|null, 남성=-1, 성별 미상=null). null이면 미전송. */
+    if (data.is_menopause !== null) {
+      patch.is_menopause = data.is_menopause;
+    }
+
+    /* ocp_total_months: 복용 중이면 개월수, 아니면 0 */
+    if (gender === "FEMALE") {
+      if (data.ocp_taking === true) {
+        patch.ocp_total_months = toInt(data.ocp_total_months) ?? 0;
+      } else if (data.ocp_taking === false) {
+        patch.ocp_total_months = 0;
       }
+    }
+
+    /* anemia: 모름=null → 키 자체 미포함(undefined) */
+    if (data.anemia !== null && data.anemia !== undefined) {
+      patch.anemia = data.anemia;
+    }
+
+    try {
+      await upsert(patch);
+    } catch (err) {
+      showToast(extractErrorMessage(err), "error");
+      /* 프로필 저장 실패해도 예측은 시도 */
     }
 
     /* 예측 생성 — 같은 입력으로 3개 질병 모두 호출.
        하나라도 성공하면 risk 탭에서 결과 표시 가능. 모두 실패해도 이동은 진행. */
-    // 이전 위험도 저장값 읽기 (변화 감지용)
     const PREV_RISK_KEY = "prev-risk-levels";
     let prevRisk: Record<string, string> = {};
     try {
@@ -188,7 +306,6 @@ export default function HealthRecordsNewPage() {
       createPrediction.mutateAsync("CARDIOVASCULAR"),
     ]);
 
-    // 위험도 변화 감지 → 알림
     const nextRisk: Record<string, string> = { ...prevRisk };
     predictionResults.forEach((result) => {
       if (result.status !== "fulfilled") return;
@@ -205,13 +322,12 @@ export default function HealthRecordsNewPage() {
         const to = RISK_LABEL[newLevel] ?? newLevel;
         pushNotification({
           category: "위험도",
-          title: `⚠️ ${dLabel} 위험도 변화`,
+          title: `${dLabel} 위험도 변화`,
           body: `${dLabel} 위험도가 ${from}에서 ${to}로 변경되었어요.`,
         });
       }
     });
 
-    // 새 위험도 저장
     try { localStorage.setItem(PREV_RISK_KEY, JSON.stringify(nextRisk)); } catch { /* 무시 */ }
 
     const succeeded = predictionResults.filter((r) => r.status === "fulfilled").length;
@@ -239,25 +355,56 @@ export default function HealthRecordsNewPage() {
         </button>
         <h1 className="text-xl font-black text-text-primary">건강 기록 입력</h1>
         <p className="text-sm text-text-secondary mt-1">
-          Step 1은 필수, 2·3단계는 건너뛸 수 있습니다.
+          1단계는 필수, 나머지는 건너뛸 수 있습니다.
         </p>
       </div>
 
       <WizardShell currentStep={step}>
         {step === 1 && (
-          <StepBasic onSubmit={handleStep1} isLoading={createProfile.isPending} />
+          <StepMeasure
+            onSubmit={handleStep1}
+            isLoading={createProfile.isPending || createRecord.isPending}
+          />
         )}
         {step === 2 && (
-          <StepBP
+          <StepVitals
             onSubmit={handleStep2}
-            onSkip={handleSkipBP}
-            isLoading={createRecord.isPending}
+            onSkip={() => setStep(3)}
+            isLoading={createProfile.isPending || createRecord.isPending}
           />
         )}
         {step === 3 && (
-          <StepGlucose
+          <StepFamily
             onSubmit={handleStep3}
-            onSkip={() => handleStep3({ fasting_glucose: "", postmeal_glucose: "", hba1c: "" }, true)}
+            onSkip={() => setStep(4)}
+            isLoading={createProfile.isPending}
+          />
+        )}
+        {step === 4 && (
+          <StepSmokingDrinking
+            onSubmit={handleStep4}
+            onSkip={() => setStep(5)}
+            isLoading={createProfile.isPending}
+          />
+        )}
+        {step === 5 && (
+          <StepActivity
+            onSubmit={handleStep5}
+            onSkip={() => setStep(6)}
+            isLoading={createProfile.isPending}
+          />
+        )}
+        {step === 6 && (
+          <StepDiet
+            onSubmit={handleStep6}
+            onSkip={() => setStep(7)}
+            isLoading={createProfile.isPending}
+          />
+        )}
+        {step === 7 && (
+          <StepExtras
+            gender={gender}
+            onSubmit={handleStep7}
             isLoading={isLoading}
           />
         )}
