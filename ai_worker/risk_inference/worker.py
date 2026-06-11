@@ -46,7 +46,7 @@ from tortoise import Tortoise
 
 from app.core import config
 from app.core.db.databases import TORTOISE_ORM
-from app.models.health import DiseaseType
+from app.models.health import DiseaseType, score_to_risk_level_label
 from app.models.ml_inference import (
     MLInferenceRequest,
     MLInferenceStatus,
@@ -192,6 +192,7 @@ async def _process_message(message: dict[str, Any]) -> None:
             "disease_type": output.disease_type.value,
             "risk_score": float(output.risk_score),
             "risk_level": output.risk_level.value,
+            "risk_level_label": score_to_risk_level_label(output.risk_score),
             "contributing_factors": [f.to_dict() for f in output.contributing_factors],
             "model_version": output.model_version,
         }

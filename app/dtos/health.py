@@ -224,6 +224,7 @@ class PredictionResponse(BaseSerializerModel):
     disease_type: DiseaseType
     risk_score: Decimal
     risk_level: RiskLevel
+    risk_level_label: str  # risk_score 기반 5단계 한글 라벨 (DiseaseRisk.risk_level_label @property 파생)
     contributing_factors: list[ContributingFactor]
     model_version: str
     calculated_at: datetime

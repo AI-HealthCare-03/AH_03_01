@@ -45,6 +45,8 @@ class TestPredictionsApi(TestCase):
             assert body["risk_level"] in {"RISK", "HIGH_RISK"}
             assert float(body["risk_score"]) > 0
             assert len(body["contributing_factors"]) >= 1
+            # risk_score 기반 5단계 한글 라벨이 응답에 실리는지 (DiseaseRisk.risk_level_label @property)
+            assert body["risk_level_label"] in {"매우 낮음", "낮음", "보통", "높음", "매우 높음"}
 
     async def test_create_diabetes_prediction_with_snapshot_override(self):
         async with make_client() as client:
