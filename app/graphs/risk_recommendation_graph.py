@@ -67,6 +67,7 @@ from app.models.health import (
     RecordType,
     RiskLevel,
     UserHealthInfo,
+    score_to_risk_level_label,
 )
 from app.models.ml_inference import (
     MLInferenceKind,
@@ -445,6 +446,7 @@ def _output_to_result(output: PredictionOutput) -> dict[str, Any]:
         "disease_type": output.disease_type.value,
         "risk_score": float(output.risk_score),
         "risk_level": output.risk_level.value,
+        "risk_level_label": score_to_risk_level_label(output.risk_score),
         "contributing_factors": [f.to_dict() for f in output.contributing_factors],
         "model_version": output.model_version,
     }

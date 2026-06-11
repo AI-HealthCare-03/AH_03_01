@@ -22,9 +22,17 @@ class RiskFactor:
     factor: str
     weight: float
     description: str | None = None
+    name_kor: str | None = None  # 사람이 읽는 한글명 (ML 경로만; 룰 폴백은 None)
+    direction: str | None = None  # "위험 증가↑"/"위험 감소↓" (없으면 weight 부호로 파생)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"factor": self.factor, "weight": self.weight, "description": self.description}
+        return {
+            "factor": self.factor,
+            "weight": self.weight,
+            "description": self.description,
+            "name_kor": self.name_kor,
+            "direction": self.direction or ("위험 증가↑" if self.weight > 0 else "위험 감소↓"),
+        }
 
 
 @dataclass(slots=True)
