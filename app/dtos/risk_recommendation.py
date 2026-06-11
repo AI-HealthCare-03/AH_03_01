@@ -38,7 +38,7 @@ class RecommendationSourceItem(BaseModel):
     title: str | None = None
     document_id: int | None = None
     snippet: str | None = None
-    source: str | None = None  # 예: "KSOLA2022" / "CHALLENGE_CATALOG"
+    source: str | None = None  # 예: "KSLA2022" / "CHALLENGE_CATALOG"
 
 
 class RiskRecommendationResponse(BaseModel):

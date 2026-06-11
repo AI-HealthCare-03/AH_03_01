@@ -420,49 +420,97 @@ _KSH2026: dict[str, list[str]] = {
 }
 
 # ══════════════════════════════════════════════════════════════
-# KSOLA2022 — 이상지질혈증 진료지침 (source_id: KSOLA2022)
+# KSLA2022 — 이상지질혈증 진료지침 (source_id: KSLA2022)
+# 주의: DB 저장 section_id 는 "KSLA2022_SEC_" (O 없음). 이전 "KSOLA2022_SEC_" 키는 미매핑.
 # ══════════════════════════════════════════════════════════════
-_KSOLA2022: dict[str, list[str]] = {
-    "KSOLA2022_SEC_0002": ["risk"],
-    "KSOLA2022_SEC_0020_A": ["risk"],
-    "KSOLA2022_SEC_0020_C": ["risk"],
-    "KSOLA2022_SEC_0021": ["risk"],
-    "KSOLA2022_SEC_0022": ["risk"],
-    "KSOLA2022_SEC_0040": ["diagnosis"],
-    "KSOLA2022_SEC_0051": ["risk"],
-    "KSOLA2022_SEC_0060_A": ["monitoring"],
-    "KSOLA2022_SEC_0060_B": ["medication", "monitoring"],
-    "KSOLA2022_SEC_0070": ["diet"],
-    "KSOLA2022_SEC_0071_A": ["diet"],
-    "KSOLA2022_SEC_0071_B": ["diet"],
-    "KSOLA2022_SEC_0071_C": ["diet"],
-    "KSOLA2022_SEC_0071_D": ["diet"],
-    "KSOLA2022_SEC_0071_E": ["diet"],
-    "KSOLA2022_SEC_0071_F": ["diet"],
-    "KSOLA2022_SEC_0073_A": ["exercise"],
-    "KSOLA2022_SEC_0073_B": ["exercise"],
-    "KSOLA2022_SEC_0073_C": ["exercise", "medication"],
-    "KSOLA2022_SEC_0073_D": ["exercise"],
-    "KSOLA2022_SEC_0074": ["exercise"],
-    "KSOLA2022_SEC_0075_A": ["smoking"],
-    "KSOLA2022_SEC_0076": ["alcohol"],
-    "KSOLA2022_SEC_0084_F": ["medication"],
-    "KSOLA2022_SEC_0105_A": ["complication", "medication"],
-    "KSOLA2022_SEC_0105_B": ["medication"],
-    "KSOLA2022_SEC_0105_C": ["medication"],
-    "KSOLA2022_SEC_0105_D": ["medication"],
-    "KSOLA2022_SEC_0107_A": ["diagnosis", "lifestyle"],
-    "KSOLA2022_SEC_0107_B": ["diagnosis"],
-    "KSOLA2022_SEC_0107_C": ["diet", "medication"],
-    "KSOLA2022_SEC_0107_D": ["exercise"],
-    "KSOLA2022_SEC_0108": ["diagnosis"],
-    "KSOLA2022_SEC_0109": ["diagnosis"],
-    "KSOLA2022_SEC_0110": ["risk"],
-    "KSOLA2022_SEC_0111": ["medication"],
-    "KSOLA2022_SEC_0117_A": ["diagnosis", "medication"],
-    "KSOLA2022_SEC_0117_B": ["complication"],
-    "KSOLA2022_SEC_0117_C": ["complication"],
-    # figures
+_KSLA2022: dict[str, list[str]] = {
+    # ── 서문 ──────────────────────────────────────────────────
+    "KSLA2022_SEC_0001": ["risk"],                                    # 인사말
+    "KSLA2022_SEC_0002": ["risk", "diagnosis"],                       # 제5판 주요 변경사항
+    "KSLA2022_SEC_0003": ["risk"],                                    # 근거수준 및 권고등급 정의
+    # ── Chapter 1. 역학·위험도 ────────────────────────────────
+    "KSLA2022_SEC_0004": ["risk"],                                    # 심혈관질환 현황 (1) 사망률
+    "KSLA2022_SEC_0005": ["risk"],                                    # 심혈관질환 현황 (2) 위험요인·유병률
+    "KSLA2022_SEC_0006": ["risk"],                                    # 위험요인과 위험도 평가 — 개요
+    "KSLA2022_SEC_0007": ["risk"],                                    # 위험도 평가 — 표 1-1 기여위험도
+    "KSLA2022_SEC_0008": ["risk"],                                    # 위험도 평가 — 표 1-2 비교위험도
+    "KSLA2022_SEC_0009": ["screening", "diagnosis"],                  # 혈중 지질 농도 분포 (1)
+    "KSLA2022_SEC_0010": ["screening", "diagnosis"],                  # 혈중 지질 농도 분포 (2) 유병률
+    # ── Chapter 2. 진단·치료 기준 ─────────────────────────────
+    "KSLA2022_SEC_0011": ["diagnosis", "screening"],                  # 진단 방법 및 분류 기준 (1) 선별검사
+    "KSLA2022_SEC_0012": ["diagnosis"],                               # 진단 방법 및 분류 기준 (2) 기준표
+    "KSLA2022_SEC_0013": ["risk", "medication"],                      # 치료 기준 — LDL 목표치 전체 권고안
+    "KSLA2022_SEC_0014": ["risk", "medication"],                      # 치료 기준 — 고중성지방혈증·고LDL
+    "KSLA2022_SEC_0015": ["risk"],                                    # 치료 기준 — 서론·주요 위험인자
+    "KSLA2022_SEC_0016": ["risk", "medication"],                      # 초고위험군 LDL <55 근거
+    "KSLA2022_SEC_0017": ["risk", "medication"],                      # 고위험군 LDL <70 근거
+    "KSLA2022_SEC_0018": ["risk", "complication"],                    # 당뇨병 심혈관질환 고위험 근거
+    "KSLA2022_SEC_0019": ["risk", "medication"],                      # 위험도별 LDL 치료 기준표 해설
+    "KSLA2022_SEC_0020": ["risk", "medication"],                      # 중등도 위험군 LDL 목표
+    "KSLA2022_SEC_0021": ["risk", "medication"],                      # 저위험군 LDL 목표
+    "KSLA2022_SEC_0022": ["risk", "medication"],                      # 고중성지방혈증 치료지침
+    "KSLA2022_SEC_0023": ["risk", "medication"],                      # 결론·가이드라인 비교
+    "KSLA2022_SEC_0024": ["monitoring"],                              # 경과 모니터링
+    # ── Chapter 3. 생활습관요법 ───────────────────────────────
+    "KSLA2022_SEC_0025": ["diet", "lifestyle"],                       # 식사요법 — 고콜레스테롤혈증 에너지·지방
+    "KSLA2022_SEC_0026": ["diet", "lifestyle"],                       # 식사요법 — 트랜스지방·콜레스테롤·탄수화물
+    "KSLA2022_SEC_0027": ["diet", "lifestyle"],                       # 식사요법 — 고중성지방혈증 에너지·지방
+    "KSLA2022_SEC_0028": ["diet", "lifestyle", "alcohol"],            # 식사요법 — 고중성지방혈증 탄수화물·알코올
+    "KSLA2022_SEC_0029": ["diet", "lifestyle"],                       # 식사요법 — 저HDL 지방·탄수화물
+    "KSLA2022_SEC_0030": ["diet", "lifestyle"],                       # 식사요법 — 식사패턴·가이드
+    "KSLA2022_SEC_0031": ["diet"],                                    # 식사요법 — 권장식품·주의식품 표
+    "KSLA2022_SEC_0032": ["exercise", "lifestyle"],                   # 운동요법
+    "KSLA2022_SEC_0033": ["lifestyle", "smoking", "alcohol"],         # 금연 / 절주
+    # ── Chapter 4. 약물치료 ───────────────────────────────────
+    "KSLA2022_SEC_0034": ["medication"],                              # 약제의 선택 — LDL·non-HDL·병용요법
+    "KSLA2022_SEC_0035": ["medication"],                              # 약제의 선택 — 저HDL·TG 권고안
+    "KSLA2022_SEC_0036": ["medication"],                              # 약제의 선택 — 고콜레스테롤혈증 알고리즘
+    "KSLA2022_SEC_0037": ["medication"],                              # 약제의 선택 — 고중성지방혈증·스타틴
+    "KSLA2022_SEC_0038": ["medication"],                              # 비스타틴 — 피브린산·니코틴산
+    "KSLA2022_SEC_0039": ["medication"],                              # 비스타틴 — 오메가-3·에제티미브·PCSK9
+    "KSLA2022_SEC_0040": ["medication"],                              # 스타틴 — 서론·역사·기전·종류
+    "KSLA2022_SEC_0041": ["medication"],                              # 스타틴 — 용법·용량·부작용
+    "KSLA2022_SEC_0042": ["medication", "monitoring"],                # 스타틴 — 금기증·추적관찰
+    "KSLA2022_SEC_0043": ["medication"],                              # 에제티미브 — 서론·기전·임상연구
+    "KSLA2022_SEC_0044": ["medication"],                              # 에제티미브 — 부작용·금기증
+    "KSLA2022_SEC_0045": ["medication"],                              # PCSK9 억제제 — 서론·적응증·기전
+    "KSLA2022_SEC_0046": ["medication"],                              # PCSK9 억제제 — 임상연구·부작용
+    "KSLA2022_SEC_0047": ["medication"],                              # 피브린산 유도체 — 서론·기전
+    "KSLA2022_SEC_0048": ["medication"],                              # 피브린산 유도체 — 임상연구
+    "KSLA2022_SEC_0049": ["medication"],                              # 피브린산 유도체 — 부작용·금기증
+    "KSLA2022_SEC_0050": ["medication"],                              # 오메가-3 지방산 — 서론·기전
+    "KSLA2022_SEC_0051": ["medication"],                              # 오메가-3 지방산 — 임상연구·부작용
+    "KSLA2022_SEC_0052": ["medication"],                              # 니코틴산 — 서론·기전
+    "KSLA2022_SEC_0053": ["medication"],                              # 니코틴산·담즙산결합수지
+    "KSLA2022_SEC_0054": ["medication"],                              # 병용요법 (1) — 스타틴+에제티미브
+    "KSLA2022_SEC_0055": ["medication"],                              # 병용요법 (2) — 스타틴+PCSK9
+    "KSLA2022_SEC_0056": ["medication"],                              # 병용요법 (3) — 스타틴+피브린산·오메가-3
+    # ── Chapter 5. 특수 상황 ──────────────────────────────────
+    "KSLA2022_SEC_0057": ["complication", "medication"],              # 관상동맥질환 — 스타틴 근거
+    "KSLA2022_SEC_0058": ["complication", "medication"],              # 관상동맥질환 — 에제티미브·PCSK9
+    "KSLA2022_SEC_0059": ["complication", "medication"],              # 뇌졸중 — 권고안
+    "KSLA2022_SEC_0060": ["complication", "medication"],              # 뇌졸중 — 죽상경화증 치료
+    "KSLA2022_SEC_0061": ["complication", "risk", "medication"],      # 뇌졸중 — 고위험 LDL 목표치
+    "KSLA2022_SEC_0062": ["complication", "medication"],              # 만성콩팥병 — 권고안
+    "KSLA2022_SEC_0063": ["complication", "medication"],              # 만성콩팥병 — 임상연구
+    "KSLA2022_SEC_0064": ["complication", "medication"],              # 만성콩팥병과 이상지질혈증
+    "KSLA2022_SEC_0065": ["complication", "diagnosis", "medication"], # 당뇨병 — 권고안
+    "KSLA2022_SEC_0066": ["complication", "monitoring"],              # 당뇨병 — 추적관리
+    "KSLA2022_SEC_0067": ["complication", "medication"],              # 당뇨병 — 치료목표
+    "KSLA2022_SEC_0068": ["complication", "medication", "lifestyle"], # 당뇨병 — 치료 (생활습관·스타틴)
+    "KSLA2022_SEC_0069": ["complication", "medication"],              # 당뇨병 — 스타틴 병용요법
+    "KSLA2022_SEC_0070": ["risk", "medication"],                      # 노인의 이상지질혈증
+    "KSLA2022_SEC_0071": ["pediatric", "screening"],                  # 소아청소년 — 권고안·역학
+    "KSLA2022_SEC_0072": ["pediatric", "diagnosis", "screening"],     # 소아청소년 — 진단
+    "KSLA2022_SEC_0073": ["pediatric", "diet", "lifestyle"],          # 소아청소년 — 식사요법·생활습관
+    "KSLA2022_SEC_0074": ["pediatric", "medication"],                 # 소아청소년 — 약물치료·FH
+    "KSLA2022_SEC_0075": ["diagnosis"],                               # 가족성 고콜레스테롤혈증 (FH) — 진단기준
+    "KSLA2022_SEC_0076": ["medication"],                              # 가족성 고콜레스테롤혈증 (FH) — 치료
+    "KSLA2022_SEC_0077": ["complication", "risk"],                    # 임신 중 이상지질혈증 — 권고안·지질대사
+    "KSLA2022_SEC_0078": ["complication"],                            # 임신 중 — 지질의 태반통과
+    "KSLA2022_SEC_0079": ["complication"],                            # 임신 중 — 합병증
+    "KSLA2022_SEC_0080": ["complication", "medication", "lifestyle"], # 임신 중 — 치료
+    # ── figures (기존 유지) ───────────────────────────────────
     "DYS_FIG_001": ["diagnosis"],
     "DYS_FIG_002": ["medication", "risk"],
     "DYS_FIG_003": ["medication", "risk"],
@@ -546,7 +594,7 @@ _CHALLENGE_CATALOG: dict[str, list[str]] = {
 TOPIC_MAPPING: dict[str, list[str]] = {
     **_KDA2025,
     **_KSH2026,
-    **_KSOLA2022,
+    **_KSLA2022,
     **_GUIDE,
     **_CHALLENGE_CATALOG,
 }
