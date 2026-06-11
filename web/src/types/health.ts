@@ -14,12 +14,7 @@ export type RecordType =
   | "WAIST"
   | "profile";
 
-export type SubType =
-  | "HOME"
-  | "HOSPITAL"
-  | "FASTING"
-  | "POSTMEAL"
-  | null;
+export type SubType = "HOME" | "HOSPITAL" | "FASTING" | "POSTMEAL" | null;
 
 /** 건강 기록 생성 요청 */
 export interface CreateHealthRecordRequest {
@@ -173,7 +168,7 @@ export type StatPeriod = "1w" | "1m" | "3m" | "6m";
 
 export interface StatSeriesPoint {
   measured_at: string;
-  primary_value: string;  /* Decimal → string */
+  primary_value: string; /* Decimal → string */
   secondary_value?: string | null;
   sub_type?: string | null;
   level?: string | null;
@@ -201,7 +196,11 @@ export interface HealthStatisticsResponse {
 export interface ContributingFactor {
   factor: string;
   weight: number;
-  description?: string;
+  description?: string | null;
+  /** 기여요인 한글명. 룰 폴백 시 null. */
+  name_kor?: string | null;
+  /** 방향 라벨. 항상 존재. "위험 증가↑" | "위험 감소↓" */
+  direction?: string;
 }
 
 export interface PredictionDetail {
@@ -210,6 +209,8 @@ export interface PredictionDetail {
   risk_score: number;
   risk_level: "NORMAL" | "CAUTION" | "RISK" | "HIGH_RISK";
   risk_grade: RiskGrade;
+  /** risk_score 기반 5단계 한글 라벨. "매우 낮음"|"낮음"|"보통"|"높음"|"매우 높음" */
+  risk_level_label?: string;
   contributing_factors: ContributingFactor[];
   disclaimer?: string;
   created_at: string;
@@ -221,7 +222,12 @@ export interface PredictionDetailResponse {
 
 /* ── 권고사항 ─────────────────────────────── */
 
-export type RecommendationCategory = "EXERCISE" | "DIET" | "SMOKING" | "SLEEP" | "GENERAL";
+export type RecommendationCategory =
+  | "EXERCISE"
+  | "DIET"
+  | "SMOKING"
+  | "SLEEP"
+  | "GENERAL";
 
 export interface RiskRecommendation {
   id?: number;
@@ -270,7 +276,10 @@ export interface DiseaseRiskSummaryEntry {
 
 export interface MonthlyReportResponse {
   year_month: string; /* YYYY-MM */
-  disease_risk_summary: Record<string, DiseaseRiskSummaryEntry>; /* keys: HYPERTENSION|DIABETES|CARDIOVASCULAR */
+  disease_risk_summary: Record<
+    string,
+    DiseaseRiskSummaryEntry
+  >; /* keys: HYPERTENSION|DIABETES|CARDIOVASCULAR */
   health_data_summary: Record<string, unknown>;
   challenge_summary: Record<string, unknown> & Partial<ChallengeSummary>;
   pdf_url: string | null;
@@ -299,7 +308,7 @@ export interface WizardFormStep2 {
 
 /** Step 3: 가족력 */
 export interface WizardFormStep3 {
-  family_dm: number;   /* 1=있음 / 0=없음 / -1=모름 */
+  family_dm: number; /* 1=있음 / 0=없음 / -1=모름 */
   family_hp: number;
   family_hl: number;
 }
@@ -309,7 +318,7 @@ export interface WizardFormStep4 {
   /* 흡연 UI 선택값 */
   smoking_choice: "CURRENT" | "QUIT" | "NEVER";
   /* 음주 */
-  alcohol_freq_y: number | null;  /* null = 미선택 */
+  alcohol_freq_y: number | null; /* null = 미선택 */
   alcohol_cup: number | null;
 }
 
@@ -333,10 +342,10 @@ export interface WizardFormStep6 {
 
 /** Step 7: 여성전용·빈혈·추가정보 */
 export interface WizardFormStep7 {
-  is_menopause: number | null;          /* 1=예 / 0=아니오 / null=스킵(남성) */
-  ocp_taking: boolean | null;           /* UI 선택. null=스킵(남성) */
-  ocp_total_months: string;             /* ocp_taking=true 일 때만 유효 */
-  anemia: number | null;               /* 1=예 / 0=아니오 / null=모름(미전송) */
+  is_menopause: number | null; /* 1=예 / 0=아니오 / null=스킵(남성) */
+  ocp_taking: boolean | null; /* UI 선택. null=스킵(남성) */
+  ocp_total_months: string; /* ocp_taking=true 일 때만 유효 */
+  anemia: number | null; /* 1=예 / 0=아니오 / null=모름(미전송) */
   chronic_diseases: string[];
   pregnancy_status: "NOT_APPLICABLE" | "PREGNANT" | "POSTPARTUM";
 }
