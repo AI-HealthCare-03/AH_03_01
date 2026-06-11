@@ -156,14 +156,14 @@ export default function DetailTab() {
 
   const profile = rawProfile as HealthProfileDetail | null;
 
-  /* 날짜 선택 시 해당 날짜 기록으로 체중/허리둘레 대체 */
-  const displayWeightKg: number | null | undefined = selectedDate && weightRecords && weightRecords.length > 0
-    ? parseFloat(weightRecords[0].primary_value)
-    : profile?.weight_kg != null ? Number(profile.weight_kg) : null;
+  /* 날짜 선택 시 해당 날짜 기록만 사용 (없으면 null), 미선택 시 프로필 기본값 사용 */
+  const displayWeightKg: number | null = selectedDate
+    ? (weightRecords && weightRecords.length > 0 ? parseFloat(weightRecords[0].primary_value) : null)
+    : (profile?.weight_kg != null ? Number(profile.weight_kg) : null);
 
-  const displayWaistCm: number | null | undefined = selectedDate && waistRecords && waistRecords.length > 0
-    ? parseFloat(waistRecords[0].primary_value)
-    : profile?.waist_cm != null ? Number(profile.waist_cm) : null;
+  const displayWaistCm: number | null = selectedDate
+    ? (waistRecords && waistRecords.length > 0 ? parseFloat(waistRecords[0].primary_value) : null)
+    : (profile?.waist_cm != null ? Number(profile.waist_cm) : null);
 
   const bmi =
     profile?.height_cm && displayWeightKg
