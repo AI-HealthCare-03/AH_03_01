@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { format } from "date-fns";
 import { useHealthProfile } from "@/hooks/queries/useHealthProfile";
 import { useHealthRecordList } from "@/hooks/queries/useHealthRecordList";
 import {
@@ -66,7 +68,13 @@ function Disclaimer() {
 /* ── 메인 컴포넌트 ─────────────────────── */
 
 export default function SummaryTab() {
+  const [selectedDate, setSelectedDate] = useState("");
+  const today = format(new Date(), "yyyy-MM-dd");
+  const hasDateFilter = selectedDate !== "";
+
   const { data: profile, isLoading: profileLoading } = useHealthProfile();
+
+  /* 최신 기록 쿼리 (항상 실행) */
   const { data: bpList, isLoading: bpLoading } = useHealthRecordList({
     recordType: "BLOOD_PRESSURE",
     size: 1,
@@ -80,6 +88,24 @@ export default function SummaryTab() {
     recordType: "HBA1C",
     size: 1,
   });
+
+  /* 날짜 지정 쿼리 (날짜 선택 시에만 실행) */
+  const { data: bpDateList } = useHealthRecordList(
+    { recordType: "BLOOD_PRESSURE", from: selectedDate, to: selectedDate },
+    { enabled: hasDateFilter }
+  );
+  const { data: bgDateList } = useHealthRecordList(
+    { recordType: "BLOOD_GLUCOSE", subType: "FASTING", from: selectedDate, to: selectedDate },
+    { enabled: hasDateFilter }
+  );
+  const { data: hba1cDateList } = useHealthRecordList(
+    { recordType: "HBA1C", from: selectedDate, to: selectedDate },
+    { enabled: hasDateFilter }
+  );
+  const { data: weightDateList } = useHealthRecordList(
+    { recordType: "WEIGHT", from: selectedDate, to: selectedDate },
+    { enabled: hasDateFilter }
+  );
 
   const isLoading = profileLoading || bpLoading || bgLoading || hba1cLoading;
 
@@ -96,24 +122,29 @@ export default function SummaryTab() {
     );
   }
 
+  /* ── 활성 레코드 (날짜 필터 적용 여부에 따라 선택) ── */
+  const activeBp = hasDateFilter ? (bpDateList?.[0] ?? null) : (bpList?.[0] ?? null);
+  const activeBg = hasDateFilter ? (bgDateList?.[0] ?? null) : (bgList?.[0] ?? null);
+  const activeHba1c = hasDateFilter ? (hba1cDateList?.[0] ?? null) : (hba1cList?.[0] ?? null);
+
   /* ── 값 파싱 ── */
   const heightCm = profile?.height_cm ?? null;
-  const weightKg = profile?.weight_kg ?? null;
-  const bmi =
-    heightCm && weightKg ? calcBmi(heightCm, weightKg) : null;
+  const profileWeightKg = profile?.weight_kg ?? null;
+  const dateWeightKg = weightDateList?.[0]
+    ? parseFloat(weightDateList[0].primary_value)
+    : null;
+  const weightKg = hasDateFilter ? dateWeightKg : profileWeightKg;
+  const bmi = heightCm && weightKg ? calcBmi(heightCm, weightKg) : null;
 
+  const sysParsed = activeBp ? parseFloat(activeBp.primary_value) : null;
+  const diaParsed = activeBp ? parseFloat(activeBp.secondary_value ?? "0") : null;
+  const bgParsed = activeBg ? parseFloat(activeBg.primary_value) : null;
+  const hba1cParsed = activeHba1c ? parseFloat(activeHba1c.primary_value) : null;
+
+  /* 최근 측정일 — 날짜 필터가 없을 때만 계산 */
   const latestBp = bpList?.[0] ?? null;
-  const sysParsed = latestBp ? parseFloat(latestBp.primary_value) : null;
-  const diaParsed = latestBp ? parseFloat(latestBp.secondary_value ?? "0") : null;
-
   const latestBg = bgList?.[0] ?? null;
-  const bgParsed = latestBg ? parseFloat(latestBg.primary_value) : null;
-
   const latestHba1c = hba1cList?.[0] ?? null;
-  const hba1cParsed = latestHba1c ? parseFloat(latestHba1c.primary_value) : null;
-
-  /* 최근 측정일 — 가장 최신 measured_at.
-     백엔드 HealthProfileResponse 는 updated_at 을 보내므로 그것을 우선 사용. */
   const dates: number[] = [
     latestBp?.measured_at,
     latestBg?.measured_at,
@@ -122,26 +153,51 @@ export default function SummaryTab() {
   ]
     .filter((d): d is string => Boolean(d))
     .map((d) => new Date(d).getTime());
-  const latestDate =
-    dates.length > 0 ? new Date(Math.max(...dates)) : null;
-
+  const latestDate = dates.length > 0 ? new Date(Math.max(...dates)) : null;
   const hasAnyData = latestDate !== null;
 
   return (
     <div className="space-y-5">
       {/* 상단 헤더 */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-sm text-text-secondary">
-          {hasAnyData
-            ? `최근 측정 ${latestDate!.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })}`
+          {hasDateFilter
+            ? `${selectedDate} 기록`
+            : hasAnyData
+            ? `최근 측정 ${latestDate!.toLocaleDateString("ko-KR", {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+              })}`
             : "아직 측정 기록이 없습니다"}
         </p>
-        <Link
-          href="/health-records/new"
-          className="flex items-center gap-1 px-3 py-2 bg-brand text-brand-black text-sm font-semibold rounded-[10px] hover:bg-brand-hover transition-colors"
-        >
-          + 데이터 입력
-        </Link>
+        <div className="flex items-center gap-2">
+          {/* 날짜 선택 */}
+          <div className="flex items-center gap-1">
+            <input
+              type="date"
+              max={today}
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="text-xs border border-border rounded-[8px] px-2 py-1.5 text-text-secondary bg-white focus:outline-none focus:border-text-primary"
+            />
+            {hasDateFilter && (
+              <button
+                onClick={() => setSelectedDate("")}
+                className="text-xs text-text-tertiary hover:text-text-primary px-1 py-1.5"
+                aria-label="날짜 필터 초기화"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <Link
+            href="/health-records/new"
+            className="flex items-center gap-1 px-3 py-2 bg-brand text-brand-black text-sm font-semibold rounded-[10px] hover:bg-brand-hover transition-colors"
+          >
+            + 데이터 입력
+          </Link>
+        </div>
       </div>
 
       {/* 빈 상태 */}
@@ -168,7 +224,7 @@ export default function SummaryTab() {
             label="BMI"
             value={bmi !== null ? bmi.toFixed(1) : null}
             unit="kg/m²"
-            sub={bmi !== null ? "자동 계산" : undefined}
+            sub={bmi !== null ? (hasDateFilter ? "해당 날짜 체중 기준" : "자동 계산") : undefined}
             status={bmi !== null ? getBmiStatus(bmi) : "N/A"}
           />
           <MetricCard
