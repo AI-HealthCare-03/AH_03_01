@@ -233,15 +233,9 @@ _CHALLENGE_CATALOG_PATTERN = re.compile(
 
 # 질환 감지 — diseases 결정에 사용.
 _DISEASE_PATTERNS: dict[str, re.Pattern[str]] = {
-    "diabetes": re.compile(
-        r"당뇨|혈당|HbA1c|당화혈색소|인슐린|저혈당|고혈당|공복혈당|식후혈당"
-    ),
-    "hypertension": re.compile(
-        r"고혈압|혈압|수축기|이완기|DASH\s*식단"
-    ),
-    "dyslipidemia": re.compile(
-        r"이상지질혈증|고지혈증|콜레스테롤|LDL|HDL|중성지방|TG\b|스타틴|동맥경화"
-    ),
+    "diabetes": re.compile(r"당뇨|혈당|HbA1c|당화혈색소|인슐린|저혈당|고혈당|공복혈당|식후혈당"),
+    "hypertension": re.compile(r"고혈압|혈압|수축기|이완기|DASH\s*식단"),
+    "dyslipidemia": re.compile(r"이상지질혈증|고지혈증|콜레스테롤|LDL|HDL|중성지방|TG\b|스타틴|동맥경화"),
 }
 
 # 토픽 감지 — topics 결정에 사용. 순서 무관, 모두 매칭.
@@ -255,13 +249,9 @@ _TOPIC_PATTERNS: dict[str, re.Pattern[str]] = {
     "weight": re.compile(r"체중|비만|BMI|살|다이어트|허리둘레|과체중"),
     "smoking": re.compile(r"금연|흡연|담배"),
     "alcohol": re.compile(r"음주|절주|술"),
-    "complication": re.compile(
-        r"합병증|신장|망막|신경병증|알부민뇨|단백뇨|뇌졸중|심근경색|심부전|말초혈관"
-    ),
+    "complication": re.compile(r"합병증|신장|망막|신경병증|알부민뇨|단백뇨|뇌졸중|심근경색|심부전|말초혈관"),
     "risk": re.compile(r"위험도|위험인자|위험군|심혈관\s*위험|위험\s*평가|위험\s*분석"),
-    "monitoring": re.compile(
-        r"측정|모니터링|목표\s*수치|추적|자가\s*측정|혈압\s*재|혈당\s*재|관리\s*목표"
-    ),
+    "monitoring": re.compile(r"측정|모니터링|목표\s*수치|추적|자가\s*측정|혈압\s*재|혈당\s*재|관리\s*목표"),
     "diagnosis": re.compile(r"진단|기준|분류|선별|검사|수치\s*해석|정상\s*범위"),
     "lifestyle": re.compile(r"생활습관|수면|스트레스|자기관리|일상|관리\s*(방법|전략|개선|지침)"),
     "challenge": re.compile(r"챌린지|챌린지\s*참여|챌린지\s*인증"),

@@ -74,6 +74,7 @@ class ReportCreateRequest(BaseModel):
 
 # ── Quiz DTOs ──────────────────────────────────────────────────────────────────
 
+
 class QuizResponse(BaseSerializerModel):
     id: int
     question: str

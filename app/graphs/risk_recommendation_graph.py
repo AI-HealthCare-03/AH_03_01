@@ -697,7 +697,9 @@ def _format_eligible_templates_block(eligible: list[EligibleTemplate]) -> str:
     lines = ["[추천 가능 챌린지 템플릿 — 이 목록에 있는 template_id 만 추천 가능]"]
     for t in eligible:
         sub = f" / {t.sub_category}" if t.sub_category else ""
-        lines.append(f"- id={t.template_id}  {t.title}  ({t.category}{sub}, {t.difficulty}, 우선도 힌트: {t.priority_hint})")
+        lines.append(
+            f"- id={t.template_id}  {t.title}  ({t.category}{sub}, {t.difficulty}, 우선도 힌트: {t.priority_hint})"
+        )
     return "\n".join(lines) + "\n\n"
 
 
@@ -710,7 +712,7 @@ def _parse_recommendation_json(draft: str) -> tuple[str, list[dict[str, Any]]]:
     if not m:
         return draft, []
     json_str = m.group(1)
-    clean = draft[: m.start()].rstrip() + draft[m.end():]
+    clean = draft[: m.start()].rstrip() + draft[m.end() :]
     try:
         items = json.loads(json_str)
         if not isinstance(items, list):
@@ -739,10 +741,14 @@ async def generate_recommendation(state: RiskState) -> dict[str, Any]:
 
     allowed_ids = {t.template_id for t in eligible}
     json_instruction = (
-        "\n\n답변 본문 작성 후, 아래 형식으로 추천 챌린지 JSON 블록을 **반드시** 본문 끝에 붙이세요 "
-        "(템플릿 목록의 id 만 사용, 최대 3개):\n"
-        '<!--RECS:[{"template_id": <id>, "priority": "TOP"|"RECOMMENDED"|"OPTIONAL", "reason": "한국어 한 줄 이유"}]-->'
-    ) if allowed_ids else ""
+        (
+            "\n\n답변 본문 작성 후, 아래 형식으로 추천 챌린지 JSON 블록을 **반드시** 본문 끝에 붙이세요 "
+            "(템플릿 목록의 id 만 사용, 최대 3개):\n"
+            '<!--RECS:[{"template_id": <id>, "priority": "TOP"|"RECOMMENDED"|"OPTIONAL", "reason": "한국어 한 줄 이유"}]-->'
+        )
+        if allowed_ids
+        else ""
+    )
 
     user_prompt = (
         f"{_format_predictions_block(predictions)}"

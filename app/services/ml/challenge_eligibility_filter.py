@@ -202,7 +202,11 @@ async def filter_eligible_templates(
         )
 
     # TOP 우선, 같으면 템플릿 ID 오름차순
-    _priority_order = {RecommendationPriority.TOP: 0, RecommendationPriority.RECOMMENDED: 1, RecommendationPriority.OPTIONAL: 2}
+    _priority_order = {
+        RecommendationPriority.TOP: 0,
+        RecommendationPriority.RECOMMENDED: 1,
+        RecommendationPriority.OPTIONAL: 2,
+    }
     eligible.sort(key=lambda e: (_priority_order[e.priority_hint], e.template_id))
 
     priority_reasons: list[str] = []
