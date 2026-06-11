@@ -23,6 +23,8 @@ import type { DiseaseType } from "@/types/api";
 export async function fetchHealthRecordList(params: {
   recordType?: string;
   subType?: string;
+  from?: string;
+  to?: string;
   page?: number;
   size?: number;
 }): Promise<HealthRecordItem[]> {
