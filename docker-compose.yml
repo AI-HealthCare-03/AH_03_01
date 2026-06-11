@@ -109,6 +109,35 @@ services:
       redis:
         condition: service_healthy
 
+  # 4-2. Risk Inference Worker (위험도 예측 ML 추론 — CatBoost/LightGBM, queue:ml-inference)
+  # SigLIP 워커(ai-worker)와 분리된 전용 프로세스. SigLIP/torch 없이 ML 부스팅 추론만 담당.
+  risk-worker:
+    container_name: risk-worker
+    build:
+      context: .  # 프로젝트 루트를 빌드 컨텍스트로 지정
+      dockerfile: ai_worker/risk_inference/Dockerfile
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    image: ${DOCKER_USER}/${DOCKER_REPOSITORY}:risk-${AI_WORKER_VERSION}
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      REDIS_HOST: redis
+    restart: always
+    mem_limit: 2G
+    volumes:
+      - ./models:/app/models        # ML 모델 아티팩트 (preprocess.py + 모델 가중치). 추론에 필수.
+      - ./ai_worker:/app/ai_worker  # 코드 변경 즉시 반영 (컨테이너 restart 만 필요)
+      - ./app:/app/app              # 워커가 import 하는 app 모듈도 동기화
+    networks:
+      - ws
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   # 5. Nginx (웹 서버 - 요청 리버스 프록시로 전달)
   nginx:
     container_name: nginx
