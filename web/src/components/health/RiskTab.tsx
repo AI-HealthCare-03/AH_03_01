@@ -885,30 +885,32 @@ export default function RiskTab() {
     setMlUnavailable(false);
     setStageLabel(null);
     setIsStreaming(true);
-    await streamRagRiskRecommendation({
-      // 그래프 진행 단계를 버튼 라벨로 노출 (건강정보 확인 → 위험도 예측 → 자료 검색 → 권고 작성 → 검토).
-      onStage: ({ label }) => setStageLabel(label),
-      onDone: (result) => {
-        // 비스트림과 동일: 결과를 캐시에 저장 후 데이터부족/fallback/성공 분기.
-        queryClient.setQueryData(RAG_RISK_RECOMMENDATION_KEY, result);
-        if (!result.has_required_data) {
-          setPredictError("건강데이터를 전부 입력해주셔야 예측 결과를 확인하실 수 있습니다.");
-        } else if (result.is_fallback) {
-          setMlUnavailable(true);
-        } else {
-          // 성공 — latestPredictions 도 갱신해 latestDate 반영
-          void queryClient.invalidateQueries({ queryKey: LATEST_PREDICTIONS_KEY });
-        }
-        setStageLabel(null);
-        setIsStreaming(false);
-      },
-      onError: (message) => {
-        // DB 장애·throttle 등은 error 이벤트로 전달됨(스트림은 HTTP status 대신 메시지).
-        setPredictError(message || "예측 실행 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
-        setStageLabel(null);
-        setIsStreaming(false);
-      },
-    });
+    try {
+      await streamRagRiskRecommendation({
+        // 그래프 진행 단계를 버튼 라벨로 노출 (건강정보 확인 → 위험도 예측 → 자료 검색 → 권고 작성 → 검토).
+        onStage: ({ label }) => setStageLabel(label),
+        onDone: (result) => {
+          // 비스트림과 동일: 결과를 캐시에 저장 후 데이터부족/fallback/성공 분기.
+          queryClient.setQueryData(RAG_RISK_RECOMMENDATION_KEY, result);
+          if (!result.has_required_data) {
+            setPredictError("건강데이터를 전부 입력해주셔야 예측 결과를 확인하실 수 있습니다.");
+          } else if (result.is_fallback) {
+            setMlUnavailable(true);
+          } else {
+            // 성공 — latestPredictions 도 갱신해 latestDate 반영
+            void queryClient.invalidateQueries({ queryKey: LATEST_PREDICTIONS_KEY });
+          }
+        },
+        onError: (message) => {
+          // DB 장애·throttle 등은 error 이벤트로 전달됨(스트림은 HTTP status 대신 메시지).
+          setPredictError(message || "예측 실행 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+        },
+      });
+    } finally {
+      // 스트림이 done/error 이벤트 없이 비정상 종료돼도 버튼 로딩이 풀리도록 항상 정리.
+      setStageLabel(null);
+      setIsStreaming(false);
+    }
   };
 
   const latestItems = latestPredictions?.items ?? [];
