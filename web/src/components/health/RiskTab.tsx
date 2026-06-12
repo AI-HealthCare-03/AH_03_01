@@ -6,7 +6,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useLatestPredictions, LATEST_PREDICTIONS_KEY } from "@/hooks/queries/useLatestPredictions";
 import { useChallengeRecommendations } from "@/hooks/queries/useChallengeRecommendations";
-import { useRagRiskRecommendation, RAG_RISK_RECOMMENDATION_KEY } from "@/hooks/queries/useRagRiskRecommendation";
+import { RAG_RISK_RECOMMENDATION_KEY } from "@/hooks/queries/useRagRiskRecommendation";
+import { streamRagRiskRecommendation } from "@/lib/api/health";
 import { useMe } from "@/hooks/queries/useMe";
 import { useProfileCompleteness } from "@/hooks/queries/useProfileCompleteness";
 import RiskSemiGauge from "@/components/health/RiskSemiGauge";
@@ -728,6 +729,7 @@ interface CompletenessGateProps {
   missingFields: string[];
   complete: boolean;
   isPredicting: boolean;
+  stageLabel?: string | null;
   onPredict: () => void;
 }
 
@@ -738,6 +740,7 @@ function CompletenessGate({
   missingFields,
   complete,
   isPredicting,
+  stageLabel,
   onPredict,
 }: CompletenessGateProps) {
   /* SVG 링 파라미터 */
@@ -837,7 +840,7 @@ function CompletenessGate({
                 {isPredicting ? (
                   <>
                     <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" aria-hidden="true" />
-                    분석 중...
+                    {stageLabel || "분석 중..."}
                   </>
                 ) : (
                   "위험도 예측 실행 →"
@@ -860,11 +863,12 @@ export default function RiskTab() {
     useState<DiseaseType>("HYPERTENSION");
   const [predictError, setPredictError] = useState<string | null>(null);
   const [mlUnavailable, setMlUnavailable] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [stageLabel, setStageLabel] = useState<string | null>(null);
 
   const { data: meData } = useMe();
   const { data: latestPredictions, isLoading: latestLoading } = useLatestPredictions();
   const { data: completeness, isLoading: completenessLoading } = useProfileCompleteness();
-  const ragRecommendation = useRagRiskRecommendation();
   const queryClient = useQueryClient();
 
   // 예측 실행 이후 캐시된 RAG 결과 읽기 (useMutation onSuccess 에서 setQueryData 로 저장됨)
@@ -875,44 +879,36 @@ export default function RiskTab() {
 
   const isLoading = latestLoading || completenessLoading;
 
-  /* ── 예측 실행 핸들러 ── */
+  /* ── 예측 실행 핸들러 (SSE 스트리밍) ── */
   const handlePredict = async () => {
     setPredictError(null);
     setMlUnavailable(false);
-    try {
-      const result = await ragRecommendation.mutateAsync();
-      // has_required_data=false: 데이터 부족 응답 (게이트 사전 차단이지만 방어적 처리)
-      if (!result.has_required_data) {
-        setPredictError("건강데이터를 전부 입력해주셔야 예측 결과를 확인하실 수 있습니다.");
-        return;
-      }
-      // is_fallback=true: ML 장애 fallback
-      if (result.is_fallback) {
-        setMlUnavailable(true);
-        return;
-      }
-      // 성공 — latestPredictions 도 갱신해 latestDate 반영
-      await queryClient.invalidateQueries({ queryKey: LATEST_PREDICTIONS_KEY });
-    } catch (err: unknown) {
-      const axiosErr = err as {
-        response?: { status: number; data?: { detail?: { message?: string; code?: string } } };
-      };
-      const status = axiosErr?.response?.status;
-      const detail = axiosErr?.response?.data?.detail;
-      if (status === 503 && detail?.code === "ML_UNAVAILABLE") {
-        setMlUnavailable(true);
-        return;
-      }
-      if (status === 429) {
-        setPredictError("요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.");
-        return;
-      }
-      if (status === 422) {
-        setPredictError(detail?.message ?? "건강데이터를 전부 입력해주셔야 예측 결과를 확인하실 수 있습니다.");
-        return;
-      }
-      setPredictError("예측 실행 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
-    }
+    setStageLabel(null);
+    setIsStreaming(true);
+    await streamRagRiskRecommendation({
+      // 그래프 진행 단계를 버튼 라벨로 노출 (건강정보 확인 → 위험도 예측 → 자료 검색 → 권고 작성 → 검토).
+      onStage: ({ label }) => setStageLabel(label),
+      onDone: (result) => {
+        // 비스트림과 동일: 결과를 캐시에 저장 후 데이터부족/fallback/성공 분기.
+        queryClient.setQueryData(RAG_RISK_RECOMMENDATION_KEY, result);
+        if (!result.has_required_data) {
+          setPredictError("건강데이터를 전부 입력해주셔야 예측 결과를 확인하실 수 있습니다.");
+        } else if (result.is_fallback) {
+          setMlUnavailable(true);
+        } else {
+          // 성공 — latestPredictions 도 갱신해 latestDate 반영
+          void queryClient.invalidateQueries({ queryKey: LATEST_PREDICTIONS_KEY });
+        }
+        setStageLabel(null);
+        setIsStreaming(false);
+      },
+      onError: (message) => {
+        // DB 장애·throttle 등은 error 이벤트로 전달됨(스트림은 HTTP status 대신 메시지).
+        setPredictError(message || "예측 실행 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+        setStageLabel(null);
+        setIsStreaming(false);
+      },
+    });
   };
 
   const latestItems = latestPredictions?.items ?? [];
@@ -1002,7 +998,7 @@ export default function RiskTab() {
 
   const userName = meData?.nickname ?? meData?.name ?? null;
 
-  const isPredicting = ragRecommendation.isPending;
+  const isPredicting = isStreaming;
 
   /* ── 로딩 ── */
   if (isLoading || completenessLoading) {
@@ -1032,6 +1028,7 @@ export default function RiskTab() {
           missingFields={completeness?.missing_fields ?? []}
           complete={false}
           isPredicting={isPredicting}
+          stageLabel={stageLabel}
           onPredict={handlePredict}
         />
         {predictError && (
@@ -1061,6 +1058,7 @@ export default function RiskTab() {
           missingFields={completeness?.missing_fields ?? []}
           complete
           isPredicting={isPredicting}
+          stageLabel={stageLabel}
           onPredict={handlePredict}
         />
         <div className="text-center py-8 space-y-2">
@@ -1083,6 +1081,7 @@ export default function RiskTab() {
           missingFields={completeness?.missing_fields ?? []}
           complete
           isPredicting={isPredicting}
+          stageLabel={stageLabel}
           onPredict={handlePredict}
         />
         {predictError && (
@@ -1112,6 +1111,7 @@ export default function RiskTab() {
         missingFields={completeness?.missing_fields ?? []}
         complete={completeness?.complete ?? false}
         isPredicting={isPredicting}
+        stageLabel={stageLabel}
         onPredict={handlePredict}
       />
       {predictError && (
