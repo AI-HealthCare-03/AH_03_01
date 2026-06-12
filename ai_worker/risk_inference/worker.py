@@ -237,11 +237,28 @@ async def _main_loop() -> None:
         logger.info("risk_inference worker stopped")
 
 
+def _verify_model_loaded() -> None:
+    """부팅 시 모델 적재를 즉시 검증해 '조용한 룰 폴백'을 표면화한다.
+
+    모델을 못 올린 워커는 매 job 을 FAILED 처리할 뿐이고(그래프는 룰 폴백) 운영이
+    이를 알아채기 어렵다. RISK_REQUIRE_ML=true 면 프로세스를 종료(non-zero)시켜
+    restart 루프로 장애를 드러내고, false 면 룰 전용 모드임을 경고로 남긴다.
+    """
+    if _predictor.warmup():
+        logger.info("risk model 적재 완료 — ML 추론 활성")
+        return
+    if config.RISK_REQUIRE_ML:
+        logger.critical("risk model 적재 실패 — RISK_REQUIRE_ML=true, 워커 종료(restart 루프로 장애 표면화)")
+        raise RuntimeError("risk inference model load failed (RISK_REQUIRE_ML=true)")
+    logger.error("risk model 적재 실패 — 룰 전용 폴백 모드로 가동. 모든 예측이 rule-v1 로 처리됩니다.")
+
+
 async def main() -> None:
     """엔트리포인트 — `python -m ai_worker.risk_inference.worker` 또는
     ai_worker/main.py 의 asyncio.gather 에 추가하여 활성화.
     """
     _install_signal_handlers()
+    _verify_model_loaded()
     async with _tortoise_session():
         await _main_loop()
 
