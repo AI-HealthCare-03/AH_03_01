@@ -827,6 +827,7 @@ def _parse_tips_diet(draft: str) -> tuple[str, list[str], list[str]]:
 
     반환: (두 블록이 제거된 본문, tips 문자열 리스트, diet 문자열 리스트).
     """
+    # 순서 무관 — _extract_json_block 은 re.search 로 태그명 기준 매칭하므로 LLM 출력 순서에 영향받지 않음.
     clean, raw_tips = _extract_json_block(draft, "TIPS")
     clean, raw_diet = _extract_json_block(clean, "DIET")
     # 응답·캐시 비대화 방지: 항목 수(최대 5개)·길이(200자) 상한 (악의/오작동 LLM 출력 가드).
