@@ -2,25 +2,38 @@
 RAGAS 평가 파이프라인
 ======================================
 평가 지표:
-    Faithfulness      ← 답변이 검색 문서에 근거하는가? (목표 0.85 이상)
-    Context Precision ← 검색된 문서가 정확한가?
-    Context Recall    ← 필요한 정보를 잘 가져왔는가?
-    Answer Relevancy  ← [RAGAS 원본, 참고용] 한국어 역질문 매칭 한계
+    Faithfulness        ← 답변이 검색 문서에 근거하는가? (목표 0.85 이상)
+    Context Precision   ← 검색된 문서가 정확한가? (ground_truth=answer 기반)
+    Context Recall      ← 필요한 정보를 잘 가져왔는가? (eval_metrics 포함 항목만)
+    Answer Relevancy    ← [RAGAS 원본, 참고용] 한국어 역질문 매칭 한계
     KO Answer Relevancy ← [커스텀] 한국어 전용 직접 평가 (신뢰도 높음)
+    Reference Hit Rate  ← [커스텀] reference_context_ids 기반 정답 섹션 검색 적중률
 
 데이터셋:
-    eval_dataset.json 에서 관리 — 질문 추가/수정은 해당 파일만 편집하세요.
-    schema: [{ category, question, ground_truth }, ...]
+    rag_eval_qa_dataset_v4.jsonl — 질문 추가/수정은 해당 파일만 편집하세요.
+    schema: {id, category, sub_topic, difficulty, question, answer, disclaimer,
+             reference_context_ids, question_type, source_document,
+             safety_level, is_adversarial, eval_metrics}
+    ※ ground_truth 필드 없음 → answer 필드를 대신 사용
 
 변경 이력:
-    - crag_pipeline(CRAG) → ChatRAGGraph(chat_rag_graph) 기반으로 전환
-    - run_chat_rag() 비동기 API 사용, ChatRAGResult에서 sources 추출
-    - asyncio.run() 으로 비동기 답변 수집 실행
+    v1: crag_pipeline(CRAG) → ChatRAGGraph(chat_rag_graph) 기반으로 전환
+    v2: per-item eval_metrics 존중 (challenge_rec context_recall 제외)
+        reference_context_ids 기반 Reference Hit Rate 지표 추가
+        카테고리 비율 유지 층화 샘플링 적용
+        eval_type 필터(dead code) → category 기반으로 교체
+        _collect_single 미사용 graph 파라미터 제거
+        KO_AR 답변 절단 600자 → 1200자
+        카테고리별 KO_AR 세분화 출력
+        per-item 상세 결과 JSON 저장
 """
 
 import asyncio
 import json
+import math
 import os
+import random
+from collections import defaultdict
 from pathlib import Path
 
 # nest_asyncio를 가장 먼저 패치 — ragas 내부 event loop 충돌 방지
@@ -45,12 +58,15 @@ from ragas.metrics import (  # noqa: E402
 # 경로 설정
 # ─────────────────────────────────────────────
 BASE = Path(__file__).parent
-EVAL_DATASET_PATH = BASE / "rag_eval_qa_dataset_v3.jsonl"
+EVAL_DATASET_PATH = BASE / "rag_eval_qa_dataset_v6.jsonl"
 EVAL_SAMPLE_SIZE = 50
+
+# 평가에서 제외할 카테고리 (v3의 eval_type="out_of_scope" 대체)
+_EXCLUDE_CATEGORIES: set[str] = {"out_of_scope"}
 
 
 # ─────────────────────────────────────────────
-# 데이터셋 로드 (eval_dataset.json)
+# 데이터셋 로드
 # ─────────────────────────────────────────────
 def load_eval_dataset(path: Path) -> list[dict]:
     if not path.exists():
@@ -78,16 +94,42 @@ load_env(BASE)
 
 
 # ─────────────────────────────────────────────
+# 층화 샘플링 (카테고리 비율 유지)
+# ─────────────────────────────────────────────
+def stratified_sample(data: list[dict], total: int, seed: int | None = None) -> list[dict]:
+    """카테고리별 비율을 유지하며 total개를 샘플링."""
+    if seed is not None:
+        random.seed(seed)
+
+    by_category: dict[str, list[dict]] = defaultdict(list)
+    for item in data:
+        by_category[item.get("category", "unknown")].append(item)
+
+    n = len(data)
+    sampled: list[dict] = []
+    for items in by_category.values():
+        quota = max(1, math.floor(len(items) / n * total))
+        sampled.extend(random.sample(items, min(quota, len(items))))
+
+    # 반올림 오차로 total 미만이면 나머지에서 무작위 보충
+    chosen_ids = {id(item) for item in sampled}
+    remaining = [item for item in data if id(item) not in chosen_ids]
+    if len(sampled) < total and remaining:
+        sampled.extend(random.sample(remaining, min(total - len(sampled), len(remaining))))
+
+    random.shuffle(sampled)
+    return sampled[:total]
+
+
+# ─────────────────────────────────────────────
 # ChatRAGGraph 로 답변 및 컨텍스트 수집
 # ─────────────────────────────────────────────
 async def _collect_single(
-    graph,
     question: str,
     idx: int,
     total: int,
-) -> tuple[str, list[str]]:
-    """단일 질문에 대해 ChatRAGGraph를 실행하고 (answer, ctx_texts) 반환."""
-
+) -> tuple[str, list[str], list[str]]:
+    """단일 질문에 대해 ChatRAGGraph를 실행하고 (answer, ctx_texts, ctx_ids) 반환."""
     print(f"\n  [{idx}/{total}] {question}")
     try:
         from app.graphs.chat_rag_graph import ChatRAGGraph, _state_to_result
@@ -103,29 +145,34 @@ async def _collect_single(
         final_state = await graph.ainvoke(initial)
         result = _state_to_result(final_state)
         answer = result.answer or ""
-        ctx_texts: list[str] = [chunk.chunk_text for chunk in (result.sources or []) if chunk.chunk_text]
+        sources = [chunk for chunk in (result.sources or []) if chunk.chunk_text]
+        ctx_texts: list[str] = [chunk.chunk_text for chunk in sources]
+        ctx_ids: list[str] = [chunk.metadata.get("section_id") or str(chunk.document_id) for chunk in sources]
     except Exception as e:
         print(f"    ❌ 오류: {e}")
         answer = ""
         ctx_texts = []
+        ctx_ids = []
 
     print(f"    ✅ 완료 (컨텍스트 {len(ctx_texts)}개)")
-    return answer, ctx_texts
+    return answer, ctx_texts, ctx_ids
 
 
 async def _collect_all(eval_dataset: list[dict]) -> dict:
     from tortoise import Tortoise
 
     from app.core.db.databases import TORTOISE_ORM
-    from app.graphs.chat_rag_graph import ChatRAGGraph  # noqa: F401
 
-    # Tortoise ORM 초기화를 가장 먼저
     await Tortoise.init(config=TORTOISE_ORM)
 
     questions: list[str] = []
     answers: list[str] = []
     contexts: list[list[str]] = []
+    context_ids: list[list[str]] = []
     ground_truths: list[str] = []
+    eval_metrics_list: list[list[str]] = []
+    reference_context_ids_list: list[list[str]] = []
+    categories: list[str] = []
     total = len(eval_dataset)
 
     print("=" * 60)
@@ -135,12 +182,17 @@ async def _collect_all(eval_dataset: list[dict]) -> dict:
     try:
         for i, item in enumerate(eval_dataset, start=1):
             question = item["question"]
+            # v4: ground_truth 필드 없음 → answer 필드를 대신 사용
             ground_truth = item.get("ground_truth") or item.get("answer", "")
-            answer, ctx_texts = await _collect_single(None, question, i, total)
+            answer, ctx_texts, ctx_ids = await _collect_single(question, i, total)
             questions.append(question)
             answers.append(answer)
             contexts.append(ctx_texts)
+            context_ids.append(ctx_ids)
             ground_truths.append(ground_truth)
+            eval_metrics_list.append(item.get("eval_metrics", ["faithfulness", "answer_relevance", "context_recall"]))
+            reference_context_ids_list.append(item.get("reference_context_ids") or [])
+            categories.append(item.get("category", "unknown"))
     finally:
         await Tortoise.close_connections()
 
@@ -148,30 +200,27 @@ async def _collect_all(eval_dataset: list[dict]) -> dict:
         "question": questions,
         "answer": answers,
         "contexts": contexts,
+        "context_ids": context_ids,
         "ground_truth": ground_truths,
+        "eval_metrics": eval_metrics_list,
+        "reference_context_ids": reference_context_ids_list,
+        "category": categories,
     }
 
 
 def collect_answers(eval_dataset: list[dict], seed: int | None = None) -> dict:
-    import random
+    # v4에는 eval_type 필드가 없으므로 category 기반으로만 필터링
+    filtered = [item for item in eval_dataset if item.get("category") not in _EXCLUDE_CATEGORIES]
 
-    import nest_asyncio
+    sampled = stratified_sample(filtered, EVAL_SAMPLE_SIZE, seed=seed)
 
-    nest_asyncio.apply()
+    from collections import Counter
 
-    # RAGAS 평가용 필터링 — 서비스 범위 밖 질문 제외
-    filtered = [
-        item
-        for item in eval_dataset
-        if item.get("category") not in ("out_of_scope",) and item.get("eval_type") not in ("out_of_scope",)
-    ]
-
-    if seed is not None:
-        random.seed(seed)
-    sampled = random.sample(filtered, min(EVAL_SAMPLE_SIZE, len(filtered)))
+    cat_counts = Counter(item.get("category") for item in sampled)
     print(
-        f"  샘플링: {len(eval_dataset)}개 중 필터링 후 {len(filtered)}개 → {len(sampled)}개 선택 (seed={seed if seed else '랜덤'})"
+        f"  층화 샘플링: {len(eval_dataset)}개 → 필터링 {len(filtered)}개 → {len(sampled)}개 선택 (seed={seed if seed is not None else '랜덤'})"
     )
+    print(f"  카테고리별: {dict(cat_counts)}")
     return asyncio.run(_collect_all(sampled))
 
 
@@ -209,7 +258,8 @@ def compute_korean_answer_relevancy(
             scores.append(0.0)
             continue
         try:
-            response = llm.invoke([HumanMessage(content=KO_AR_PROMPT.format(question=q, answer=a[:600]))])
+            # 600자 → 1200자: hard 난이도 긴 의료 답변 절단 방지
+            response = llm.invoke([HumanMessage(content=KO_AR_PROMPT.format(question=q, answer=a[:1200]))])
             score = float(response.content.strip())
             scores.append(min(max(score, 0.0), 1.0))
         except Exception:
@@ -218,9 +268,35 @@ def compute_korean_answer_relevancy(
 
 
 # ─────────────────────────────────────────────
+# Reference Context Hit Rate
+# ─────────────────────────────────────────────
+def compute_reference_context_hit_rate(
+    context_ids: list[list[str]],
+    reference_ids: list[list[str]],
+) -> list[float | None]:
+    """
+    reference_context_ids 기반 정답 섹션 검색 적중률.
+    context_ids: 각 질문에서 실제 검색된 청크의 section_id 리스트.
+    reference_ids가 비어 있으면 None(해당 항목 미적용).
+    """
+    scores = []
+    for retrieved_ids, ref_ids in zip(context_ids, reference_ids, strict=False):
+        if not ref_ids:
+            scores.append(None)
+            continue
+        if not retrieved_ids:
+            scores.append(0.0)
+            continue
+        retrieved_set = set(retrieved_ids)
+        hit = sum(1 for ref_id in ref_ids if ref_id in retrieved_set)
+        scores.append(hit / len(ref_ids))
+    return scores
+
+
+# ─────────────────────────────────────────────
 # RAGAS 평가 실행
 # ─────────────────────────────────────────────
-def run_ragas_evaluation(data: dict) -> tuple[dict, list[float]]:
+def run_ragas_evaluation(data: dict) -> tuple[dict, list[float], list[float | None]]:
     import numpy as np
 
     print("\n" + "=" * 60)
@@ -231,9 +307,22 @@ def run_ragas_evaluation(data: dict) -> tuple[dict, list[float]]:
     ragas_embeddings = LangchainEmbeddingsWrapper(OpenAIEmbeddings(model="text-embedding-3-small"))
     ko_ar_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-    dataset = Dataset.from_dict(data)
+    # eval_metrics에 context_recall이 없는 항목(challenge_rec 등)은 contexts를 비워
+    # ragas가 contexts=[] 이면 context_recall=NaN 처리하여 해당 항목 제외
+    adjusted_contexts = [
+        ctx if "context_recall" in metrics else []
+        for ctx, metrics in zip(data["contexts"], data["eval_metrics"], strict=False)
+    ]
 
-    # RAGAS 자체가 내부에서 asyncio loop 를 관리하므로 별도 loop 생성 불필요.
+    ragas_data = {
+        "question": data["question"],
+        "answer": data["answer"],
+        "contexts": adjusted_contexts,
+        "ground_truth": data["ground_truth"],
+    }
+    dataset = Dataset.from_dict(ragas_data)
+
+    # RAGAS 자체가 내부에서 asyncio loop를 관리하므로 별도 loop 생성 불필요
     ragas_result = evaluate(
         dataset=dataset,
         metrics=[
@@ -246,18 +335,23 @@ def run_ragas_evaluation(data: dict) -> tuple[dict, list[float]]:
         embeddings=ragas_embeddings,
     )
 
-    # 커스텀 한국어 AR 점수 계산
     print("\n  한국어 Answer Relevancy 계산 중...")
     ko_ar_scores = compute_korean_answer_relevancy(data["question"], data["answer"], ko_ar_llm)
     print(f"  KO Answer Relevancy: {float(np.mean(ko_ar_scores)):.4f}")
 
-    return ragas_result, ko_ar_scores
+    print("\n  Reference Context Hit Rate 계산 중...")
+    ref_hit_scores = compute_reference_context_hit_rate(data["context_ids"], data["reference_context_ids"])
+    valid_hits = [s for s in ref_hit_scores if s is not None]
+    if valid_hits:
+        print(f"  Reference Hit Rate: {float(np.mean(valid_hits)):.4f}")
+
+    return ragas_result, ko_ar_scores, ref_hit_scores
 
 
 # ─────────────────────────────────────────────
 # 결과 출력
 # ─────────────────────────────────────────────
-def print_results(ragas_result, ko_ar_scores: list[float], data: dict):
+def print_results(ragas_result, ko_ar_scores: list[float], ref_hit_scores: list[float | None], data: dict):
     import numpy as np
 
     print("\n" + "=" * 60)
@@ -270,26 +364,40 @@ def print_results(ragas_result, ko_ar_scores: list[float], data: dict):
         except Exception:
             return 0.0
 
-    scores = {
+    scores: dict[str, float] = {
         "Faithfulness": safe_float(ragas_result["faithfulness"]),
         "Context Precision": safe_float(ragas_result["context_precision"]),
         "Context Recall": safe_float(ragas_result["context_recall"]),
         "Answer Relevancy(EN)": safe_float(ragas_result["answer_relevancy"]),
         "KO Answer Relevancy": float(np.mean(ko_ar_scores)),
     }
+    valid_hits = [s for s in ref_hit_scores if s is not None]
+    if valid_hits:
+        scores["Reference Hit Rate"] = float(np.mean(valid_hits))
 
     target = 0.85
+    notes = {
+        "Answer Relevancy(EN)": " ⚠ (한국어 역질문 한계, 참고용)",
+        "KO Answer Relevancy": " ✨ (한국어 전용 직접 평가)",
+        "Reference Hit Rate": " 🎯 (정답 섹션 검색 적중률)",
+    }
     for metric, score in scores.items():
-        if metric == "Answer Relevancy(EN)":
-            note = " ⚠ (한국어 역질문 한계, 참고용)"
-        elif metric == "KO Answer Relevancy":
-            note = " ✨ (한국어 전용 직접 평가)"
-        else:
-            note = ""
         status = "✅" if score >= target else "⚠️ "
-        score_for_bar = 0.0 if (score != score) else score  # NaN 체크
+        score_for_bar = 0.0 if score != score else score  # NaN 체크
         bar = "█" * int(score_for_bar * 20) + "░" * (20 - int(score_for_bar * 20))
-        print(f"  {status} {metric:25s} {bar} {score:.4f}{note}")
+        print(f"  {status} {metric:25s} {bar} {score:.4f}{notes.get(metric, '')}")
+
+    # 카테고리별 KO_AR 세분화
+    categories = data.get("category", [])
+    if categories:
+        print("\n  📂 카테고리별 KO Answer Relevancy")
+        cat_scores: dict[str, list[float]] = defaultdict(list)
+        for cat, score in zip(categories, ko_ar_scores, strict=False):
+            cat_scores[cat].append(score)
+        for cat, sc in sorted(cat_scores.items()):
+            avg = float(np.mean(sc))
+            status = "✅" if avg >= target else "⚠️ "
+            print(f"    {status} {cat:30s} {avg:.4f} (n={len(sc)})")
 
     print()
     faith_score = scores["Faithfulness"]
@@ -301,12 +409,25 @@ def print_results(ragas_result, ko_ar_scores: list[float], data: dict):
         print(f"  ⚠️  Faithfulness 목표 미달 ({faith_score:.4f}, {gap:.4f} 부족)")
     print("=" * 60)
 
+    # per-item 상세 결과 저장
     output_path = BASE / "output" / "ragas_result.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_data = {
         "summary": {k: float(v) for k, v in scores.items()},
-        "ko_ar_per_question": [
-            {"question": q, "ko_ar_score": s} for q, s in zip(data["question"], ko_ar_scores, strict=False)
+        "per_question": [
+            {
+                "question": q,
+                "category": cat,
+                "ko_ar_score": s,
+                "ref_hit_score": rh,
+            }
+            for q, cat, s, rh in zip(
+                data["question"],
+                data.get("category", [""] * len(data["question"])),
+                ko_ar_scores,
+                ref_hit_scores,
+                strict=False,
+            )
         ],
     }
     with open(output_path, "w", encoding="utf-8") as f:
@@ -318,8 +439,8 @@ def print_results(ragas_result, ko_ar_scores: list[float], data: dict):
 # 실행
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
-    # seed=42 고정 — 매번 같은 50개 샘플로 평가해 개선 효과를 정확히 측정
+    # seed=42 고정 — 매번 같은 층화 샘플로 평가해 개선 효과를 정확히 측정
     dataset = load_eval_dataset(EVAL_DATASET_PATH)
     data = collect_answers(dataset, seed=42)
-    result, ko_ar = run_ragas_evaluation(data)
-    print_results(result, ko_ar, data)
+    result, ko_ar, ref_hits = run_ragas_evaluation(data)
+    print_results(result, ko_ar, ref_hits, data)
