@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Button from "@/components/ui/Button";
 import ChallengeCategoryIcon, { CATEGORY_CONFIG } from "@/components/challenges/common/ChallengeCategoryIcon";
@@ -19,6 +20,7 @@ interface PersonalDetailProps {
   pendingDates?: string[];
   rejectedToday?: boolean;
   onShield: () => void;
+  onQuit?: () => void;
 }
 
 export default function PersonalDetail({
@@ -27,7 +29,9 @@ export default function PersonalDetail({
   pendingDates = [],
   rejectedToday = false,
   onShield,
+  onQuit,
 }: PersonalDetailProps) {
+  const [confirmQuit, setConfirmQuit] = useState(false);
   const catConfig = CATEGORY_CONFIG[challenge.category] ?? CATEGORY_CONFIG.EXERCISE;
   const progressPct =
     challenge.total_days && challenge.total_days > 0
@@ -128,6 +132,42 @@ export default function PersonalDetail({
           <span className="font-bold text-brand-black">200 P</span>
         </div>
       </div>
+
+      {/* 챌린지 포기 */}
+      {onQuit && challenge.status === "ACTIVE" && calcDDay(challenge.end_date) >= 0 && (
+        <div className="bg-white rounded-[16px] border border-border p-5 shadow-sm">
+          {confirmQuit ? (
+            <div className="space-y-3">
+              <p className="text-sm font-bold text-text-primary">정말 포기하시겠어요?</p>
+              <p className="text-xs text-text-secondary">포기하면 챌린지가 삭제되며 되돌릴 수 없어요.</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmQuit(false)}
+                  className="flex-1 py-2 rounded-[10px] border border-border text-sm font-semibold text-text-secondary"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={onQuit}
+                  className="flex-1 py-2 rounded-[10px] bg-status-danger text-white text-sm font-semibold"
+                >
+                  포기하기
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmQuit(true)}
+              className="w-full text-xs text-text-tertiary hover:text-status-danger underline py-1"
+            >
+              챌린지 포기하기
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

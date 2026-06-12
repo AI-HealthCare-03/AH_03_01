@@ -25,6 +25,9 @@ interface GroupDetailProps {
   challenge: Challenge;
   onShield: () => void;
   initialTab?: GroupTab;
+  onLeave?: () => void;
+  onCancel?: () => void;
+  currentUserId?: string;
 }
 
 const TABS: { key: GroupTab; label: string }[] = [
@@ -37,6 +40,9 @@ export default function GroupDetail({
   challenge,
   onShield,
   initialTab = "info",
+  onLeave,
+  onCancel,
+  currentUserId,
 }: GroupDetailProps) {
   const [activeTab, setActiveTab] = useState<GroupTab>(initialTab);
   const { showToast } = useToast();
@@ -146,7 +152,13 @@ export default function GroupDetail({
         {/* 메인 탭 콘텐츠 */}
         <div className="flex-1 min-w-0">
           {activeTab === "info" && (
-            <GroupInfoTab challenge={challenge} participants={participants} />
+            <GroupInfoTab
+              challenge={challenge}
+              participants={participants}
+              currentUserId={currentUserId}
+              onLeave={onLeave}
+              onCancel={onCancel}
+            />
           )}
           {activeTab === "chat" && (
             <GroupChatTab challengeId={challenge.id} />

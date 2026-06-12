@@ -18,6 +18,9 @@ import { dDayLabel } from "@/lib/dateUtils";
 interface GroupInfoTabProps {
   challenge: Challenge;
   participants: ChallengeParticipant[];
+  currentUserId?: string;
+  onLeave?: () => void;
+  onCancel?: () => void;
 }
 
 function getInitial(name?: string): string {
@@ -41,11 +44,16 @@ function buildDateRange(start: string, end: string): string[] {
 export default function GroupInfoTab({
   challenge,
   participants,
+  currentUserId,
+  onLeave,
+  onCancel,
 }: GroupInfoTabProps) {
   const catConfig = CATEGORY_CONFIG[challenge.category] ?? CATEGORY_CONFIG.EXERCISE;
   const { showToast } = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   /* 합산 인증 내역 — 모달 열릴 때만 fetch (피드: 전체 참여자 APPROVED 인증 반환) */
   const { data: feedData, isLoading: historyLoading } = useQuery({
@@ -70,6 +78,11 @@ export default function GroupInfoTab({
     [challenge.start_date, challenge.end_date]
   );
 
+  /* 현재 사용자가 방장인지 확인 */
+  const myParticipant = currentUserId ? participants.find((p) => p.user_id === currentUserId) : undefined;
+  const isOwner = myParticipant?.role === "OWNER";
+  const canLeave = !!onLeave && !isOwner && challenge.status !== "COMPLETED";
+  const canCancel = !!onCancel && isOwner && challenge.status !== "COMPLETED";
   const participantUserIds = participants
     .map((p) => p.user_id ?? p.user?.id)
     .filter((id): id is string => typeof id === "string");
@@ -329,6 +342,78 @@ export default function GroupInfoTab({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* 챌린지 탈퇴 */}
+      {canLeave && (
+        <div className="bg-white border border-border rounded-[14px] p-4">
+          {confirmLeave ? (
+            <div className="space-y-3">
+              <p className="text-sm font-bold text-text-primary">정말 탈퇴하시겠어요?</p>
+              <p className="text-xs text-text-secondary">탈퇴 후에도 챌린지 기록은 완료 탭에서 확인할 수 있어요.</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmLeave(false)}
+                  className="flex-1 py-2 rounded-[10px] border border-border text-sm font-semibold text-text-secondary"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={onLeave}
+                  className="flex-1 py-2 rounded-[10px] bg-status-danger text-white text-sm font-semibold"
+                >
+                  탈퇴하기
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmLeave(true)}
+              className="w-full text-xs text-text-tertiary hover:text-status-danger underline py-1"
+            >
+              챌린지 탈퇴하기
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 챌린지 취소 (방장 전용) */}
+      {canCancel && (
+        <div className="bg-white border border-border rounded-[14px] p-4">
+          {confirmCancel ? (
+            <div className="space-y-3">
+              <p className="text-sm font-bold text-text-primary">정말 챌린지를 취소하시겠어요?</p>
+              <p className="text-xs text-text-secondary">취소 후에는 되돌릴 수 없으며, 모든 멤버의 챌린지가 종료돼요.</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmCancel(false)}
+                  className="flex-1 py-2 rounded-[10px] border border-border text-sm font-semibold text-text-secondary"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="flex-1 py-2 rounded-[10px] bg-status-danger text-white text-sm font-semibold"
+                >
+                  챌린지 취소하기
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmCancel(true)}
+              className="w-full text-xs text-text-tertiary hover:text-status-danger underline py-1"
+            >
+              챌린지 취소하기
+            </button>
+          )}
         </div>
       )}
 

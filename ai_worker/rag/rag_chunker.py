@@ -24,10 +24,11 @@ OUTPUT_DIR.mkdir(exist_ok=True)  # output 폴더 없으면 자동 생성
 # 대상 파일 목록
 # ─────────────────────────────────────────────
 FILES = [
-    DATA_DIR / "KDA2025_section_documentation_요약.md",
-    DATA_DIR / "KSH2022_section_documentation_요약.md",
-    DATA_DIR / "이상지질혈증_치료지침_RAG_요약.md",
-    DATA_DIR / "서비스_이용_가이드_20260522.md",
+    DATA_DIR / "KDA2025_section_documentation.md",
+    DATA_DIR / "KSH2026_section_documentation.md",
+    DATA_DIR / "KSOLA2022_section_documentation.md",
+    DATA_DIR / "CHALLENGE_CATALOG_documentation.md",
+    DATA_DIR / "서비스_이용_가이드_20260610.md",
 ]
 
 # ─────────────────────────────────────────────
