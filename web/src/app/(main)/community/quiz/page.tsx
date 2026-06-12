@@ -7,14 +7,6 @@ import QuizHistoryList from "@/components/community/QuizHistoryList";
 import type { QuizAnswerResponse, QuizAttemptHistoryItem, QuizResponse } from "@/types/community";
 
 const DAILY_LIMIT = 5;
-const BASE_DATE = new Date("2026-06-01");
-
-function getDayNumber(quizDate: string): number {
-  const diff = Math.round(
-    (new Date(quizDate).getTime() - BASE_DATE.getTime()) / (1000 * 60 * 60 * 24)
-  );
-  return diff + 1;
-}
 
 type Tab = "quiz" | "history";
 
@@ -38,10 +30,11 @@ export default function CommunityQuizPage() {
   useEffect(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
 
-    Promise.all([getAvailableQuizzes(), getQuizHistory({ size: DAILY_LIMIT })])
+    Promise.all([getAvailableQuizzes(), getQuizHistory({ size: 20 })])
       .then(([quizzes, todayHistory]) => {
         const today = todayHistory.filter((a) => a.attempted_at.slice(0, 10) === todayStr);
-        const offset = today.length;
+        // offset + queue.length 가 DAILY_LIMIT을 초과하지 않도록 캡핑
+        const offset = Math.min(today.length, Math.max(0, DAILY_LIMIT - quizzes.length));
         const points = today.reduce((sum, a) => sum + a.points_earned, 0);
 
         setAnsweredOffset(offset);
@@ -142,7 +135,7 @@ export default function CommunityQuizPage() {
                 <QuizCard
                   key={current.id}
                   quiz={current}
-                  dayNumber={getDayNumber(current.quiz_date)}
+                  dayNumber={displayNumber}
                   hasNext={currentIndex + 1 < queue.length}
                   onAnswered={handleAnswered}
                   onNext={handleNext}

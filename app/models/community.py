@@ -106,13 +106,13 @@ class HealthQuiz(models.Model):
     correct_option = fields.CharEnumField(QuizOption, max_length=1)
     explanation = fields.TextField()
     category = fields.CharEnumField(QuizCategory, max_length=20, default=QuizCategory.GENERAL)
-    quiz_date = fields.DateField()
+    quiz_date = fields.DateField(null=True)
     is_active = fields.BooleanField(default=True)
     created_at = fields.DatetimeField(auto_now_add=True)
 
     class Meta:
         table = "health_quizzes"
-        ordering = ["quiz_date", "id"]
+        ordering = ["id"]
 
 
 class QuizAttempt(models.Model):
@@ -161,3 +161,19 @@ class CommentLike(models.Model):
     class Meta:
         table = "community_comment_likes"
         unique_together = (("comment", "user"),)
+
+
+class DailyQuizAssignment(models.Model):
+    id = fields.BigIntField(primary_key=True)
+    user: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(
+        "models.User", related_name="daily_quiz_assignments", on_delete=fields.CASCADE
+    )
+    quiz: fields.ForeignKeyRelation["HealthQuiz"] = fields.ForeignKeyField(
+        "models.HealthQuiz", related_name="daily_assignments", on_delete=fields.CASCADE
+    )
+    assigned_date = fields.DateField()
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "daily_quiz_assignments"
+        unique_together = (("user", "quiz", "assigned_date"),)

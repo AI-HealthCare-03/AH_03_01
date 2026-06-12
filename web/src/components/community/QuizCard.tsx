@@ -86,9 +86,7 @@ export default function QuizCard({
     }
   }
 
-  const quizDate = new Date(quiz.quiz_date);
-  const dayLabel =
-    dayNumber != null ? `DAY ${dayNumber}` : `${quizDate.getMonth() + 1}/${quizDate.getDate()}`;
+  const dayLabel = dayNumber != null ? `Q${dayNumber}` : CATEGORY_LABEL[quiz.category] ?? quiz.category;
 
   return (
     <div className="rounded-3xl bg-brand p-6 flex flex-col gap-4">

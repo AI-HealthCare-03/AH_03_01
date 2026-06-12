@@ -1,34 +1,31 @@
 """건강 퀴즈 시드 데이터 삽입 스크립트.
 
 실행 방법:
-    docker exec -i fastapi uv run --no-sync python scripts/seed_quiz.py
+    docker cp scripts/seed_quiz.py fastapi:/tmp/seed_quiz.py
+    docker exec -i fastapi uv run --no-sync python /tmp/seed_quiz.py
 
-이미 존재하는 quiz_date 는 건너뜁니다 (멱등 실행 가능).
+이미 존재하는 question 은 건너뜁니다 (멱등 실행 가능).
+추후 데이터 추가 및 수정 필요함.
 """
 
 import asyncio
 import os
-from datetime import date
 
 import asyncpg
 
 # ── DB 접속 정보 (환경변수에서 읽음; docker-compose 내부 기본값 사용) ──────────
 DB_CONFIG = dict(
     host=os.getenv("DB_HOST", "postgres"),
-    port=int(os.getenv("DB_PORT", "3306")),
+    port=int(os.getenv("DB_PORT", "5432")),
     user=os.getenv("DB_USER", "ozcoding"),
     password=os.getenv("DB_PASSWORD", ""),
     database=os.getenv("DB_NAME", "ai_health"),
 )
 
 # ── 퀴즈 데이터 ─────────────────────────────────────────────────────────────────
-# quiz_date 는 DAY 1 = 2026-06-01 기준. 필요 시 날짜 조정.
-BASE_DATE = date(2026, 6, 1)
-
 QUIZZES = [
     # ── 당뇨 (BLOOD_SUGAR) ────────────────────────────────────────────────────
     {
-        "offset": 0,
         "category": "BLOOD_SUGAR",
         "question": "한국인 공복혈당의 정상 범위는?",
         "option_a": "60~80 mg/dL",
@@ -39,7 +36,6 @@ QUIZZES = [
         "explanation": "공복혈당 정상 범위는 70~99 mg/dL입니다. 100~125 mg/dL은 공복혈당장애(당뇨 전단계), 126 mg/dL 이상이 두 번 측정되면 당뇨병으로 진단합니다.",
     },
     {
-        "offset": 1,
         "category": "BLOOD_SUGAR",
         "question": "당화혈색소(HbA1c) 정상 기준은?",
         "option_a": "4% 미만",
@@ -50,7 +46,6 @@ QUIZZES = [
         "explanation": "HbA1c 5.7% 미만이 정상입니다. 5.7~6.4%는 당뇨 전단계, 6.5% 이상이면 당뇨병으로 진단합니다. 최근 2~3개월 평균 혈당을 반영합니다.",
     },
     {
-        "offset": 2,
         "category": "BLOOD_SUGAR",
         "question": "제2형 당뇨병의 가장 큰 위험 인자는?",
         "option_a": "바이러스 감염",
@@ -61,7 +56,6 @@ QUIZZES = [
         "explanation": "제2형 당뇨는 인슐린 저항성이 주요 원인입니다. 복부비만, 신체 활동 부족, 고칼로리 식이가 복합적으로 위험을 높입니다. 체중 5~10% 감량만으로도 발병을 늦출 수 있습니다.",
     },
     {
-        "offset": 3,
         "category": "BLOOD_SUGAR",
         "question": "저혈당 증상으로 옳지 않은 것은?",
         "option_a": "식은땀, 손 떨림",
@@ -72,7 +66,6 @@ QUIZZES = [
         "explanation": "얼굴이 붉어지고 두통이 오는 것은 고혈압 증상에 가깝습니다. 저혈당(혈당 70 mg/dL 미만)은 식은땀, 손 떨림, 심박 증가, 극심한 공복감, 어지러움이 특징입니다.",
     },
     {
-        "offset": 4,
         "category": "BLOOD_SUGAR",
         "question": "당뇨 환자에게 권장되는 하루 유산소 운동량은?",
         "option_a": "주 1회, 60분 이상",
@@ -84,7 +77,6 @@ QUIZZES = [
     },
     # ── 고혈압 (BLOOD_PRESSURE) ───────────────────────────────────────────────
     {
-        "offset": 5,
         "category": "BLOOD_PRESSURE",
         "question": "고혈압의 진단 기준(수축기/이완기)은?",
         "option_a": "120/80 mmHg 이상",
@@ -95,7 +87,6 @@ QUIZZES = [
         "explanation": "두 번 이상 측정 시 수축기 140 mmHg 이상 또는 이완기 90 mmHg 이상이면 고혈압으로 진단합니다. 130~139/80~89는 고혈압 전단계(주의혈압)입니다.",
     },
     {
-        "offset": 6,
         "category": "BLOOD_PRESSURE",
         "question": "혈압을 높이는 생활 습관으로 옳은 것은?",
         "option_a": "하루 나트륨 섭취 2,000 mg 이하 유지",
@@ -106,7 +97,6 @@ QUIZZES = [
         "explanation": "과도한 음주와 흡연은 혈관을 수축시키고 심박수를 높여 혈압을 올립니다. 반면 나트륨 제한, 규칙적 운동, 충분한 수면은 혈압 조절에 도움이 됩니다.",
     },
     {
-        "offset": 7,
         "category": "BLOOD_PRESSURE",
         "question": "고혈압 환자가 하루 나트륨 섭취 목표량은?",
         "option_a": "1,000 mg 이하",
@@ -117,7 +107,6 @@ QUIZZES = [
         "explanation": "고혈압 환자의 나트륨 섭취 목표는 하루 2,000 mg(소금 5 g) 이하입니다. 나트륨 1,000 mg 감소 시 수축기 혈압이 약 2~4 mmHg 낮아질 수 있습니다.",
     },
     {
-        "offset": 8,
         "category": "BLOOD_PRESSURE",
         "question": "혈압 측정 시 올바른 방법이 아닌 것은?",
         "option_a": "5분 이상 안정 후 측정",
@@ -128,7 +117,6 @@ QUIZZES = [
         "explanation": "운동 직후에는 일시적으로 혈압이 높아지므로 최소 30분 휴식 후 측정해야 정확합니다. 측정 전 카페인, 흡연, 식사도 피하고 5분 이상 안정을 취해야 합니다.",
     },
     {
-        "offset": 9,
         "category": "BLOOD_PRESSURE",
         "question": "고혈압 합병증으로 가장 거리가 먼 것은?",
         "option_a": "뇌졸중",
@@ -140,7 +128,6 @@ QUIZZES = [
     },
     # ── 식이 (DIET) ───────────────────────────────────────────────────────────
     {
-        "offset": 10,
         "category": "DIET",
         "question": "만성질환 예방에 도움이 되는 식사 패턴은?",
         "option_a": "고단백·저탄수화물 극단 식이",
@@ -151,7 +138,6 @@ QUIZZES = [
         "explanation": "지중해식 식단은 심혈관 질환, 당뇨, 고혈압 위험을 낮추는 것으로 다수의 임상 연구에서 입증되었습니다. 채소, 통곡물, 올리브오일, 생선, 콩류를 중심으로 합니다.",
     },
     {
-        "offset": 11,
         "category": "DIET",
         "question": "혈당 지수(GI)가 낮은 식품은?",
         "option_a": "흰 쌀밥",
@@ -163,7 +149,6 @@ QUIZZES = [
     },
     # ── 운동 (EXERCISE) ───────────────────────────────────────────────────────
     {
-        "offset": 12,
         "category": "EXERCISE",
         "question": "근력 운동이 혈당 조절에 도움이 되는 이유는?",
         "option_a": "근육이 포도당을 소비하는 주요 기관이기 때문",
@@ -175,7 +160,6 @@ QUIZZES = [
     },
     # ── 일반 (GENERAL) ────────────────────────────────────────────────────────
     {
-        "offset": 13,
         "category": "GENERAL",
         "question": "만성질환 자가 관리에서 가장 중요한 것은?",
         "option_a": "증상이 없으면 약을 중단한다",
@@ -186,7 +170,6 @@ QUIZZES = [
         "explanation": "만성질환은 증상이 없어도 지속적인 관리가 필수입니다. 정기적인 혈압·혈당 측정, 복약 순응, 건강한 식이와 운동 습관이 합병증 예방의 핵심입니다.",
     },
     {
-        "offset": 14,
         "category": "GENERAL",
         "question": "수면이 혈당·혈압에 미치는 영향으로 옳은 것은?",
         "option_a": "수면 시간은 혈당·혈압과 무관하다",
@@ -205,12 +188,7 @@ async def main() -> None:
     skipped = 0
 
     for q in QUIZZES:
-        quiz_date = date(BASE_DATE.year, BASE_DATE.month, BASE_DATE.day)
-        from datetime import timedelta
-
-        quiz_date = BASE_DATE + timedelta(days=q["offset"])
-
-        exists = await conn.fetchval('SELECT id FROM "health_quizzes" WHERE "quiz_date" = $1', quiz_date)
+        exists = await conn.fetchval('SELECT id FROM "health_quizzes" WHERE "question" = $1', q["question"])
         if exists:
             skipped += 1
             continue
@@ -219,8 +197,8 @@ async def main() -> None:
             """
             INSERT INTO "health_quizzes"
                 ("question", "option_a", "option_b", "option_c", "option_d",
-                 "correct_option", "explanation", "category", "quiz_date", "is_active")
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE)
+                 "correct_option", "explanation", "category", "is_active")
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE)
             """,
             q["question"],
             q["option_a"],
@@ -230,7 +208,6 @@ async def main() -> None:
             q["correct_option"],
             q["explanation"],
             q["category"],
-            quiz_date,
         )
         inserted += 1
 

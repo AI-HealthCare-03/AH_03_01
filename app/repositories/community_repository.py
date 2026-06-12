@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from datetime import date
 from uuid import UUID
 
@@ -8,6 +9,7 @@ from tortoise.functions import Count
 from app.models.community import (
     Comment,
     CommentLike,
+    DailyQuizAssignment,
     HealthQuiz,
     Post,
     PostCategory,
@@ -132,6 +134,15 @@ class ReportRepository:
         return report
 
 
+class DailyAssignmentRepository:
+    async def get_today_assignments(self, user_id: UUID, today: date) -> list[DailyQuizAssignment]:
+        return list(await DailyQuizAssignment.filter(user_id=user_id, assigned_date=today).prefetch_related("quiz"))
+
+    async def create_assignments(self, user_id: UUID, quiz_ids: list[int], today: date) -> None:
+        for quiz_id in quiz_ids:
+            await DailyQuizAssignment.get_or_create(user_id=user_id, quiz_id=quiz_id, assigned_date=today)
+
+
 class QuizRepository:
     async def get_quiz_by_date(self, quiz_date: date) -> HealthQuiz | None:
         return await HealthQuiz.get_or_none(quiz_date=quiz_date, is_active=True)
@@ -140,13 +151,10 @@ class QuizRepository:
         return await HealthQuiz.get_or_none(id=quiz_id, is_active=True)
 
     async def list_unanswered_quizzes(self, user_id: UUID, limit: int) -> list[HealthQuiz]:
-        attempted_ids = await QuizAttempt.filter(user_id=user_id).values_list("quiz_id", flat=True)
-        return list(
-            await HealthQuiz.filter(is_active=True, quiz_date__lte=date.today())
-            .exclude(id__in=list(attempted_ids))
-            .order_by("-quiz_date")
-            .limit(limit)
-        )
+        attempted_ids = list(await QuizAttempt.filter(user_id=user_id).values_list("quiz_id", flat=True))
+        quizzes = list(await HealthQuiz.filter(is_active=True).exclude(id__in=attempted_ids))
+        random.shuffle(quizzes)
+        return quizzes[:limit]
 
     async def get_attempt(self, user_id: UUID, quiz_id: int) -> QuizAttempt | None:
         return await QuizAttempt.get_or_none(user_id=user_id, quiz_id=quiz_id)
