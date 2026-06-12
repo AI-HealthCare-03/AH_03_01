@@ -249,20 +249,26 @@ class ParticipantService:
         existing = await self.repo.get_by_user(challenge_id, user.id)
         if existing and existing.status in {ParticipantStatus.APPROVED, ParticipantStatus.PENDING}:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 참여한 챌린지입니다.")
-        active_count = await self.repo.count_active(challenge_id)
-        if active_count >= challenge.max_participants:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="모집 정원이 가득 찼습니다.")
         async with in_transaction():
-            participant = await self.repo.create(
-                data={
-                    "challenge_id": challenge_id,
-                    "user_id": user.id,
-                    "role": ParticipantRole.MEMBER,
-                    "status": ParticipantStatus.APPROVED,
-                }
-            )
-        if active_count + 1 >= challenge.max_participants and challenge.status == ChallengeStatus.RECRUITING:
-            await self.challenge_repo.update_instance(challenge, {"status": ChallengeStatus.ACTIVE})
+            # select_for_update: 동시 참가 요청의 정원 초과 방지 (TOCTOU 차단)
+            challenge_locked = await Challenge.filter(id=challenge_id).select_for_update().first()
+            active_count = await self.repo.count_active(challenge_id)
+            if active_count >= challenge_locked.max_participants:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="모집 정원이 가득 찼습니다.")
+            if existing is not None:
+                # LEFT 후 재참가: 새 row 생성 대신 기존 row 재활성화 (unique_together 위반 방지)
+                participant = await self.repo.update_status(existing, ParticipantStatus.APPROVED)
+            else:
+                participant = await self.repo.create(
+                    data={
+                        "challenge_id": challenge_id,
+                        "user_id": user.id,
+                        "role": ParticipantRole.MEMBER,
+                        "status": ParticipantStatus.APPROVED,
+                    }
+                )
+            if active_count + 1 >= challenge_locked.max_participants and challenge_locked.status == ChallengeStatus.RECRUITING:
+                await self.challenge_repo.update_instance(challenge_locked, {"status": ChallengeStatus.ACTIVE})
         return participant
 
     async def join_public(self, user: User, challenge_id: int) -> ChallengeParticipant:
@@ -275,20 +281,26 @@ class ParticipantService:
         existing = await self.repo.get_by_user(challenge_id, user.id)
         if existing and existing.status in {ParticipantStatus.APPROVED, ParticipantStatus.PENDING}:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 참여한 챌린지입니다.")
-        active_count = await self.repo.count_active(challenge_id)
-        if active_count >= challenge.max_participants:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="모집 정원이 가득 찼습니다.")
         async with in_transaction():
-            participant = await self.repo.create(
-                data={
-                    "challenge_id": challenge_id,
-                    "user_id": user.id,
-                    "role": ParticipantRole.MEMBER,
-                    "status": ParticipantStatus.APPROVED,
-                }
-            )
-        if active_count + 1 >= challenge.max_participants and challenge.status == ChallengeStatus.RECRUITING:
-            await self.challenge_repo.update_instance(challenge, {"status": ChallengeStatus.ACTIVE})
+            # select_for_update: 동시 참가 요청의 정원 초과 방지 (TOCTOU 차단)
+            challenge_locked = await Challenge.filter(id=challenge_id).select_for_update().first()
+            active_count = await self.repo.count_active(challenge_id)
+            if active_count >= challenge_locked.max_participants:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="모집 정원이 가득 찼습니다.")
+            if existing is not None:
+                # LEFT 후 재참가: 새 row 생성 대신 기존 row 재활성화 (unique_together 위반 방지)
+                participant = await self.repo.update_status(existing, ParticipantStatus.APPROVED)
+            else:
+                participant = await self.repo.create(
+                    data={
+                        "challenge_id": challenge_id,
+                        "user_id": user.id,
+                        "role": ParticipantRole.MEMBER,
+                        "status": ParticipantStatus.APPROVED,
+                    }
+                )
+            if active_count + 1 >= challenge_locked.max_participants and challenge_locked.status == ChallengeStatus.RECRUITING:
+                await self.challenge_repo.update_instance(challenge_locked, {"status": ChallengeStatus.ACTIVE})
         return participant
 
     async def leave(self, user: User, challenge_id: int) -> None:
