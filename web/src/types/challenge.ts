@@ -105,7 +105,7 @@ export interface CreateChallengeRequest {
 }
 
 /* 챌린지 수정 요청 */
-export type UpdateChallengeRequest = Partial<CreateChallengeRequest>;
+export type UpdateChallengeRequest = Partial<CreateChallengeRequest> & { status?: ChallengeStatus };
 
 /* ─── 참여자 ─── */
 export interface ChallengeParticipant {

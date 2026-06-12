@@ -8,7 +8,7 @@ import { useChallenge } from "@/hooks/queries/useChallenge";
 import { useVerifications } from "@/hooks/queries/useVerifications";
 import { useMe } from "@/hooks/queries/useMe";
 import { useLeaveChallenge } from "@/hooks/queries/useLeaveChallenge";
-import { useDeleteChallenge } from "@/hooks/queries/useDeleteChallenge";
+import { useUpdateChallenge } from "@/hooks/queries/useUpdateChallenge";
 import PersonalDetail from "@/components/challenges/detail/PersonalDetail";
 import GroupDetail from "@/components/challenges/detail/GroupDetail";
 import NonMemberDetail from "@/components/challenges/detail/NonMemberDetail";
@@ -55,7 +55,7 @@ function ChallengeDetailContent({
   const [shieldOpen, setShieldOpen] = useState(false);
   const shieldMutation = useCreateVerification();
   const leaveMutation = useLeaveChallenge();
-  const deleteMutation = useDeleteChallenge();
+  const updateMutation = useUpdateChallenge(challengeId);
 
   /* 인증 완료 날짜 목록 (APPROVED 상태만) */
   const verifiedDates =
@@ -175,9 +175,9 @@ function ChallengeDetailContent({
     });
   };
 
-  /* 개인 챌린지 포기 핸들러 */
+  /* 개인 챌린지 포기 핸들러 — 소프트 삭제 대신 CANCELLED 로 상태 변경 */
   const handleQuit = () => {
-    deleteMutation.mutate(challengeId, {
+    updateMutation.mutate({ status: "CANCELLED" }, {
       onSuccess: () => {
         showToast("챌린지를 포기했어요.", "info");
         router.push("/challenges?tab=my");

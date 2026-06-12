@@ -96,6 +96,7 @@ class ChallengeUpdateRequest(BaseModel):
     unit: Annotated[str | None, Field(None, max_length=20)] = None
     visibility: ChallengeVisibility | None = None
     end_date: date | None = None
+    status: ChallengeStatus | None = None  # 방장만 CANCELLED 로 변경 가능 (포기)
 
 
 class ChallengeResponse(BaseSerializerModel):

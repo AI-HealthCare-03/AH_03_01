@@ -79,6 +79,11 @@ function ChallengeListContent() {
     mine: true, leftOnly: true, size: 20,
     enabled: tab === "my",
   });
+  /* 포기한(CANCELLED) 개인 챌린지 — 완료 탭 노출용 */
+  const { data: cancelledData, isLoading: cancelledLoading } = useChallenges({
+    mine: true, status: "CANCELLED", size: 20,
+    enabled: tab === "my",
+  });
 
   /* 참여하기 탭 — 그룹 모집중 챌린지 (공개 + 비공개 모두 표시) */
   const { data: joinData, isLoading: joinLoading } = useChallenges({
@@ -115,7 +120,8 @@ function ChallengeListContent() {
   const leftItems = (leftData?.items ?? []).filter(
     (c) => !allActiveItems.some((a) => a.id === c.id)
   );
-  const completedItems = [...expiredActiveItems, ...leftItems, ...(completedData?.items ?? [])];
+  const cancelledItems = cancelledData?.items ?? [];
+  const completedItems = [...expiredActiveItems, ...leftItems, ...cancelledItems, ...(completedData?.items ?? [])];
   const groupItems = joinData?.items ?? [];
   const recommendationItems = recommendationData?.items ?? [];
 
@@ -296,7 +302,7 @@ function ChallengeListContent() {
 
           {tab === "my" && mySubTab === "completed" && (
             <>
-              {completedLoading || activeLoading || recruitingLoading || leftLoading ? (
+              {completedLoading || activeLoading || recruitingLoading || leftLoading || cancelledLoading ? (
                 <div className="space-y-3">
                   {[0, 1].map((i) => (
                     <div key={i} className="h-32 bg-white rounded-[16px] border border-border animate-pulse" />

@@ -30,7 +30,9 @@ export default function ChallengeCard({
 
   const isCrisis = (challenge.missed_count ?? 0) >= 1;
   const isLeft = challenge.my_participant_status === "LEFT";
-  const dday = isLeft ? "챌린지 종료" : dDayLabel(challenge.end_date);
+  const isQuit = challenge.status === "CANCELLED";
+  const isAbandoned = isLeft || isQuit;
+  const dday = isAbandoned ? "챌린지 종료" : dDayLabel(challenge.end_date);
   const isExpired = calcDDay(challenge.end_date) < 0;
 
   // 그룹 ACTIVE 또는 RECRUITING(시작일 경과) → 인증하기 / 그룹 RECRUITING(미시작) → 소통하기 / 개인 ACTIVE → 오늘 인증하기
@@ -51,7 +53,7 @@ export default function ChallengeCard({
       href={`/challenges/${challenge.id}`}
       className={[
         "block rounded-[16px] border shadow-sm hover:shadow-md transition-shadow p-4",
-        isLeft
+        isAbandoned
           ? "bg-surface border-border opacity-70"
           : "bg-white border-border",
       ].join(" ")}
@@ -62,7 +64,7 @@ export default function ChallengeCard({
         <ChallengeCategoryIcon category={challenge.category} size="md" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
-            {isLeft ? (
+            {isAbandoned ? (
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-surface border border-border text-text-tertiary">
                 포기
               </span>
@@ -94,8 +96,8 @@ export default function ChallengeCard({
         </div>
       )}
 
-      {/* 완료/탈퇴 상태 */}
-      {(challenge.status === "COMPLETED" || isLeft) && (
+      {/* 완료/탈퇴/포기 상태 */}
+      {(challenge.status === "COMPLETED" || isAbandoned) && (
         <div className="mb-3 text-xs text-text-secondary">
           {challenge.my_progress ?? 0}/{challenge.total_days ?? 0}일 달성
         </div>
