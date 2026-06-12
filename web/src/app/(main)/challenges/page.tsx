@@ -74,9 +74,9 @@ function ChallengeListContent() {
     enabled: tab === "my",
   });
 
-  /* 참여하기 탭 — 공개 그룹 모집중 챌린지 */
+  /* 참여하기 탭 — 그룹 모집중 챌린지 (공개 + 비공개 모두 표시) */
   const { data: joinData, isLoading: joinLoading } = useChallenges({
-    scope: "GROUP", status: "RECRUITING", visibility: "PUBLIC", size: 20,
+    scope: "GROUP", status: "RECRUITING", size: 20,
     enabled: tab === "join",
   });
 
