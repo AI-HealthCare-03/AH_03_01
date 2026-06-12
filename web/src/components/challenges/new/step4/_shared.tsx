@@ -174,9 +174,10 @@ export function TitleInput({
         className="w-full h-12 px-4 rounded-[12px] border border-border text-sm focus:outline-none focus:border-brand-black bg-white"
         placeholder="챌린지 이름을 입력하세요"
       />
-      <p className="text-xs text-text-tertiary mt-1 text-right">
-        {value.length}/40
-      </p>
+      <div className="flex justify-between mt-1">
+        <p className="text-xs text-text-tertiary">2자 이상 입력해주세요</p>
+        <p className="text-xs text-text-tertiary">{value.length}/40</p>
+      </div>
     </div>
   );
 }

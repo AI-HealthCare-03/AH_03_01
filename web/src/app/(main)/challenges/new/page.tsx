@@ -142,8 +142,51 @@ function isStep4Valid(form: WizardFormState): boolean {
   /* EXERCISE */
   if (category === "EXERCISE") {
     if (!sub_category) return false;
+
     if (scope === "GROUP") {
       if (!goal_config.group_target_count) return false;
+      /* 걷기/러닝: 시간 또는 거리 선택 필요 */
+      if (sub_category === "WALKING") {
+        if (!goal_config.duration_minutes && !goal_config.distance_km && !goal_config.step_count) return false;
+      }
+      if (sub_category === "RUNNING") {
+        if (!goal_config.duration_minutes && !goal_config.distance_km) return false;
+      }
+      /* 자전거/근력: 목표 시간 선택 필요 */
+      if (sub_category === "CYCLING" || sub_category === "STRENGTH") {
+        if (!goal_config.duration_minutes) return false;
+      }
+      /* 기타: 운동 종류 입력 필요 */
+      if (sub_category === "OTHER" && !goal_config.exercise_other_type) return false;
+    } else {
+      /* 개인 */
+      const isWeekly = step3Mode === "WEEKLY_COUNT";
+      if (sub_category === "WALKING") {
+        if (!goal_config.duration_minutes && !goal_config.distance_km && !goal_config.step_count) return false;
+        if (isWeekly && !goal_config.weekly_target_count) return false;
+      }
+      if (sub_category === "RUNNING") {
+        if (!goal_config.duration_minutes && !goal_config.distance_km) return false;
+        if (isWeekly && !goal_config.weekly_target_count) return false;
+      }
+      if (sub_category === "CYCLING") {
+        /* 자전거는 항상 주간 */
+        if (!goal_config.duration_minutes) return false;
+        if (!goal_config.weekly_target_count) return false;
+      }
+      if (sub_category === "STRENGTH") {
+        if (!goal_config.duration_minutes) return false;
+        if (isWeekly && !goal_config.weekly_target_count) return false;
+      }
+      if (sub_category === "SWIMMING") {
+        /* 수영은 항상 주간 */
+        if (!goal_config.weekly_target_count) return false;
+      }
+      if (sub_category === "OTHER") {
+        /* 기타는 항상 주간 */
+        if (!goal_config.exercise_other_type) return false;
+        if (!goal_config.weekly_target_count) return false;
+      }
     }
   }
   return true;
@@ -296,6 +339,12 @@ export default function NewChallengePage() {
       /* DISEASE_CARE: step3Mode = questionnaire_template */
       const isDiseaseTemplate = form.category === "DISEASE_CARE";
 
+      /* SLEEP 그룹 SLEEP_DURATION: 선택 UI 없이 고정값이라 step3Mode 선택 시 sleep_mode 함께 설정 */
+      const isSleepGroupDuration =
+        form.category === "SLEEP" &&
+        form.scope === "GROUP" &&
+        mode === "SLEEP_DURATION";
+
       const newGoalConfig = isDietGroupType
         ? {
             ...form.goal_config,
@@ -308,6 +357,8 @@ export default function NewChallengePage() {
           }
         : isDiseaseTemplate
         ? { ...form.goal_config, questionnaire_template: mode }
+        : isSleepGroupDuration
+        ? { ...form.goal_config, sleep_mode: "SLEEP_DURATION" as const }
         : form.goal_config;
 
       updateForm({
@@ -459,6 +510,7 @@ export default function NewChallengePage() {
 
       {currentStep === 2 && (
         <WizardStep2
+          scope={form.scope}
           value={form.category}
           onChange={handleCategoryChange}
         />
