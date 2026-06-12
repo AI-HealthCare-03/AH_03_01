@@ -6,12 +6,12 @@ import { useRouter, useSearchParams } from "next/navigation";
    진행중 / 완료 / 추천 탭 컴포넌트
    ========================================= */
 
-type TabKey = "active" | "completed" | "recommended";
+type TabKey = "join" | "my" | "recommended";
 
 const TABS: { key: TabKey; label: string }[] = [
-  { key: "active", label: "진행중" },
-  { key: "completed", label: "완료" },
-  { key: "recommended", label: "추천" },
+  { key: "join", label: "참여하기" },
+  { key: "my", label: "내 챌린지" },
+  { key: "recommended", label: "맞춤 추천 챌린지" },
 ];
 
 interface ChallengeListTabsProps {
