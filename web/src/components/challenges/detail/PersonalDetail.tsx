@@ -122,7 +122,9 @@ export default function PersonalDetail({
       <div className="bg-white rounded-[16px] border border-border p-5 shadow-sm">
         <p className="text-sm font-bold text-text-primary mb-3">보상</p>
         <div className="flex items-center justify-between text-sm">
-          <span className="text-text-secondary">기간 완주 보상</span>
+          <span className="text-text-secondary">
+            {challenge.status === "COMPLETED" ? "획득한 보상" : "기간 완주 보상"}
+          </span>
           <span className="font-bold text-brand-black">200 P</span>
         </div>
       </div>

@@ -139,6 +139,7 @@ export interface ChallengeVerification {
   memo?: string | null;
   /* REJECTED 시 SigLIP2 판정 사유(점수/임계값) */
   rejection_reason?: string | null;
+  verified_date?: string | null;  /* YYYY-MM-DD, 백엔드 verified_date */
   verified_at?: string | null;
   created_at: string;
 }
