@@ -26,6 +26,7 @@ interface GroupDetailProps {
   onShield: () => void;
   initialTab?: GroupTab;
   onLeave?: () => void;
+  onCancel?: () => void;
   currentUserId?: string;
 }
 
@@ -40,6 +41,7 @@ export default function GroupDetail({
   onShield,
   initialTab = "info",
   onLeave,
+  onCancel,
   currentUserId,
 }: GroupDetailProps) {
   const [activeTab, setActiveTab] = useState<GroupTab>(initialTab);
@@ -155,6 +157,7 @@ export default function GroupDetail({
               participants={participants}
               currentUserId={currentUserId}
               onLeave={onLeave}
+              onCancel={onCancel}
             />
           )}
           {activeTab === "chat" && (

@@ -175,6 +175,19 @@ function ChallengeDetailContent({
     });
   };
 
+  /* 그룹 챌린지 취소 핸들러 (방장 전용) — CANCELLED 로 상태 변경 */
+  const handleCancel = () => {
+    updateMutation.mutate({ status: "CANCELLED" }, {
+      onSuccess: () => {
+        showToast("챌린지를 취소했어요.", "info");
+        router.push("/challenges?tab=my");
+      },
+      onError: (err) => {
+        showToast(extractErrorMessage(err), "error");
+      },
+    });
+  };
+
   /* 개인 챌린지 포기 핸들러 — 소프트 삭제 대신 CANCELLED 로 상태 변경 */
   const handleQuit = () => {
     updateMutation.mutate({ status: "CANCELLED" }, {
@@ -212,6 +225,7 @@ function ChallengeDetailContent({
           onShield={() => setShieldOpen(true)}
           initialTab={initialTab}
           onLeave={handleLeave}
+          onCancel={handleCancel}
           currentUserId={me?.id}
         />
       ) : (
