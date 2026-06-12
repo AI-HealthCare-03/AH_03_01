@@ -49,7 +49,7 @@ const VISIBILITY_OPTIONS: {
     value: "PRIVATE",
     emoji: "🔒",
     title: "비공개",
-    desc: "초대 코드로만 참여할 수 있어요",
+    desc: "목록에는 표시되지만 참여 시 초대 코드가 필요해요",
   },
 ];
 
