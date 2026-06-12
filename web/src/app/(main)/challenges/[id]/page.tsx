@@ -161,11 +161,9 @@ function ChallengeDetailContent({
     router.refresh();
   };
 
-  /* 비참여자 여부 판단:
-   * 실제로는 백엔드가 403을 반환하거나 participants API로 확인해야 함.
-   * 현재는 invite 쿼리 파라미터가 있으면 NonMember로 보여주는 간단 처리.
-   * TODO: /challenges/{id}/participants?userId=me API로 정확히 판단 */
-  const isNonMember = !!inviteCode;
+  /* 비참여자 여부: 백엔드가 is_member 필드를 내려줌 */
+  const isNonMember = challenge.is_member === false;
+  const isPrivate = challenge.visibility === "PRIVATE";
 
   return (
     <>
@@ -173,6 +171,7 @@ function ChallengeDetailContent({
         <NonMemberDetail
           challenge={challenge}
           inviteCode={inviteCode}
+          requiresCode={isPrivate}
           onJoined={handleJoined}
         />
       ) : challenge.scope === "GROUP" ? (

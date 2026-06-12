@@ -219,10 +219,20 @@ async def get_challenge(
     user: Annotated[User, Depends(get_request_user)],
     service: Annotated[ChallengeService, Depends(ChallengeService)],
 ) -> Response:
-    challenge = await service.get_owned_or_participating(user, challenge_id)
+    from app.models.challenge import ChallengeParticipant, ParticipantStatus  # noqa: PLC0415
+
+    challenge = await service.get_public(challenge_id)
+    is_creator = challenge.creator_id == user.id
+    participation = await ChallengeParticipant.filter(
+        challenge_id=challenge_id, user_id=user.id,
+    ).first()
+    is_member = is_creator or (
+        participation is not None and participation.status == ParticipantStatus.APPROVED
+    )
     payload = ChallengeResponse.model_validate(challenge).model_dump()
+    payload["is_member"] = is_member
     # 그룹 챌린지의 경우 참여자/방장에게 invite_code 노출 (코드 복사 기능)
-    if challenge.scope.value == "GROUP":
+    if challenge.scope.value == "GROUP" and is_member:
         invite_code = await service.get_active_invite_code(challenge.id)
         if invite_code:
             payload["invite_code"] = invite_code
@@ -358,9 +368,10 @@ async def participant_action(
         body = {}
     if action == "join":
         code = invite_code_q or (body.get("invite_code") if isinstance(body, dict) else None)
-        if not code:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invite_code 가 필요합니다.")
-        participant = await service.join_by_code(user, challenge_id, code)
+        if code:
+            participant = await service.join_by_code(user, challenge_id, code)
+        else:
+            participant = await service.join_public(user, challenge_id)
         return Response(
             ParticipantResponse.model_validate(participant).model_dump(mode="json"),
             status_code=status.HTTP_201_CREATED,

@@ -120,6 +120,7 @@ class ChallengeResponse(BaseSerializerModel):
     cadence: ChallengeCadence = ChallengeCadence.DAILY
     goal_config: dict[str, Any] = Field(default_factory=dict)
     invite_code: str | None = None  # 그룹 챌린지 + 방장/참여자에게만 노출
+    is_member: bool = False  # 현재 사용자가 참여자/방장인지 여부
 
 
 class ChallengeListItem(BaseModel):
