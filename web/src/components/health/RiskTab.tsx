@@ -1,20 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
 import { useLatestPredictions, LATEST_PREDICTIONS_KEY } from "@/hooks/queries/useLatestPredictions";
-import { usePredictionsList, PREDICTIONS_LIST_KEY } from "@/hooks/queries/usePredictionsList";
 import { useChallengeRecommendations } from "@/hooks/queries/useChallengeRecommendations";
-import { useRiskRecommendation } from "@/hooks/queries/useRiskRecommendation";
+import { useRagRiskRecommendation, RAG_RISK_RECOMMENDATION_KEY } from "@/hooks/queries/useRagRiskRecommendation";
 import { useMe } from "@/hooks/queries/useMe";
-import { useCreatePrediction } from "@/hooks/queries/useCreatePrediction";
 import { useProfileCompleteness } from "@/hooks/queries/useProfileCompleteness";
 import RiskSemiGauge from "@/components/health/RiskSemiGauge";
 import { CATEGORY_CONFIG } from "@/components/challenges/common/ChallengeCategoryIcon";
 import type { RiskGrade, DiseaseType, ChallengeCategory } from "@/types/api";
-import type { PredictionDetail } from "@/types/health";
+import type { RagRiskRecommendationResponse } from "@/types/health";
 import { MISSING_FIELD_LABEL } from "@/lib/healthFields";
 
 /* ── 상수 ──────────────────────────── */
@@ -479,10 +477,21 @@ function ContributingBars({ factors }: ContributingBarsProps) {
 
 /* ── 기여도 카드 (탭 포함) ──── */
 
+interface SelectedDetail {
+  id: number;
+  disease_type: DiseaseType;
+  risk_score: number;
+  risk_level: "NORMAL" | "CAUTION" | "RISK" | "HIGH_RISK";
+  risk_grade: RiskGrade;
+  risk_level_label?: string | null;
+  contributing_factors: { factor: string; weight: number; description?: string; name_kor?: string }[];
+  created_at: string;
+}
+
 interface ContributingCardProps {
   activeDisease: DiseaseType;
   onChangeDisease: (d: DiseaseType) => void;
-  selectedDetail?: PredictionDetail;
+  selectedDetail?: SelectedDetail;
 }
 
 function ContributingCard({
@@ -535,32 +544,23 @@ function ContributingCard({
    6. AI 맞춤 제안 섹션
    ======================================================== */
 
-function AiSuggestions({ predictionId }: { predictionId: number | undefined }) {
-  const { data: recData, isLoading: recLoading } =
-    useRiskRecommendation(predictionId);
-  const { data: challengeData, isLoading: challengeLoading } =
-    useChallengeRecommendations(predictionId, 3);
+interface AiSuggestionsProps {
+  ragResult: RagRiskRecommendationResponse | null;
+}
 
-  const recommendations = recData?.recommendations ?? [];
+function AiSuggestions({ ragResult }: AiSuggestionsProps) {
+  // 챌린지 칩은 기존 훅 유지 (RAG 응답에 predictionId 없음 → disabled 상태로 빈 배열)
+  const { data: challengeData, isLoading: challengeLoading } =
+    useChallengeRecommendations(undefined, 3);
+
   const challenges = challengeData?.items ?? [];
 
-  const exerciseRec = recommendations.find((r) => r.category === "EXERCISE");
-  const dietRec = recommendations.find((r) => r.category === "DIET");
-  const generalRecs = recommendations
-    .filter((r) => r.category !== "EXERCISE" && r.category !== "DIET")
-    .slice(0, 3);
-  const displayRecs =
-    generalRecs.length > 0 ? generalRecs : recommendations.slice(0, 3);
+  // 권고 칩: recommended_tips (최대 3개 표시)
+  const tips = ragResult?.recommended_tips?.slice(0, 3) ?? [];
+  // 식단 칩: recommended_diet
+  const dietItems = ragResult?.recommended_diet ?? [];
 
-  const dietItems = dietRec
-    ? [dietRec.content]
-    : [
-        "채소·통곡물 위주 식단을 권장합니다.",
-        "나트륨 섭취를 줄여보세요.",
-        "규칙적인 식사 시간을 유지하세요.",
-      ];
-
-  if (!predictionId) return null;
+  if (!ragResult) return null;
 
   return (
     <div className="bg-white rounded-[16px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.07)] space-y-5">
@@ -571,52 +571,40 @@ function AiSuggestions({ predictionId }: { predictionId: number | undefined }) {
         <h3 className="font-bold text-text-primary">AI 맞춤 제안</h3>
       </div>
 
+      {/* AI 권고 본문 */}
+      {ragResult.answer && (
+        <div className="bg-[#f8f9fa] rounded-[12px] p-4">
+          <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
+            {ragResult.answer}
+          </p>
+        </div>
+      )}
+
       <div className="grid md:grid-cols-3 gap-4">
         {/* 권고사항 */}
-        <div className="space-y-2">
-          <p className="text-xs font-bold text-text-primary flex items-center gap-1">
-            <span aria-hidden="true">🛡️</span> 권고사항
-          </p>
-          {recLoading ? (
-            <div className="animate-pulse space-y-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-8 bg-surface rounded-[8px]" />
-              ))}
-            </div>
-          ) : displayRecs.length > 0 ? (
-            <>
-              <ul className="space-y-2">
-                {displayRecs.map((rec, i) => (
-                  <li
-                    key={i}
-                    className="flex items-start gap-2 text-xs text-text-secondary"
+        {tips.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-bold text-text-primary flex items-center gap-1">
+              <span aria-hidden="true">🛡️</span> 권고사항
+            </p>
+            <ul className="space-y-2">
+              {tips.map((tip, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-xs text-text-secondary"
+                >
+                  <span
+                    className="text-status-success mt-0.5 shrink-0"
+                    aria-hidden="true"
                   >
-                    <span
-                      className="text-status-success mt-0.5 shrink-0"
-                      aria-hidden="true"
-                    >
-                      ✓
-                    </span>
-                    <span>{rec.content}</span>
-                  </li>
-                ))}
-              </ul>
-              <Link
-                href={`/predictions/${predictionId}/recommendations`}
-                className="text-xs text-text-tertiary hover:text-text-primary transition-colors"
-              >
-                자세히 보기 →
-              </Link>
-            </>
-          ) : (
-            <Link
-              href={`/predictions/${predictionId}/recommendations`}
-              className="block text-xs text-brand-black font-semibold underline"
-            >
-              자세히 보기 →
-            </Link>
-          )}
-        </div>
+                    ✓
+                  </span>
+                  <span>{tip}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* 추천 챌린지 */}
         <div className="space-y-2">
@@ -669,35 +657,30 @@ function AiSuggestions({ predictionId }: { predictionId: number | undefined }) {
           )}
         </div>
 
-        {/* 식단 추천 — DIET 권고사항 기반, 없으면 일반 가이드라인 플레이스홀더 */}
-        <div className="space-y-2">
-          <p className="text-xs font-bold text-text-primary flex items-center gap-1">
-            <span aria-hidden="true">🍽️</span> 식단 추천
-          </p>
-          {exerciseRec && (
-            <div className="p-2 bg-surface rounded-[8px] mb-2">
-              <p className="text-[11px] text-text-secondary">
-                {exerciseRec.content}
-              </p>
-            </div>
-          )}
-          <ul className="space-y-2">
-            {dietItems.map((item, i) => (
-              <li
-                key={i}
-                className="flex items-start gap-2 text-xs text-text-secondary"
-              >
-                <span
-                  className="text-brand-black mt-0.5 shrink-0"
-                  aria-hidden="true"
+        {/* 식단 추천 */}
+        {dietItems.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-bold text-text-primary flex items-center gap-1">
+              <span aria-hidden="true">🍽️</span> 식단 추천
+            </p>
+            <ul className="space-y-2">
+              {dietItems.map((item, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-xs text-text-secondary"
                 >
-                  •
-                </span>
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+                  <span
+                    className="text-brand-black mt-0.5 shrink-0"
+                    aria-hidden="true"
+                  >
+                    •
+                  </span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       <p className="text-[10px] text-text-tertiary border-t border-border pt-3">
@@ -879,80 +862,96 @@ export default function RiskTab() {
   const [mlUnavailable, setMlUnavailable] = useState(false);
 
   const { data: meData } = useMe();
-  const { data: latestPredictions, isLoading: l1 } = useLatestPredictions();
-  const { data: detailPredictions, isLoading: l2 } = usePredictionsList({
-    latest: true,
-  });
+  const { data: latestPredictions, isLoading: latestLoading } = useLatestPredictions();
   const { data: completeness, isLoading: completenessLoading } = useProfileCompleteness();
-  const createPrediction = useCreatePrediction();
+  const ragRecommendation = useRagRiskRecommendation();
   const queryClient = useQueryClient();
 
-  const isLoading = l1 || l2;
+  // 예측 실행 이후 캐시된 RAG 결과 읽기 (useMutation onSuccess 에서 setQueryData 로 저장됨)
+  const ragResult = useQuery<RagRiskRecommendationResponse>({
+    queryKey: RAG_RISK_RECOMMENDATION_KEY,
+    enabled: false, // 직접 fetch 하지 않음 — mutation onSuccess 에서만 채워짐
+  }).data ?? null;
+
+  const isLoading = latestLoading || completenessLoading;
 
   /* ── 예측 실행 핸들러 ── */
   const handlePredict = async () => {
     setPredictError(null);
     setMlUnavailable(false);
-    // Promise.allSettled 는 rejected 도 fulfilled 로 감싸므로 결과를 직접 순회해 에러를 판별한다.
-    const results = await Promise.allSettled([
-      createPrediction.mutateAsync("HYPERTENSION"),
-      createPrediction.mutateAsync("DIABETES"),
-      createPrediction.mutateAsync("CARDIOVASCULAR"),
-    ]);
-    for (const result of results) {
-      if (result.status !== "rejected") continue;
-      const axiosErr = result.reason as {
-        response?: { status: number; data?: { detail?: { message?: string; missing_fields?: string[]; code?: string } } };
+    try {
+      const result = await ragRecommendation.mutateAsync();
+      // has_required_data=false: 데이터 부족 응답 (게이트 사전 차단이지만 방어적 처리)
+      if (!result.has_required_data) {
+        setPredictError("건강데이터를 전부 입력해주셔야 예측 결과를 확인하실 수 있습니다.");
+        return;
+      }
+      // is_fallback=true: ML 장애 fallback
+      if (result.is_fallback) {
+        setMlUnavailable(true);
+        return;
+      }
+      // 성공 — latestPredictions 도 갱신해 latestDate 반영
+      await queryClient.invalidateQueries({ queryKey: LATEST_PREDICTIONS_KEY });
+    } catch (err: unknown) {
+      const axiosErr = err as {
+        response?: { status: number; data?: { detail?: { message?: string; code?: string } } };
       };
       const status = axiosErr?.response?.status;
       const detail = axiosErr?.response?.data?.detail;
       if (status === 503 && detail?.code === "ML_UNAVAILABLE") {
-        setMlUnavailable(true); // 모델 장애 → "위험도 예측 준비 중"
+        setMlUnavailable(true);
+        return;
+      }
+      if (status === 429) {
+        setPredictError("요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.");
         return;
       }
       if (status === 422) {
-        // 게이트(미완성). 보통 버튼 비활성으로 사전 차단되나 방어적으로 처리.
         setPredictError(detail?.message ?? "건강데이터를 전부 입력해주셔야 예측 결과를 확인하실 수 있습니다.");
         return;
       }
       setPredictError("예측 실행 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
-      return;
     }
-    // 성공 — 결과 쿼리를 즉시 refetch 해 새로고침 없이 화면 반영(mutation onSuccess invalidate 보강).
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: LATEST_PREDICTIONS_KEY }),
-      queryClient.invalidateQueries({ queryKey: [PREDICTIONS_LIST_KEY] }),
-    ]);
   };
 
   const latestItems = latestPredictions?.items ?? [];
-  const detailItems =
-    (detailPredictions as { items?: PredictionDetail[] } | null)?.items ?? [];
 
-  /* 도넛 데이터 */
+  /* 도넛 데이터 — RAG 응답 있으면 우선 사용, 없으면 latestPredictions fallback */
+  const ragPredictions = ragResult?.predictions ?? [];
   const diseaseData: {
     disease: DiseaseType;
     score: number;
     grade: RiskGrade;
     riskLevelLabel?: string | null;
-    predId?: number;
   }[] = DISEASE_TABS.map(({ id }) => {
-    const lite = latestItems.find((p) => p.disease_type === id);
-    const detail = detailItems.find((p) => p.disease_type === id);
+    const ragItem = ragPredictions.find((p) => p.disease_type === id);
+    const liteItem = latestItems.find((p) => p.disease_type === id);
     return {
       disease: id,
-      score: Math.round(Number(lite?.risk_score ?? detail?.risk_score ?? 0)),
-      grade:
-        riskLevelToGrade(detail?.risk_level) ?? lite?.risk_grade ?? "NORMAL",
-      riskLevelLabel: detail?.risk_level_label ?? null,
-      predId: lite?.id ?? detail?.id,
+      score: Math.round(Number(ragItem?.risk_score ?? liteItem?.risk_score ?? 0)),
+      grade: ragItem ? riskLevelToGrade(ragItem.risk_level) : (liteItem?.risk_grade ?? "NORMAL"),
+      riskLevelLabel: null,
     };
   });
 
-  /* 선택된 질환 */
-  const selectedDetail = detailItems.find(
+  /* 선택된 질환 기여 인자 — RAG 응답 우선 */
+  const selectedRagPrediction = ragPredictions.find(
     (p) => p.disease_type === activeDisease,
   );
+  // ContributingCard 가 요구하는 PredictionDetail 형태와 호환되는 객체 구성
+  const selectedDetail = selectedRagPrediction
+    ? {
+        id: 0,
+        disease_type: selectedRagPrediction.disease_type,
+        risk_score: selectedRagPrediction.risk_score,
+        risk_level: selectedRagPrediction.risk_level,
+        risk_grade: riskLevelToGrade(selectedRagPrediction.risk_level),
+        contributing_factors: selectedRagPrediction.contributing_factors,
+        created_at: "",
+      }
+    : undefined;
+
   /* 종합: 가장 높은 위험 질환 */
   const gradeOrder: RiskGrade[] = [
     "HIGH_DANGER",
@@ -977,13 +976,13 @@ export default function RiskTab() {
     .map((d) => DISEASE_LABELS[d.disease])
     .join(", ");
 
-  /* 가장 큰 영향 요인 */
-  const highestDetail = detailItems.find(
+  /* 가장 큰 영향 요인 — RAG 응답 우선 */
+  const highestRagPrediction = ragPredictions.find(
     (p) => p.disease_type === highestDiseaseData?.disease,
   );
-  const topFactor = highestDetail?.contributing_factors?.[0]
+  const topFactor = highestRagPrediction?.contributing_factors?.[0]
     ? (() => {
-        const f = highestDetail.contributing_factors[0];
+        const f = highestRagPrediction.contributing_factors[0];
         return (
           f.name_kor ??
           (f.description
@@ -993,18 +992,17 @@ export default function RiskTab() {
       })()
     : null;
 
-  /* AI 제안용 — 최고 위험 질환 예측 ID */
-  const highestPredId = highestDiseaseData?.predId;
-
-  /* 최근 분석일 */
+  /* 최근 분석일 — latestPredictions 기반 유지 */
   const latestDate = latestItems[0]?.created_at
     ? new Date(latestItems[0].created_at).toLocaleDateString("ko-KR")
     : null;
 
-  /* disclaimer — 상세 예측 중 첫 번째 것 사용 */
-  const disclaimer = detailItems[0]?.disclaimer;
+  /* disclaimer — RAG 응답 우선, 없으면 DisclaimerBar 기본값 */
+  const disclaimer = ragResult?.disclaimer;
 
   const userName = meData?.nickname ?? meData?.name ?? null;
+
+  const isPredicting = ragRecommendation.isPending;
 
   /* ── 로딩 ── */
   if (isLoading || completenessLoading) {
@@ -1033,7 +1031,7 @@ export default function RiskTab() {
           total={completeness?.total ?? 0}
           missingFields={completeness?.missing_fields ?? []}
           complete={false}
-          isPredicting={createPrediction.isPending}
+          isPredicting={isPredicting}
           onPredict={handlePredict}
         />
         {predictError && (
@@ -1052,7 +1050,7 @@ export default function RiskTab() {
     );
   }
 
-  /* ── 상태 2: 모델 장애 (예측 호출이 503 ML_UNAVAILABLE 로 실패) ── */
+  /* ── 상태 2: 모델 장애 (예측 호출이 503 ML_UNAVAILABLE 또는 is_fallback=true) ── */
   if (mlUnavailable) {
     return (
       <div className="space-y-5">
@@ -1062,7 +1060,7 @@ export default function RiskTab() {
           total={completeness?.total ?? 0}
           missingFields={completeness?.missing_fields ?? []}
           complete
-          isPredicting={createPrediction.isPending}
+          isPredicting={isPredicting}
           onPredict={handlePredict}
         />
         <div className="text-center py-8 space-y-2">
@@ -1074,8 +1072,8 @@ export default function RiskTab() {
     );
   }
 
-  /* ── 상태 3: 완성이지만 표시할 예측 결과 없음 (추론은 됐으나 저장 결과 없음/조회 이상) ── */
-  if (latestItems.length === 0) {
+  /* ── 상태 3: 완성이지만 표시할 예측 결과 없음 (RAG 결과도 없고 기존 예측도 없음) ── */
+  if (latestItems.length === 0 && ragPredictions.length === 0) {
     return (
       <div className="space-y-5">
         <CompletenessGate
@@ -1084,7 +1082,7 @@ export default function RiskTab() {
           total={completeness?.total ?? 0}
           missingFields={completeness?.missing_fields ?? []}
           complete
-          isPredicting={createPrediction.isPending}
+          isPredicting={isPredicting}
           onPredict={handlePredict}
         />
         {predictError && (
@@ -1113,7 +1111,7 @@ export default function RiskTab() {
         total={completeness?.total ?? 0}
         missingFields={completeness?.missing_fields ?? []}
         complete={completeness?.complete ?? false}
-        isPredicting={createPrediction.isPending}
+        isPredicting={isPredicting}
         onPredict={handlePredict}
       />
       {predictError && (
@@ -1144,7 +1142,7 @@ export default function RiskTab() {
         challengeGoal={null}
       />
 
-      {/* 5. 기여도 + (데스크탑) AI 제안 사이드 */}
+      {/* 5. 기여도 카드 */}
       <div className="flex gap-4">
         <ContributingCard
           activeDisease={activeDisease}
@@ -1154,7 +1152,7 @@ export default function RiskTab() {
       </div>
 
       {/* 6. AI 맞춤 제안 */}
-      <AiSuggestions predictionId={highestPredId} />
+      <AiSuggestions ragResult={ragResult} />
 
       {/* 7. Disclaimer 바 */}
       <DisclaimerBar text={disclaimer} />

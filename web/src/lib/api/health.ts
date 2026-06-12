@@ -14,6 +14,7 @@ import type {
   PredictionDetail,
   PredictionDetailResponse,
   RiskRecommendationResponse,
+  RagRiskRecommendationResponse,
   MonthlyReportResponse,
   ProfileCompleteness,
 } from "@/types/health";
@@ -164,6 +165,15 @@ export async function fetchRiskRecommendations(
   } catch {
     return null;
   }
+}
+
+/* ── RAG 위험도 권고 (단일 통합 엔드포인트) ─── */
+
+export async function fetchRagRiskRecommendation(): Promise<RagRiskRecommendationResponse> {
+  const { data } = await apiClient.post<RagRiskRecommendationResponse>(
+    "/api/v1/risk-recommendations"
+  );
+  return data;
 }
 
 /* ── 월간 리포트 ─────────────────────────── */
