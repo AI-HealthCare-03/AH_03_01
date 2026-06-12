@@ -74,6 +74,16 @@ function ChallengeListContent() {
     mine: true, status: "COMPLETED", size: 20, from, to, sortBy,
     enabled: tab === "my",
   });
+  /* 탈퇴한 챌린지 — 완료 탭 노출용 */
+  const { data: leftData, isLoading: leftLoading } = useChallenges({
+    mine: true, leftOnly: true, size: 20,
+    enabled: tab === "my",
+  });
+  /* 포기한(CANCELLED) 개인 챌린지 — 완료 탭 노출용 */
+  const { data: cancelledData, isLoading: cancelledLoading } = useChallenges({
+    mine: true, status: "CANCELLED", size: 20,
+    enabled: tab === "my",
+  });
 
   /* 참여하기 탭 — 그룹 모집중 챌린지 (공개 + 비공개 모두 표시) */
   const { data: joinData, isLoading: joinLoading } = useChallenges({
@@ -106,7 +116,12 @@ function ChallengeListContent() {
   /* end_date 지난 ACTIVE/RECRUITING 챌린지는 완료 탭으로 이동 */
   const activeItems = allActiveItems.filter((c) => calcDDay(c.end_date) >= 0);
   const expiredActiveItems = allActiveItems.filter((c) => calcDDay(c.end_date) < 0);
-  const completedItems = [...expiredActiveItems, ...(completedData?.items ?? [])];
+  /* 탈퇴(LEFT) 챌린지도 완료 탭으로 이동 */
+  const leftItems = (leftData?.items ?? []).filter(
+    (c) => !allActiveItems.some((a) => a.id === c.id)
+  );
+  const cancelledItems = cancelledData?.items ?? [];
+  const completedItems = [...expiredActiveItems, ...leftItems, ...cancelledItems, ...(completedData?.items ?? [])];
   /* 참여가능 탭: end_date 지난 챌린지 제외 */
   const groupItems = (joinData?.items ?? []).filter((c) => calcDDay(c.end_date) >= 0);
   const recommendationItems = recommendationData?.items ?? [];
@@ -288,7 +303,7 @@ function ChallengeListContent() {
 
           {tab === "my" && mySubTab === "completed" && (
             <>
-              {completedLoading || activeLoading || recruitingLoading ? (
+              {completedLoading || activeLoading || recruitingLoading || leftLoading || cancelledLoading ? (
                 <div className="space-y-3">
                   {[0, 1].map((i) => (
                     <div key={i} className="h-32 bg-white rounded-[16px] border border-border animate-pulse" />

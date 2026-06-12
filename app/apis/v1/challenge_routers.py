@@ -148,6 +148,7 @@ async def list_challenges(
     date_from: Annotated[date | None, Query(alias="from")] = None,
     date_to: Annotated[date | None, Query(alias="to")] = None,
     mine: Annotated[bool, Query()] = False,
+    left_only: Annotated[bool, Query(alias="leftOnly")] = False,
     sort_by: Annotated[str | None, Query(alias="sortBy")] = None,  # start_date | end_date
     page: Annotated[int, Query(ge=1)] = 1,
     size: Annotated[int, Query(ge=1, le=100)] = 20,
@@ -165,6 +166,7 @@ async def list_challenges(
         page=page,
         size=size,
         mine_only=mine,
+        left_only=left_only,
     )
 
     # 사용자별 달성 현황 일괄 조회
@@ -173,6 +175,7 @@ async def list_challenges(
     challenge_ids = [ch.id for ch in items]
     approved_counts: dict[int, int] = {}
     missed_counts: dict[int, int] = {}
+    participant_statuses: dict[int, str] = {}
     if challenge_ids:
         verif_rows = await ChallengeVerification.filter(
             challenge_id__in=challenge_ids,
@@ -188,9 +191,10 @@ async def list_challenges(
         part_rows = await ChallengeParticipant.filter(
             challenge_id__in=challenge_ids,
             user_id=user.id,
-        ).values("challenge_id", "missed_count")
+        ).values("challenge_id", "missed_count", "status")
         for row in part_rows:
             missed_counts[row["challenge_id"]] = row["missed_count"] or 0
+            participant_statuses[row["challenge_id"]] = row["status"]
 
     def _total_days(ch) -> int:
         return max(1, (ch.end_date - ch.start_date).days + 1)
@@ -214,6 +218,7 @@ async def list_challenges(
                 my_progress=approved_counts.get(ch.id, 0),
                 total_days=_total_days(ch),
                 missed_count=missed_counts.get(ch.id, 0),
+                my_participant_status=participant_statuses.get(ch.id),
             )
             for ch in items
         ],

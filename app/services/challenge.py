@@ -175,6 +175,8 @@ class ChallengeService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="방장만 수정할 수 있습니다.")
         if data.end_date is not None and data.end_date < challenge.start_date:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="end_date 가 잘못되었습니다.")
+        if data.status is not None and data.status != ChallengeStatus.CANCELLED:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="status 는 CANCELLED 로만 변경 가능합니다.")
         return await self.repo.update_instance(challenge, data.model_dump(exclude_unset=True))
 
     async def delete(self, user: User, challenge_id: int) -> None:
@@ -200,9 +202,10 @@ class ChallengeService:
         page: int,
         size: int,
         mine_only: bool,
+        left_only: bool = False,
     ) -> tuple[list[Challenge], int]:
         return await self.repo.list(
-            user_id=user.id if (user and mine_only) else None,
+            user_id=user.id if (user and (mine_only or left_only)) else None,
             scope=scope,
             status=challenge_status,
             category=category,
@@ -213,6 +216,7 @@ class ChallengeService:
             sort_by=sort_by,
             page=page,
             size=size,
+            left_only=left_only,
         )
 
 
