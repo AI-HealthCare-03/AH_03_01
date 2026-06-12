@@ -107,7 +107,8 @@ function ChallengeListContent() {
   const activeItems = allActiveItems.filter((c) => calcDDay(c.end_date) >= 0);
   const expiredActiveItems = allActiveItems.filter((c) => calcDDay(c.end_date) < 0);
   const completedItems = [...expiredActiveItems, ...(completedData?.items ?? [])];
-  const groupItems = joinData?.items ?? [];
+  /* 참여가능 탭: end_date 지난 챌린지 제외 */
+  const groupItems = (joinData?.items ?? []).filter((c) => calcDDay(c.end_date) >= 0);
   const recommendationItems = recommendationData?.items ?? [];
 
   return (
