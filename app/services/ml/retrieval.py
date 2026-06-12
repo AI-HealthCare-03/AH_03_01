@@ -443,20 +443,27 @@ async def retrieve(
 
     # include_pediatric=False(기본)이면 소아 전용 섹션을 검색풀에서 제외.
     # is_pediatric 질문(소아·어린이·청소년 키워드)일 때만 True로 전달.
-    effective_topics = topics
     if not include_pediatric and source_type != "service":
         ped_clause, ped_args = _build_pediatric_exclusion_sql(2)
-        # topics 필터와 별도로 pediatric 제외 절을 dense/sparse에 전달하기 위해
-        # extra_filter로 넘긴다.
     else:
         ped_clause, ped_args = "", []
 
     dense = await _dense_search(
-        query_emb, candidate_k, source_type, diseases, effective_topics, ped_clause=ped_clause, ped_args=ped_args
+        query_emb, candidate_k, source_type, diseases, topics, ped_clause=ped_clause, ped_args=ped_args
     )
     sparse = _sparse_search(
-        bm, query, candidate_k, source_type, diseases, effective_topics, ped_clause=ped_clause, ped_args=ped_args
+        bm, query, candidate_k, source_type, diseases, topics, ped_clause=ped_clause, ped_args=ped_args
     )
+
+    # Topic 필터 soft fallback: topic 필터 적용 후 결과가 없으면 topic 없이 재검색.
+    # KB 섹션의 topic 태그가 질문 감지 topic과 불일치할 때 검색 공백 방지.
+    if topics and not dense and not sparse:
+        dense = await _dense_search(
+            query_emb, candidate_k, source_type, diseases, None, ped_clause=ped_clause, ped_args=ped_args
+        )
+        sparse = _sparse_search(
+            bm, query, candidate_k, source_type, diseases, None, ped_clause=ped_clause, ped_args=ped_args
+        )
 
     debug.dense_hits = len(dense)
     debug.sparse_hits = len(sparse)

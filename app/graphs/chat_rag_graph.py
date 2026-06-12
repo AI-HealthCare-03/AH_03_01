@@ -233,9 +233,15 @@ _CHALLENGE_CATALOG_PATTERN = re.compile(
 
 # 질환 감지 — diseases 결정에 사용.
 _DISEASE_PATTERNS: dict[str, re.Pattern[str]] = {
-    "diabetes": re.compile(r"당뇨|혈당|HbA1c|당화혈색소|인슐린|저혈당|고혈당|공복혈당|식후혈당"),
+    "diabetes": re.compile(
+        r"당뇨|혈당|HbA1c|당화혈색소|인슐린|저혈당|고혈당|공복혈당|식후혈당"
+        r"|메트포르민|SGLT.?2억제제|GLP.?1|당뇨약|인슐린\s*펜"
+    ),
     "hypertension": re.compile(r"고혈압|혈압|수축기|이완기|DASH\s*식단"),
-    "dyslipidemia": re.compile(r"이상지질혈증|고지혈증|콜레스테롤|LDL|HDL|중성지방|TG\b|스타틴|동맥경화"),
+    "dyslipidemia": re.compile(
+        r"이상지질혈증|고지혈증|콜레스테롤|LDL|HDL|중성지방|TG\b|스타틴|동맥경화"
+        r"|심혈관\s*(환자|질환|위험|관리)|금연.*위험|위험.*금연"
+    ),
 }
 
 # 토픽 감지 — topics 결정에 사용. 순서 무관, 모두 매칭.
@@ -827,6 +833,10 @@ async def retrieve_node(state: ChatState) -> dict[str, Any]:
     # multi-disease 라우팅. ChatState 의 diseases: list[DiseaseLiteral] 을 retrieve 의
     # `disease: str | list[str] | None` 시그니처와 맞추기 위해 list[str] 로 좁힘.
     diseases: list[str] = [str(d) for d in (state.get("diseases") or [])]
+    # 2개 이상 질환이 감지된 복합 질문은 disease 필터를 해제해 전체 가이드라인을 검색.
+    # 단일 disease 필터가 다른 소스(예: KDA2025 ↔ KSH2026)를 차단하는 문제 방지.
+    if len(diseases) >= 2:
+        diseases = []
     query = state.get("retrieval_query") or state["original_question"]
     needs_challenge = bool(state.get("needs_challenge_catalog"))
 
