@@ -6,7 +6,7 @@ import ChallengeCategoryIcon, { CATEGORY_CONFIG } from "@/components/challenges/
 import ChallengeProgressBar from "@/components/challenges/common/ChallengeProgressBar";
 import ChallengeStatusBadge from "@/components/challenges/common/ChallengeStatusBadge";
 import WeekStrip from "./WeekStrip";
-import { dDayLabel, format } from "@/lib/dateUtils";
+import { dDayLabel, calcDDay, format } from "@/lib/dateUtils";
 import type { Challenge } from "@/types/challenge";
 
 /* =========================================
@@ -68,7 +68,7 @@ export default function PersonalDetail({
       </div>
 
       {/* 오늘 인증 CTA */}
-      {challenge.status === "ACTIVE" && (
+      {challenge.status === "ACTIVE" && calcDDay(challenge.end_date) >= 0 && (
         <div className="bg-white rounded-[16px] border border-border p-5 shadow-sm">
           <p className="text-sm font-bold text-text-primary mb-3">
             오늘의 인증
