@@ -6,6 +6,7 @@ export const CHALLENGES_KEY = "challenges" as const;
 
 export function useChallenges(params: {
   mine?: boolean;
+  leftOnly?: boolean;
   status?: ChallengeStatus;
   scope?: ChallengeScope;
   category?: string;

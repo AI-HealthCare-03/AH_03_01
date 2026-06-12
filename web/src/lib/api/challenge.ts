@@ -25,6 +25,7 @@ import type { ChallengeStatus, ChallengeScope } from "@/types/challenge";
 /* ─── 챌린지 목록 ─── */
 export async function fetchChallenges(params: {
   mine?: boolean;
+  leftOnly?: boolean;
   status?: ChallengeStatus;
   scope?: ChallengeScope;
   category?: string;

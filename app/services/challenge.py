@@ -200,9 +200,10 @@ class ChallengeService:
         page: int,
         size: int,
         mine_only: bool,
+        left_only: bool = False,
     ) -> tuple[list[Challenge], int]:
         return await self.repo.list(
-            user_id=user.id if (user and mine_only) else None,
+            user_id=user.id if (user and (mine_only or left_only)) else None,
             scope=scope,
             status=challenge_status,
             category=category,
@@ -213,6 +214,7 @@ class ChallengeService:
             sort_by=sort_by,
             page=page,
             size=size,
+            left_only=left_only,
         )
 
 

@@ -6,6 +6,9 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useChallenge } from "@/hooks/queries/useChallenge";
 import { useVerifications } from "@/hooks/queries/useVerifications";
+import { useMe } from "@/hooks/queries/useMe";
+import { useLeaveChallenge } from "@/hooks/queries/useLeaveChallenge";
+import { useDeleteChallenge } from "@/hooks/queries/useDeleteChallenge";
 import PersonalDetail from "@/components/challenges/detail/PersonalDetail";
 import GroupDetail from "@/components/challenges/detail/GroupDetail";
 import NonMemberDetail from "@/components/challenges/detail/NonMemberDetail";
@@ -47,9 +50,12 @@ function ChallengeDetailContent({
   const { data: challenge, isLoading, error } = useChallenge(challengeId);
   /* mine: true — 내 인증만 조회. 다른 멤버의 인증이 섞이면 verifiedDates/pendingDates 오탐 발생 */
   const { data: verificationsData } = useVerifications(challengeId, { mine: true });
+  const { data: me } = useMe();
 
   const [shieldOpen, setShieldOpen] = useState(false);
   const shieldMutation = useCreateVerification();
+  const leaveMutation = useLeaveChallenge();
+  const deleteMutation = useDeleteChallenge();
 
   /* 인증 완료 날짜 목록 (APPROVED 상태만) */
   const verifiedDates =
@@ -156,6 +162,32 @@ function ChallengeDetailContent({
     );
   };
 
+  /* 그룹 챌린지 탈퇴 핸들러 */
+  const handleLeave = () => {
+    leaveMutation.mutate(challengeId, {
+      onSuccess: () => {
+        showToast("챌린지에서 탈퇴했어요.", "success");
+        router.push("/challenges?tab=my");
+      },
+      onError: (err) => {
+        showToast(extractErrorMessage(err), "error");
+      },
+    });
+  };
+
+  /* 개인 챌린지 포기 핸들러 */
+  const handleQuit = () => {
+    deleteMutation.mutate(challengeId, {
+      onSuccess: () => {
+        showToast("챌린지를 포기했어요.", "info");
+        router.push("/challenges?tab=my");
+      },
+      onError: (err) => {
+        showToast(extractErrorMessage(err), "error");
+      },
+    });
+  };
+
   /* 참가 완료 핸들러 */
   const handleJoined = () => {
     router.refresh();
@@ -179,6 +211,8 @@ function ChallengeDetailContent({
           challenge={challenge}
           onShield={() => setShieldOpen(true)}
           initialTab={initialTab}
+          onLeave={handleLeave}
+          currentUserId={me?.id}
         />
       ) : (
         <PersonalDetail
@@ -187,6 +221,7 @@ function ChallengeDetailContent({
           pendingDates={pendingDates}
           rejectedToday={rejectedToday}
           onShield={() => setShieldOpen(true)}
+          onQuit={handleQuit}
         />
       )}
 

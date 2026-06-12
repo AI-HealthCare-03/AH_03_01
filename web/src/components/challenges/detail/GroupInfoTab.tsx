@@ -16,6 +16,8 @@ import { dDayLabel } from "@/lib/dateUtils";
 interface GroupInfoTabProps {
   challenge: Challenge;
   participants: ChallengeParticipant[];
+  currentUserId?: string;
+  onLeave?: () => void;
 }
 
 function getInitial(name?: string): string {
@@ -26,10 +28,18 @@ function getInitial(name?: string): string {
 export default function GroupInfoTab({
   challenge,
   participants,
+  currentUserId,
+  onLeave,
 }: GroupInfoTabProps) {
   const catConfig = CATEGORY_CONFIG[challenge.category] ?? CATEGORY_CONFIG.EXERCISE;
   const { showToast } = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+
+  /* 현재 사용자가 방장인지 확인 */
+  const myParticipant = currentUserId ? participants.find((p) => p.user_id === currentUserId) : undefined;
+  const isOwner = myParticipant?.role === "OWNER";
+  const canLeave = !!onLeave && !isOwner && challenge.status !== "COMPLETED";
   const participantUserIds = participants
     .map((p) => p.user_id ?? p.user?.id)
     .filter((id): id is string => typeof id === "string");
@@ -197,6 +207,42 @@ export default function GroupInfoTab({
           <p className="text-xs text-text-tertiary mt-1">실패 위기</p>
         </div>
       </div>
+
+      {/* 챌린지 탈퇴 */}
+      {canLeave && (
+        <div className="bg-white border border-border rounded-[14px] p-4">
+          {confirmLeave ? (
+            <div className="space-y-3">
+              <p className="text-sm font-bold text-text-primary">정말 탈퇴하시겠어요?</p>
+              <p className="text-xs text-text-secondary">탈퇴 후에도 챌린지 기록은 완료 탭에서 확인할 수 있어요.</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmLeave(false)}
+                  className="flex-1 py-2 rounded-[10px] border border-border text-sm font-semibold text-text-secondary"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={onLeave}
+                  className="flex-1 py-2 rounded-[10px] bg-status-danger text-white text-sm font-semibold"
+                >
+                  탈퇴하기
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmLeave(true)}
+              className="w-full text-xs text-text-tertiary hover:text-status-danger underline py-1"
+            >
+              챌린지 탈퇴하기
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 친구 초대 모달 */}
       <InviteUserModal

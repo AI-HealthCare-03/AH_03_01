@@ -64,6 +64,7 @@ export interface Challenge {
   visibility?: ChallengeVisibility | null;
   is_member?: boolean;
   created_by: number;
+  creator_id?: string | null;  /* UUID — 상세 API에서 제공 */
   created_at: string;
   /* 신규: cadence + goal_config */
   cadence?: ChallengeCadence | null;
@@ -73,6 +74,7 @@ export interface Challenge {
   my_progress?: number;      /* 내 달성일 수 */
   total_days?: number;       /* 전체 기간 일 수 */
   missed_count?: number;     /* 누락 횟수 */
+  my_participant_status?: ParticipantStatus | null;  /* 내 참여 상태 (mine 쿼리 시) */
 }
 
 /* 챌린지 목록 응답 */
@@ -110,6 +112,7 @@ export interface ChallengeParticipant {
   id: number;
   user_id: string; /* UUID */
   challenge_id: number;
+  role?: "OWNER" | "MEMBER";
   status: ParticipantStatus;
   joined_at: string;
   progress_days?: number;
