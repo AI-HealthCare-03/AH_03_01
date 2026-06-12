@@ -159,6 +159,10 @@ class HealthProfileService:
                 profile = await self.repo.create(user.id, payload)
             else:
                 profile = await self.repo.update_instance(profile, payload)
+        # 건강 프로필 변경 → 위험도 feature_snapshot 입력이 바뀌므로 Redis 캐시 무효화 (best-effort).
+        from app.services.risk_recommendation_cache import invalidate_risk_cache
+
+        await invalidate_risk_cache(user.id)
         # Decimal 컬럼은 DB 정규화 결과(예: 175 → 175.0)를 반영해 응답하도록 refresh.
         await profile.refresh_from_db()
         return profile
@@ -183,6 +187,10 @@ class HealthRecordService:
             )
         async with in_transaction():
             record = await self.repo.create(user.id, payload)
+        # 일별 레코드 생성 → 위험도 feature_snapshot(레코드 폴백 포함) 입력이 바뀌므로 캐시 무효화 (best-effort).
+        from app.services.risk_recommendation_cache import invalidate_risk_cache
+
+        await invalidate_risk_cache(user.id)
         # 주간 활동량 EXP 적립 (HEALTH_INPUT, 1일 1회). best-effort.
         try:
             from app.models.experience import XpKind
@@ -222,11 +230,20 @@ class HealthRecordService:
     async def update(self, user: User, record_id: int, data: HealthRecordUpdateRequest) -> HealthRecord:
         record = await self.get_owned(user, record_id)
         async with in_transaction():
-            return await self.repo.update_instance(record, data.model_dump(exclude_unset=True))
+            updated = await self.repo.update_instance(record, data.model_dump(exclude_unset=True))
+        # 레코드 수정 → 위험도 feature_snapshot(최신 레코드 폴백) 입력이 바뀌므로 캐시 무효화 (best-effort).
+        from app.services.risk_recommendation_cache import invalidate_risk_cache
+
+        await invalidate_risk_cache(user.id)
+        return updated
 
     async def delete(self, user: User, record_id: int) -> None:
         record = await self.get_owned(user, record_id)
         await self.repo.soft_delete(record)
+        # 레코드 삭제 → 직전 레코드가 "최신"으로 노출되어 snapshot 입력이 바뀌므로 캐시 무효화 (best-effort).
+        from app.services.risk_recommendation_cache import invalidate_risk_cache
+
+        await invalidate_risk_cache(user.id)
 
 
 class HealthStatisticsService:
