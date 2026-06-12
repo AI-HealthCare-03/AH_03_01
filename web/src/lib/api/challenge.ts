@@ -27,6 +27,7 @@ export async function fetchChallenges(params: {
   mine?: boolean;
   status?: ChallengeStatus;
   scope?: ChallengeScope;
+  category?: string;
   inviteCode?: string;
   size?: number;
   page?: number;
