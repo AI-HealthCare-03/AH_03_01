@@ -6,11 +6,13 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException, status
+from tortoise.exceptions import DBConnectionError, OperationalError
 
 from app.dtos.risk_recommendation import (
     ContributingFactorItem,
@@ -19,11 +21,19 @@ from app.dtos.risk_recommendation import (
     RiskRecommendationResponse,
 )
 from app.graphs.risk_recommendation_graph import (
+    MODEL_VERSION,
     PredictionSummary,
     RiskRecommendationResult,
+    compute_feature_snapshot,
     run_risk_recommendation,
 )
-from app.models.ml_inference import MLInferenceRequest
+from app.models.ml_inference import MLInferenceKind, MLInferenceRequest
+from app.models.risk_recommendation_result import (
+    RiskRecommendationResult as RiskRecommendationResultModel,
+)
+from app.services import risk_recommendation_cache as cache
+
+logger = logging.getLogger(__name__)
 
 _SNIPPET_MAX_LEN = 200  # 출처 카드용 본문 발췌 길이
 
@@ -41,10 +51,87 @@ class RiskRecommendationService:
     """
 
     async def recommend(self, *, user_id: Any) -> RiskRecommendationResponse:
-        """그래프 실행 + Pydantic 응답 모델로 매핑."""
-        await self._enforce_throttle(user_id)
-        result: RiskRecommendationResult = await run_risk_recommendation(user_id=user_id)
-        return _to_response(result)
+        """2-tier 캐시 게이트 (Redis 단기 + DB append-only) → (hit) 저장본 / (miss) 그래프 실행.
+
+        세션 중 건강정보 수정이 드물다는 전제로 반복 요청 시 DB 쿼리·그래프 호출을 0회로
+        만든다. 흐름(순서 엄수):
+          1. ``risk:reco`` GET — 직전 성공 응답 + 그 때 쓴 snapshot/model_version 확보.
+          2. 현재 snapshot 확보: ``risk:snapshot`` 히트면 **DB 미접근**, 미스면 DB read 후 캐싱.
+          3. reco 히트 AND snapshot 일치 AND model_version 일치 → 저장본 즉시 반환 (그래프·DB 0).
+          4. 미스/불일치 → throttle → 그래프 실행 → 저장 가드 통과 시 DB append + Redis SET.
+        Redis 장애는 best-effort 로 흡수하고 DB/그래프 경로로 폴백한다 (진실 원본은 DB).
+        (cache hit 시 throttle 미적용 — 무비용 경로.)
+        """
+        # 건강데이터 read + 그래프 실행은 DB 입력 경로. DB 연결/조회 장애 시 raw 500 이나
+        # 일반 fallback 으로 가리지 않고 503(일시 오류)로 명확히 안내한다. (입력 미충족과 구분 —
+        # 미충족은 그래프가 정상 missing-info 응답으로 처리.)
+        try:
+            cached_reco = await cache.get_reco(user_id)
+
+            # 2. 현재 snapshot 확보 — Redis 히트면 DB 미접근, 미스면 DB read 후 캐싱.
+            current_snapshot = await cache.get_snapshot(user_id)
+            if current_snapshot is None:
+                current_snapshot = await compute_feature_snapshot(user_id)
+                if current_snapshot is not None:
+                    await cache.set_snapshot(user_id, current_snapshot)
+
+            # 3. reco 히트 + 입력/모델 버전 일치 → 저장본 즉시 반환 (그래프·DB 0회).
+            #    필수데이터 없음(snapshot None)이면 캐시 비교 생략하고 그래프(missing-info) 경로.
+            if (
+                current_snapshot is not None
+                and cached_reco is not None
+                and cached_reco.get("model_version") == MODEL_VERSION
+                and cached_reco.get("snapshot") == current_snapshot
+            ):
+                response = cached_reco.get("response")
+                if isinstance(response, dict):
+                    return RiskRecommendationResponse(**response)
+
+            # 4. 미스/불일치 → throttle → 그래프 실행 → 저장 가드 통과 시 DB append + Redis SET.
+            await self._enforce_throttle(user_id)
+            result: RiskRecommendationResult = await run_risk_recommendation(user_id=user_id)
+        except (DBConnectionError, OperationalError) as exc:
+            logger.error("위험도 권고 DB 접근 실패 (user=%s): %s", user_id, exc)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="일시적으로 건강 데이터를 불러올 수 없습니다. 잠시 후 다시 시도해 주세요.",
+            ) from exc
+
+        response = _to_response(result)
+
+        # fallback / 데이터 미충족 결과는 캐싱하지 않음 (다음 호출에 재시도 가능해야 함).
+        if result.has_required_data and not result.is_fallback:
+            # DB append 는 best-effort — 이력 저장이 실패해도 이미 산출된 유효 결과는 반환한다.
+            # (여기서 500 을 내면 비용을 치른 LLM 결과를 버리고, 캐시도 못 채워 재호출이 반복됨.)
+            try:
+                await self._save_cache(user_id, result)
+            except Exception as exc:  # noqa: BLE001 — 이력 적재 실패는 응답을 막지 않는다
+                logger.warning("위험도 권고 DB 저장 실패, 이력 스킵 (user=%s): %s", user_id, exc)
+            await cache.set_reco(
+                user_id,
+                snapshot=result.feature_snapshot,
+                model_version=result.model_version,
+                response=response.model_dump(mode="json"),
+            )
+            await cache.set_snapshot(user_id, result.feature_snapshot)
+
+        return response
+
+    @staticmethod
+    async def _save_cache(user_id: Any, result: RiskRecommendationResult) -> None:
+        """위험도 권고 결과 한 행을 이력에 append insert (append-only, 다수 row/user)."""
+        await RiskRecommendationResultModel.create(
+            user_id=user_id,
+            input_snapshot=result.feature_snapshot,
+            model_version=result.model_version,
+            answer=result.answer,
+            tips=list(result.tips),
+            diet=list(result.diet),
+            sources=[_source_to_dict(s) for s in result.sources],
+            predictions=[_prediction_to_dict(p) for p in result.predictions],
+            is_fallback=result.is_fallback,
+            eval_revision_count=result.eval_revision_count,
+        )
 
     @staticmethod
     async def _enforce_throttle(user_id: Any) -> None:
@@ -54,7 +141,12 @@ class RiskRecommendationService:
         을 시계열 기준으로 사용 — 그래프가 row 를 가장 먼저 만들기 때문에 노드
         중간 실패 케이스에서도 일관됨.
         """
-        latest = await MLInferenceRequest.filter(user_id=user_id).order_by("-created_at").only("created_at").first()
+        latest = (
+            await MLInferenceRequest.filter(user_id=user_id, kind=MLInferenceKind.RISK_PREDICTION)
+            .order_by("-created_at")
+            .only("created_at")
+            .first()
+        )
         if latest is None:
             return
         elapsed = (datetime.now(tz=UTC) - latest.created_at).total_seconds()
@@ -72,6 +164,8 @@ def _to_response(r: RiskRecommendationResult) -> RiskRecommendationResponse:
         answer=r.answer,
         predictions=[_to_prediction_item(p) for p in r.predictions],
         sources=[_to_source_item(c) for c in r.sources],
+        recommended_tips=list(r.tips),
+        recommended_diet=list(r.diet),
         has_required_data=r.has_required_data,
         missing_fields=list(r.missing_fields),
         action_hint=("navigate_to_health_info" if not r.has_required_data else None),
@@ -80,6 +174,28 @@ def _to_response(r: RiskRecommendationResult) -> RiskRecommendationResponse:
         disclaimer=r.disclaimer,
         model_version=r.model_version,
     )
+
+
+def _source_to_dict(c: Any) -> dict[str, Any]:
+    """RetrievedChunk → 캐시/응답 공용 dict (RecommendationSourceItem 필드와 동형)."""
+    text = getattr(c, "chunk_text", "") or ""
+    snippet = text[:_SNIPPET_MAX_LEN] + ("…" if len(text) > _SNIPPET_MAX_LEN else "")
+    return {
+        "title": getattr(c, "title", None),
+        "document_id": getattr(c, "document_id", None),
+        "snippet": snippet,
+        "source": getattr(c, "source", None),
+    }
+
+
+def _prediction_to_dict(p: PredictionSummary) -> dict[str, Any]:
+    """PredictionSummary → 캐시 dict (RiskPredictionItem 필드와 동형)."""
+    return {
+        "disease_type": p.disease_type,
+        "risk_score": p.risk_score,
+        "risk_level": p.risk_level,
+        "contributing_factors": list(p.contributing_factors),
+    }
 
 
 def _to_prediction_item(p: PredictionSummary) -> RiskPredictionItem:

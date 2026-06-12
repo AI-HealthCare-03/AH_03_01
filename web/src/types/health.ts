@@ -257,6 +257,37 @@ export interface RiskRecommendationResponse {
   disclaimer?: string;
 }
 
+/* ── RAG 위험도 권고 (POST /api/v1/risk-recommendations) ─── */
+
+export interface RagPredictionItem {
+  disease_type: DiseaseType;
+  risk_score: number;
+  risk_level: "NORMAL" | "CAUTION" | "RISK" | "HIGH_RISK";
+  contributing_factors: ContributingFactor[];
+}
+
+export interface RagSource {
+  title?: string;
+  document_id?: string;
+  snippet?: string;
+  source?: string;
+}
+
+export interface RagRiskRecommendationResponse {
+  answer: string;
+  predictions: RagPredictionItem[];
+  sources: RagSource[];
+  recommended_tips: string[];
+  recommended_diet: string[];
+  has_required_data: boolean;
+  missing_fields: string[];
+  action_hint: "navigate_to_health_info" | null;
+  is_fallback: boolean;
+  eval_revision_count: number | null;
+  disclaimer: string;
+  model_version: string;
+}
+
 /* ── 월간 리포트 ─────────────────────────── */
 
 export interface ChallengeSummaryItem {
