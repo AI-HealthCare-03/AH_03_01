@@ -42,7 +42,7 @@ from tortoise import Tortoise
 
 from app.core import config
 from app.core.db.databases import TORTOISE_ORM
-from app.models.rag import DocumentType, RAGDocument
+from app.models.rag import DEFAULT_EMBEDDING_DIM, DocumentType, RAGDocument
 from scripts.rag.topic_mapping import _get_topics
 
 # ─────────────────────────────────────────────
@@ -266,7 +266,10 @@ def embed_batch(client: OpenAI, texts: list[str]) -> list[list[float]]:
     last_err: Exception | None = None
     for attempt in range(EMBEDDING_RETRY):
         try:
-            resp = client.embeddings.create(model=config.OPENAI_EMBEDDING_MODEL, input=texts)
+            # dimensions 고정: 3-large(native 3072)도 vector(1536) 컬럼에 맞춰 1536 산출(:471 가드와 정합).
+            resp = client.embeddings.create(
+                model=config.OPENAI_EMBEDDING_MODEL, input=texts, dimensions=DEFAULT_EMBEDDING_DIM
+            )
             return [item.embedding for item in resp.data]
         except Exception as e:  # noqa: BLE001 — OpenAI SDK 의 다양한 예외 통합 처리
             last_err = e

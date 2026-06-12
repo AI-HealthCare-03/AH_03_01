@@ -28,7 +28,7 @@ from rank_bm25 import BM25Okapi  # type: ignore[import-untyped]
 from tortoise import connections
 
 from app.core import config
-from app.models.rag import RAGDocument
+from app.models.rag import DEFAULT_EMBEDDING_DIM, RAGDocument
 
 # ─────────────────────────────────────────────
 # 상수 (팀원 baseline 과 동일)
@@ -182,7 +182,11 @@ def _get_openai_client() -> AsyncOpenAI:
 
 async def _embed_query(query: str) -> list[float]:
     client = _get_openai_client()
-    resp = await client.embeddings.create(model=config.OPENAI_EMBEDDING_MODEL, input=[query])
+    # dimensions 고정: text-embedding-3-large(native 3072)도 vector(1536) 컬럼에 맞춰 1536 으로 산출.
+    # 인덱스 모델과 동일 차원이어야 검색이 유효(환경별 OPENAI_EMBEDDING_MODEL 일치 전제).
+    resp = await client.embeddings.create(
+        model=config.OPENAI_EMBEDDING_MODEL, input=[query], dimensions=DEFAULT_EMBEDDING_DIM
+    )
     return list(resp.data[0].embedding)
 
 
