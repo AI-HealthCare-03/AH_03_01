@@ -53,6 +53,14 @@ class RiskRecommendationResponse(BaseModel):
     answer: str = Field(description="LLM 생성 권고·챌린지 추천 본문")
     predictions: list[RiskPredictionItem] = Field(default_factory=list)
     sources: list[RecommendationSourceItem] = Field(default_factory=list)
+    recommended_tips: list[str] = Field(
+        default_factory=list,
+        description="생활습관 권고 칩 (LLM 구조화 출력, 본문 요약)",
+    )
+    recommended_diet: list[str] = Field(
+        default_factory=list,
+        description="끼니별 식단 제안 칩 (아침/점심/저녁)",
+    )
     has_required_data: bool = True
     missing_fields: list[str] = Field(default_factory=list)
     action_hint: str | None = Field(
