@@ -39,7 +39,7 @@ import functools
 import json
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -1107,6 +1107,11 @@ async def run_risk_recommendation(
             is_fallback=True,
         )
 
+    return _state_to_result(final_state)
+
+
+def _state_to_result(final_state: RiskState) -> RiskRecommendationResult:
+    """그래프 누적 최종 state → RiskRecommendationResult 매핑 (sync/stream 공용)."""
     if not final_state.get("has_required_data", True):
         return RiskRecommendationResult(
             answer=MISSING_INFO_MESSAGE,
@@ -1137,6 +1142,74 @@ async def run_risk_recommendation(
     )
 
 
+# 스트리밍(SSE) 단계 라벨 — astream_events on_chain_start 진입 시 사용자 노출 노드만.
+# (preprocess/build_query/persist_disease_risk/final_* 등 내부·종료 노드는 스킵.)
+STAGE_LABELS: dict[str, str] = {
+    "validate_input": "건강 정보를 확인하고 있어요...",
+    "ml_inference": "위험도를 예측하고 있어요...",
+    "retrieve": "관련 자료를 검색하고 있어요...",
+    "generate_recommendation": "맞춤 권고를 작성하고 있어요...",
+    "evaluate": "답변을 검토하고 있어요...",
+}
+
+
+async def run_risk_recommendation_stream(
+    user_id: Any,
+    thread_id: str | None = None,
+) -> AsyncIterator[tuple[str, Any]]:
+    """RiskRecommendationGraph 스트리밍 실행 — 단계 이벤트 yield 후 최종 결과 yield.
+
+    run_chat_rag_stream 과 동일 패턴: `astream_events(version="v2")` 의 on_chain_start(루트 제외 +
+    STAGE_LABELS 멤버)에서 ("stage", node) 발행, 루트 on_chain_end 의 누적 state 로 ("result", X) 발행.
+
+    Yields:
+        ("stage", node_name: str)            — 그래프 노드 진입 시점
+        ("result", RiskRecommendationResult) — 마지막 1회
+
+    DB 연결/조회 장애는 그대로 전파(서비스 스트림이 error 이벤트로 변환). 그 외 예외는 fallback 결과로 흡수.
+    """
+    graph = RiskRecommendationGraph()
+    initial: RiskState = {
+        "user_id": user_id,
+        "thread_id": thread_id or f"risk-{user_id}-{int(time.time())}",
+        "eval_revision_count": 0,
+    }
+
+    root_run_id: Any = None
+    final_state: RiskState | None = None
+
+    try:
+        async for ev in graph.astream_events(initial, version="v2"):
+            event_type = ev["event"]
+            # 루트 그래프 실행 식별 — parent_ids 가 빈 리스트인 on_chain_start 가 최상위.
+            if event_type == "on_chain_start" and ev.get("parent_ids") == []:
+                root_run_id = ev["run_id"]
+                continue
+            # 노드 진입 → stage 발행 (STAGE_LABELS 에 있는 노드만).
+            if event_type == "on_chain_start" and ev["name"] in STAGE_LABELS:
+                yield ("stage", ev["name"])
+                continue
+            # 루트 그래프 종료 → 누적 최종 state 확보.
+            if event_type == "on_chain_end" and ev["run_id"] == root_run_id:
+                output = ev["data"].get("output")
+                if isinstance(output, dict):
+                    final_state = output  # type: ignore[assignment]
+    except (DBConnectionError, OperationalError):
+        # DB 장애는 전파 — 서비스가 error 이벤트로 안내.
+        raise
+    except Exception as e:  # noqa: BLE001 — 그래프 자체 예외는 안전 fallback
+        _logger.error("RiskRecommendationGraph 스트리밍 실행 실패: %s", _safe_err_repr(e))
+        yield ("result", RiskRecommendationResult(answer=FALLBACK_MESSAGE, is_fallback=True))
+        return
+
+    if final_state is None:
+        _logger.error("RiskRecommendationGraph 스트리밍: 최종 state 미확보, fallback")
+        yield ("result", RiskRecommendationResult(answer=FALLBACK_MESSAGE, is_fallback=True))
+        return
+
+    yield ("result", _state_to_result(final_state))
+
+
 # ChatRAGGraph 의 __init__ 과 함께 export
 __all__ = [
     "MAX_REVISIONS",
@@ -1147,8 +1220,10 @@ __all__ = [
     "RiskRecommendationGraph",
     "RiskRecommendationResult",
     "RiskState",
+    "STAGE_LABELS",
     "compute_feature_snapshot",
     "run_risk_recommendation",
+    "run_risk_recommendation_stream",
 ]
 
 

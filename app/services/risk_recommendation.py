@@ -6,8 +6,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import math
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from typing import Any
 
@@ -22,10 +24,12 @@ from app.dtos.risk_recommendation import (
 )
 from app.graphs.risk_recommendation_graph import (
     MODEL_VERSION,
+    STAGE_LABELS,
     PredictionSummary,
     RiskRecommendationResult,
     compute_feature_snapshot,
     run_risk_recommendation,
+    run_risk_recommendation_stream,
 )
 from app.models.ml_inference import MLInferenceKind, MLInferenceRequest
 from app.models.risk_recommendation_result import (
@@ -41,6 +45,20 @@ _SNIPPET_MAX_LEN = 200  # 출처 카드용 본문 발췌 길이
 # 결합돼 있어 짧은 간격 반복 호출을 차단. 마지막 ml_inference_requests row 의
 # created_at 기준 — 호출 자체가 RUNNING/SUCCESS 인지 무관하게 시계열 기반.
 _THROTTLE_COOLDOWN_SEC = 60.0
+
+_TOKEN_CHUNK_SIZE = 12  # done 직전 answer 를 청크로 흘릴 때 한 토큰 길이 (한글 가독성, 챗봇 스트림과 동일)
+
+
+def _sse(event: str, data: dict[str, Any]) -> str:
+    """SSE 프레임 직렬화 — `event: <type>\\ndata: <json>\\n\\n` (JSON ensure_ascii=False). 직렬화는 이 한 곳."""
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _iter_token_chunks(text: str) -> list[str]:
+    """answer 문자열을 _TOKEN_CHUNK_SIZE 자 청크 리스트로 분할 (빈 문자열이면 빈 리스트)."""
+    if not text:
+        return []
+    return [text[i : i + _TOKEN_CHUNK_SIZE] for i in range(0, len(text), _TOKEN_CHUNK_SIZE)]
 
 
 class RiskRecommendationService:
@@ -97,8 +115,82 @@ class RiskRecommendationService:
                 detail="일시적으로 건강 데이터를 불러올 수 없습니다. 잠시 후 다시 시도해 주세요.",
             ) from exc
 
-        response = _to_response(result)
+        return await self._finalize(user_id, result)
 
+    async def recommend_stream(  # noqa: C901 — SSE 단계별(meta/stage/token/done/error) 선형 흐름
+        self, *, user_id: Any
+    ) -> AsyncGenerator[str, None]:
+        """SSE 스트리밍 — meta → stage* → token* → done (실패 시 error) 프레임을 yield.
+
+        비스트림 recommend() 와 동일한 캐시 게이트·throttle·저장 정책을 따르되, 그래프 진행
+        단계(astream_events)를 실시간으로 흘려보낸다. done payload 는 recommend() 응답과 동일 shape.
+
+        ⚠️ 스트림 시작(첫 yield) 후엔 HTTP status 를 바꿀 수 없으므로, recommend() 가 503/429 로
+        내던 DB 장애·throttle 위반은 여기선 error 이벤트로 전달한다.
+        """
+        # 1. 캐시 게이트 — 히트 시 meta + done(저장본) 즉시. (가짜 stage 없음.)
+        try:
+            cached_reco = await cache.get_reco(user_id)
+            current_snapshot = await cache.get_snapshot(user_id)
+            if current_snapshot is None:
+                current_snapshot = await compute_feature_snapshot(user_id)
+                if current_snapshot is not None:
+                    await cache.set_snapshot(user_id, current_snapshot)
+            if (
+                current_snapshot is not None
+                and cached_reco is not None
+                and cached_reco.get("model_version") == MODEL_VERSION
+                and cached_reco.get("snapshot") == current_snapshot
+            ):
+                cached_response = cached_reco.get("response")
+                if isinstance(cached_response, dict):
+                    yield _sse("meta", {"cached": True})
+                    yield _sse("done", cached_response)
+                    return
+            await self._enforce_throttle(user_id)
+        except (DBConnectionError, OperationalError) as exc:
+            logger.error("위험도 권고 스트리밍 DB 접근 실패 (user=%s): %s", user_id, exc)
+            yield _sse("error", {"message": "일시적으로 건강 데이터를 불러올 수 없습니다. 잠시 후 다시 시도해 주세요."})
+            return
+        except HTTPException as exc:  # throttle 429 — 스트림에선 error 이벤트로 변환.
+            detail = exc.detail if isinstance(exc.detail, str) else "잠시 후 다시 시도해 주세요."
+            yield _sse("error", {"message": detail, "code": "THROTTLED"})
+            return
+
+        yield _sse("meta", {"cached": False})
+
+        # 2. 그래프 스트리밍 — 노드 진입마다 stage. result 캡처.
+        result: RiskRecommendationResult | None = None
+        try:
+            async for kind, payload in run_risk_recommendation_stream(user_id=user_id):
+                if kind == "stage":
+                    label = STAGE_LABELS.get(payload)
+                    if label is not None:
+                        yield _sse("stage", {"node": payload, "label": label})
+                elif kind == "result":
+                    result = payload
+        except (DBConnectionError, OperationalError) as exc:
+            logger.error("위험도 권고 스트리밍 그래프 DB 장애 (user=%s): %s", user_id, exc)
+            yield _sse("error", {"message": "일시적으로 건강 데이터를 불러올 수 없습니다. 잠시 후 다시 시도해 주세요."})
+            return
+        except Exception:  # noqa: BLE001 — 그래프 예외는 error 이벤트로 흡수
+            logger.exception("위험도 권고 스트리밍 그래프 실패 (user=%s)", user_id)
+            yield _sse("error", {"message": "위험도 분석 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요."})
+            return
+
+        if result is None:
+            yield _sse("error", {"message": "위험도 분석 결과를 받지 못했어요. 잠시 후 다시 시도해 주세요."})
+            return
+
+        # 3. 저장(best-effort) + token + done — recommend() 와 동일 후처리.
+        response = await self._finalize(user_id, result)
+        for chunk in _iter_token_chunks(response.answer):
+            yield _sse("token", {"text": chunk})
+        yield _sse("done", response.model_dump(mode="json"))
+
+    async def _finalize(self, user_id: Any, result: RiskRecommendationResult) -> RiskRecommendationResponse:
+        """그래프 결과 → 응답 매핑 + 저장(가드 통과 시 DB append best-effort + Redis SET). 공용 후처리."""
+        response = _to_response(result)
         # fallback / 데이터 미충족 결과는 캐싱하지 않음 (다음 호출에 재시도 가능해야 함).
         if result.has_required_data and not result.is_fallback:
             # DB append 는 best-effort — 이력 저장이 실패해도 이미 산출된 유효 결과는 반환한다.
@@ -114,7 +206,6 @@ class RiskRecommendationService:
                 response=response.model_dump(mode="json"),
             )
             await cache.set_snapshot(user_id, result.feature_snapshot)
-
         return response
 
     @staticmethod
