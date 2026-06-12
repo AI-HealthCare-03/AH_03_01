@@ -351,6 +351,14 @@ class RiskPredictor:
         self._ml_loaded = True
         return self._ml
 
+    def warmup(self) -> bool:
+        """모델을 즉시 적재하고 ML 사용 가능 여부를 반환(부팅 프로브용).
+
+        True=ML 모델 적재 성공, False=룰 폴백만 가능. 워커 startup 에서 호출해
+        모델 로드 실패가 '조용한 룰 폴백'에 묻히지 않도록 표면화하는 데 쓴다.
+        """
+        return self._get_ml() is not None
+
     async def predict(self, payload: PredictionInput) -> PredictionOutput:
         import logging
         import traceback
