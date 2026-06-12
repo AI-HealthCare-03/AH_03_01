@@ -1,9 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import Button from "@/components/ui/Button";
-import { useToast } from "@/components/ui/Toast";
 import ChallengeCategoryIcon, { CATEGORY_CONFIG } from "@/components/challenges/common/ChallengeCategoryIcon";
 import ChallengeProgressBar from "@/components/challenges/common/ChallengeProgressBar";
 import ChallengeStatusBadge from "@/components/challenges/common/ChallengeStatusBadge";
@@ -39,7 +36,6 @@ export default function GroupDetail({
   initialTab = "info",
 }: GroupDetailProps) {
   const [activeTab, setActiveTab] = useState<GroupTab>(initialTab);
-  const { showToast } = useToast();
   const { data: participantsData } = useChallengeParticipants(challenge.id);
 
   const catConfig = CATEGORY_CONFIG[challenge.category] ?? CATEGORY_CONFIG.EXERCISE;
@@ -49,17 +45,6 @@ export default function GroupDetail({
       : 0;
 
   const participants = participantsData?.items ?? [];
-
-  /* 초대 코드 복사 */
-  const handleCopyInviteCode = async () => {
-    if (!challenge.invite_code) return;
-    try {
-      await navigator.clipboard.writeText(challenge.invite_code);
-      showToast("초대 코드가 복사되었어요!", "success");
-    } catch {
-      showToast(`초대 코드: ${challenge.invite_code}`, "info");
-    }
-  };
 
   return (
     <div>
@@ -82,34 +67,12 @@ export default function GroupDetail({
                 {catConfig.label}
               </p>
             </div>
-            {/* 데스크탑 초대 코드 복사 */}
-            {challenge.invite_code && (
-              <button
-                type="button"
-                onClick={handleCopyInviteCode}
-                className="hidden md:flex items-center gap-1.5 text-xs font-semibold text-text-secondary border border-border rounded-[8px] px-3 py-1.5 hover:bg-surface transition-colors"
-              >
-                <span aria-hidden="true">🔗</span>
-                초대 코드 복사
-              </button>
-            )}
-          </div>
+            </div>
           <ChallengeProgressBar
             progress={progressPct}
             completedDays={challenge.my_progress}
             totalDays={challenge.total_days}
           />
-          {/* 모바일 초대 코드 복사 */}
-          {challenge.invite_code && (
-            <button
-              type="button"
-              onClick={handleCopyInviteCode}
-              className="md:hidden mt-3 flex items-center gap-1.5 text-xs font-semibold text-text-secondary"
-            >
-              <span aria-hidden="true">🔗</span>
-              초대 코드 복사: {challenge.invite_code}
-            </button>
-          )}
         </div>
       </div>
 
@@ -142,55 +105,20 @@ export default function GroupDetail({
       </div>
 
       {/* 콘텐츠 */}
-      <div className="max-w-5xl mx-auto md:flex md:gap-6 px-5 py-5 md:px-8">
-        {/* 메인 탭 콘텐츠 */}
-        <div className="flex-1 min-w-0">
-          {activeTab === "info" && (
-            <GroupInfoTab challenge={challenge} participants={participants} />
-          )}
-          {activeTab === "chat" && (
-            <GroupChatTab challengeId={challenge.id} />
-          )}
-          {activeTab === "members" && (
-            <GroupMemberTab
-              challengeId={challenge.id}
-              totalDays={challenge.total_days}
-            />
-          )}
-        </div>
-
-        {/* 데스크탑 우측: 오늘 인증하기 사이드박스 */}
-        {challenge.status === "ACTIVE" && (
-          <aside className="hidden md:block w-56 shrink-0">
-            <div className="bg-white border border-border rounded-[16px] p-5 sticky top-32 space-y-3">
-              <p className="text-sm font-bold text-text-primary">오늘의 인증</p>
-              <Link href={`/challenges/${challenge.id}/verify`}>
-                <Button variant="primary" size="md" fullWidth>
-                  오늘 인증하기
-                </Button>
-              </Link>
-              <button
-                type="button"
-                onClick={onShield}
-                className="w-full text-xs text-text-tertiary hover:text-text-secondary underline"
-              >
-                🛡️ 방지권 사용
-              </button>
-            </div>
-          </aside>
+      <div className="max-w-5xl mx-auto px-5 py-5 md:px-8">
+        {activeTab === "info" && (
+          <GroupInfoTab challenge={challenge} participants={participants} onShield={onShield} />
+        )}
+        {activeTab === "chat" && (
+          <GroupChatTab challengeId={challenge.id} />
+        )}
+        {activeTab === "members" && (
+          <GroupMemberTab
+            challengeId={challenge.id}
+            totalDays={challenge.total_days}
+          />
         )}
       </div>
-
-      {/* 모바일 하단 고정 CTA */}
-      {challenge.status === "ACTIVE" && (
-        <div className="md:hidden fixed bottom-16 left-0 right-0 bg-white border-t border-border px-5 py-3 z-20">
-          <Link href={`/challenges/${challenge.id}/verify`}>
-            <Button variant="primary" size="lg" fullWidth>
-              오늘 인증하기
-            </Button>
-          </Link>
-        </div>
-      )}
     </div>
   );
 }

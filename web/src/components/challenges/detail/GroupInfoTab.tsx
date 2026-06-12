@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import ChallengeProgressBar from "@/components/challenges/common/ChallengeProgressBar";
-import ChallengeCategoryIcon, { CATEGORY_CONFIG } from "@/components/challenges/common/ChallengeCategoryIcon";
+import Link from "next/link";
+import Button from "@/components/ui/Button";
 import InviteUserModal from "@/components/challenges/detail/InviteUserModal";
 import { useToast } from "@/components/ui/Toast";
 import type { Challenge } from "@/types/challenge";
 import type { ChallengeParticipant } from "@/types/challenge";
-import { dDayLabel } from "@/lib/dateUtils";
+import { calcDDay } from "@/lib/dateUtils";
 
 /* =========================================
    그룹 챌린지 - 정보 탭 (10-C09)
@@ -16,6 +16,7 @@ import { dDayLabel } from "@/lib/dateUtils";
 interface GroupInfoTabProps {
   challenge: Challenge;
   participants: ChallengeParticipant[];
+  onShield: () => void;
 }
 
 function getInitial(name?: string): string {
@@ -26,9 +27,9 @@ function getInitial(name?: string): string {
 export default function GroupInfoTab({
   challenge,
   participants,
+  onShield,
 }: GroupInfoTabProps) {
-  const catConfig = CATEGORY_CONFIG[challenge.category] ?? CATEGORY_CONFIG.EXERCISE;
-  const { showToast } = useToast();
+const { showToast } = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
   const participantUserIds = participants
     .map((p) => p.user_id ?? p.user?.id)
@@ -47,10 +48,9 @@ export default function GroupInfoTab({
       showToast(`초대 코드: ${challenge.invite_code}`, "info");
     }
   };
-  const progressPct =
-    challenge.total_days && challenge.total_days > 0
-      ? Math.round(((challenge.my_progress ?? 0) / challenge.total_days) * 100)
-      : 0;
+  const canVerify =
+    (challenge.status === "ACTIVE" || (challenge.status === "RECRUITING" && calcDDay(challenge.start_date) <= 0)) &&
+    calcDDay(challenge.end_date) >= 0;
 
   /* 통계 */
   const totalVerified = participants.reduce(
@@ -86,23 +86,25 @@ export default function GroupInfoTab({
         </div>
       )}
 
-      {/* 챌린지 기본 정보 카드 */}
-      <div className="bg-surface rounded-[14px] p-4 space-y-3">
-        <div className="flex items-center gap-3">
-          <ChallengeCategoryIcon category={challenge.category} size="md" />
-          <div>
-            <p className="font-bold text-text-primary">{challenge.title}</p>
-            <p className="text-xs text-text-tertiary">
-              {catConfig.label} · {dDayLabel(challenge.end_date)}
-            </p>
-          </div>
+
+      {/* 오늘의 인증 */}
+      {canVerify && (
+        <div className="bg-white border border-border rounded-[14px] p-4 space-y-3">
+          <p className="text-sm font-bold text-text-primary">오늘의 인증</p>
+          <Link href={`/challenges/${challenge.id}/verify`}>
+            <Button variant="primary" size="lg" fullWidth>
+              오늘 인증하기
+            </Button>
+          </Link>
+          <button
+            type="button"
+            onClick={onShield}
+            className="w-full text-xs text-text-tertiary hover:text-text-secondary underline py-1"
+          >
+            🛡️ 실패 방지권 사용하기
+          </button>
         </div>
-        <ChallengeProgressBar
-          progress={progressPct}
-          completedDays={challenge.my_progress}
-          totalDays={challenge.total_days}
-        />
-      </div>
+      )}
 
       {/* 참여 멤버 5칸 */}
       <div>
