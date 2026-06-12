@@ -62,6 +62,7 @@ export interface Challenge {
   verification_type: VerificationMethod;
   invite_code?: string | null;
   visibility?: ChallengeVisibility | null;
+  is_member?: boolean;
   created_by: number;
   created_at: string;
   /* 신규: cadence + goal_config */
