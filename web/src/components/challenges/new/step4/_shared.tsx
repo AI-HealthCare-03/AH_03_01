@@ -216,6 +216,31 @@ export function MaxParticipantsSlider({
   );
 }
 
+/* ─── 그룹 최대 참여 인원 칩 (2/3/4/5명) ─── */
+export const MAX_PARTICIPANTS_OPTIONS = [
+  { value: 2, label: "2명" },
+  { value: 3, label: "3명" },
+  { value: 4, label: "4명" },
+  { value: 5, label: "5명" },
+];
+
+export function MaxParticipantsChips({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <Chips
+      label="최대 참여 인원"
+      options={MAX_PARTICIPANTS_OPTIONS}
+      value={value}
+      onChange={onChange}
+    />
+  );
+}
+
 /* ─── 예상 보상 카드 ─── */
 export function RewardPreview({
   durationDays,

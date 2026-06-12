@@ -7,7 +7,7 @@ import {
   DurationPicker,
   WeeklyDurationNote,
   TitleInput,
-  MaxParticipantsSlider,
+  MaxParticipantsChips,
   RewardPreview,
   Step4Header,
   GROUP_SUM_OPTIONS,
@@ -227,7 +227,7 @@ export function WalkingGroupForm({
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />
@@ -409,7 +409,7 @@ export function RunningGroupForm({
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />
@@ -493,7 +493,7 @@ export function CyclingGroupForm({
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />
@@ -602,7 +602,7 @@ export function StrengthGroupForm({
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />
@@ -661,7 +661,7 @@ export function SwimmingGroupForm({
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />
@@ -815,7 +815,7 @@ export function OtherGroupForm({
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />

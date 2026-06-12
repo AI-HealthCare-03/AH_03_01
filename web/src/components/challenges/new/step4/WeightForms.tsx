@@ -4,10 +4,9 @@ import { useState } from "react";
 import {
   RadioCards,
   TitleInput,
-  MaxParticipantsSlider,
+  MaxParticipantsChips,
   RewardPreview,
   Step4Header,
-  GROUP_MEMBERS_OPTIONS,
   Chips,
 } from "./_shared";
 import type { WizardFormState } from "@/types/challenge";
@@ -241,20 +240,12 @@ export function WeightGroupForm({
       )}
 
       {/* 달성 인원 */}
-      <Chips
-        label="그룹 달성 목표 인원"
-        options={GROUP_MEMBERS_OPTIONS}
-        value={form.goal_config.group_target_members}
-        onChange={(v) =>
-          onChange({
-            goal_config: { ...form.goal_config, group_target_members: v },
-          })
-        }
-      />
-
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
-        onChange={(v) => onChange({ max_participants: v })}
+        onChange={(v) => onChange({
+          max_participants: v,
+          goal_config: { ...form.goal_config, group_target_members: v },
+        })}
       />
       <TitleInput value={form.title} onChange={(v) => onChange({ title: v })} />
       <RewardPreview durationDays={form.duration_days} isGroup />

@@ -28,6 +28,7 @@ export async function fetchChallenges(params: {
   status?: ChallengeStatus;
   scope?: ChallengeScope;
   category?: string;
+  visibility?: string;
   inviteCode?: string;
   size?: number;
   page?: number;
