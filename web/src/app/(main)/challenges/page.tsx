@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/Toast";
 import { joinChallengeByCode } from "@/lib/api/challenge";
 import { extractErrorMessage } from "@/lib/api/client";
 import Button from "@/components/ui/Button";
+import { calcDDay } from "@/lib/dateUtils";
 
 /* =========================================
    챌린지 메인 목록
@@ -101,8 +102,11 @@ function ChallengeListContent() {
   const { data: recommendationData, isLoading: recLoading } =
     useChallengeRecommendations(latestPredictionId, 6);
 
-  const activeItems = [...(activeData?.items ?? []), ...(recruitingData?.items ?? [])];
-  const completedItems = completedData?.items ?? [];
+  const allActiveItems = [...(activeData?.items ?? []), ...(recruitingData?.items ?? [])];
+  /* end_date 지난 ACTIVE/RECRUITING 챌린지는 완료 탭으로 이동 */
+  const activeItems = allActiveItems.filter((c) => calcDDay(c.end_date) >= 0);
+  const expiredActiveItems = allActiveItems.filter((c) => calcDDay(c.end_date) < 0);
+  const completedItems = [...expiredActiveItems, ...(completedData?.items ?? [])];
   const groupItems = joinData?.items ?? [];
   const recommendationItems = recommendationData?.items ?? [];
 
@@ -283,7 +287,7 @@ function ChallengeListContent() {
 
           {tab === "my" && mySubTab === "completed" && (
             <>
-              {completedLoading ? (
+              {completedLoading || activeLoading || recruitingLoading ? (
                 <div className="space-y-3">
                   {[0, 1].map((i) => (
                     <div key={i} className="h-32 bg-white rounded-[16px] border border-border animate-pulse" />

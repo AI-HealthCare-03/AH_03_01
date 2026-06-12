@@ -17,16 +17,17 @@ import {
   isToday,
 } from "date-fns";
 
-/** 오늘 ~ end_date 남은 일수 (0이면 "오늘 마감") */
+/** 오늘 ~ end_date 남은 일수 (음수면 기간 종료) */
 export function calcDDay(endDate: string): number {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  return Math.max(0, differenceInCalendarDays(parseISO(endDate), today));
+  return differenceInCalendarDays(parseISO(endDate), today);
 }
 
 /** D-day 라벨 문자열 */
 export function dDayLabel(endDate: string): string {
   const days = calcDDay(endDate);
+  if (days < 0) return "챌린지 종료";
   if (days === 0) return "오늘 마감";
   return `D-${days}`;
 }

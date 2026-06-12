@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { dDayLabel } from "@/lib/dateUtils";
+import { dDayLabel, calcDDay } from "@/lib/dateUtils";
 import ChallengeCategoryIcon from "./common/ChallengeCategoryIcon";
 import ChallengeProgressBar from "./common/ChallengeProgressBar";
 import ChallengeStatusBadge from "./common/ChallengeStatusBadge";
@@ -30,15 +30,17 @@ export default function ChallengeCard({
 
   const isCrisis = (challenge.missed_count ?? 0) >= 1;
   const dday = dDayLabel(challenge.end_date);
+  const isExpired = calcDDay(challenge.end_date) < 0;
 
-  // 그룹 ACTIVE → 인증하기 / 그룹 RECRUITING → 소통하기 / 개인 → 오늘 인증하기
-  const ctaLabel =
+  // 그룹 ACTIVE 또는 RECRUITING(시작일 경과) → 인증하기 / 그룹 RECRUITING(미시작) → 소통하기 / 개인 ACTIVE → 오늘 인증하기
+  const canVerify =
     challenge.scope === "GROUP"
-      ? challenge.status === "ACTIVE" ? "오늘 인증하기" : "소통하기"
-      : "오늘 인증하기";
+      ? challenge.status === "ACTIVE" || (challenge.status === "RECRUITING" && calcDDay(challenge.start_date) <= 0)
+      : challenge.status === "ACTIVE";
+  const ctaLabel = challenge.scope === "GROUP" ? (canVerify ? "오늘 인증하기" : "소통하기") : "오늘 인증하기";
   const ctaHref =
     challenge.scope === "GROUP"
-      ? challenge.status === "ACTIVE"
+      ? canVerify
         ? `/challenges/${challenge.id}/verify`
         : `/challenges/${challenge.id}?tab=chat`
       : `/challenges/${challenge.id}/verify`;
@@ -70,7 +72,7 @@ export default function ChallengeCard({
       </div>
 
       {/* 진행률 */}
-      {challenge.status === "ACTIVE" && (
+      {showCTA && canVerify && (
         <div className="mb-3">
           <ChallengeProgressBar
             progress={progressPct}
@@ -102,7 +104,7 @@ export default function ChallengeCard({
             </span>
           )}
         </div>
-        {showCTA && challenge.status === "ACTIVE" && (
+        {showCTA && canVerify && !isExpired && (
           <button
             type="button"
             onClick={(e) => {
