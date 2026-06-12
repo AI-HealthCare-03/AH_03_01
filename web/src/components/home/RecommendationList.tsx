@@ -194,9 +194,7 @@ function GroupChallengeModal({
 
 function RecommendationCard({ item }: { item: ChallengeRecommendationItem }) {
   const [modalOpen, setModalOpen] = useState(false);
-  /* 미지의 priority 값에 대해 RECOMMENDED 로 fallback (crash 방지) */
   const priority = PRIORITY_CONFIG[item.priority] ?? PRIORITY_CONFIG.RECOMMENDED;
-  /* 백엔드는 reward_points 를 보내지 않으므로 정책상 기본 200P 표시 */
   const rewardLabel = `${item.reward_points ?? 200}P`;
   const categoryLabel = CATEGORY_CONFIG[item.category]?.label ?? item.title;
 
