@@ -128,6 +128,8 @@ class ChallengeListItem(BaseModel):
     scope: ChallengeScope
     status: ChallengeStatus
     category: ChallengeCategory
+    visibility: ChallengeVisibility = ChallengeVisibility.PUBLIC
+    max_participants: int | None = None
     start_date: date
     end_date: date
     progress_percent: float | None = None

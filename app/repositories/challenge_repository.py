@@ -57,6 +57,7 @@ class ChallengeRepository:
         scope: str | None = None,
         status: str | None = None,
         category: str | None = None,
+        visibility: str | None = None,
         keyword: str | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
@@ -71,6 +72,8 @@ class ChallengeRepository:
             qs = qs.filter(status=status)
         if category is not None:
             qs = qs.filter(category=category)
+        if visibility is not None:
+            qs = qs.filter(visibility=visibility)
         if keyword:
             qs = qs.filter(Q(title__icontains=keyword) | Q(description__icontains=keyword))
         if date_from is not None:

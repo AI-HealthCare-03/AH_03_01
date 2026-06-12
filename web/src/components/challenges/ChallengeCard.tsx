@@ -96,6 +96,11 @@ export default function ChallengeCard({
               최대 {challenge.max_participants}명
             </span>
           )}
+          {challenge.scope === "GROUP" && challenge.visibility === "PRIVATE" && (
+            <span className="flex items-center gap-0.5 text-text-tertiary">
+              🔒 비공개
+            </span>
+          )}
         </div>
         {showCTA && challenge.status === "ACTIVE" && (
           <button
