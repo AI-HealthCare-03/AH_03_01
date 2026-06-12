@@ -22,6 +22,7 @@ TORTOISE_APP_MODELS = [
     "app.models.ml_inference",
     "app.models.community",
     "app.models.notifications",
+    "app.models.risk_recommendation_result",
 ]
 
 

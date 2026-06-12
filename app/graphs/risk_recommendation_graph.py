@@ -156,6 +156,8 @@ class RiskState(TypedDict, total=False):
     eligible_templates: list[EligibleTemplate]
     safety_notes: str
     recommended_challenges: list[dict[str, Any]]  # [{template_id, priority, reason}, ...]
+    recommended_tips: list[str]  # 생활습관 권고 (LLM 구조화 출력)
+    recommended_diet: list[str]  # 끼니별 식단 제안 (LLM 구조화 출력)
 
     # final
     final_answer: str
@@ -180,12 +182,15 @@ class RiskRecommendationResult:
     answer: str  # 권고·챌린지 추천 본문 (LLM 생성)
     predictions: list[PredictionSummary] = field(default_factory=list)
     sources: list[RetrievedChunk] = field(default_factory=list)
+    tips: list[str] = field(default_factory=list)  # 생활습관 권고 (구조화 칩)
+    diet: list[str] = field(default_factory=list)  # 끼니별 식단 제안 (구조화 칩)
     has_required_data: bool = True
     missing_fields: list[str] = field(default_factory=list)
     is_fallback: bool = False
     eval_revision_count: int | None = None
     disclaimer: str = MEDICAL_DISCLAIMER
     model_version: str = MODEL_VERSION
+    feature_snapshot: dict[str, Any] = field(default_factory=dict)  # 캐시 비교 기준 입력 snapshot
 
 
 # ─────────────────────────────────────────────
@@ -788,23 +793,45 @@ def _format_eligible_templates_block(eligible: list[EligibleTemplate]) -> str:
     return "\n".join(lines) + "\n\n"
 
 
-def _parse_recommendation_json(draft: str) -> tuple[str, list[dict[str, Any]]]:
-    """draft 에서 <!--RECS:[...]–-> 블록을 추출하고 clean 본문과 파싱된 목록을 반환."""
+def _extract_json_block(draft: str, tag: str) -> tuple[str, list[Any]]:
+    """draft 에서 `<!--{tag}:[...]-->` 블록 1개를 추출 → (block 제거된 본문, 파싱 리스트).
+
+    파싱 실패/미존재 시 ([원본 그대로], []) 를 반환해 본문은 보존한다.
+    """
     import re
 
-    pattern = r"<!--RECS:(\[[\s\S]*?\])-->"
+    pattern = rf"<!--{tag}:(\[[\s\S]*?\])-->"
     m = re.search(pattern, draft)
     if not m:
         return draft, []
-    json_str = m.group(1)
     clean = draft[: m.start()].rstrip() + draft[m.end() :]
     try:
-        items = json.loads(json_str)
+        items = json.loads(m.group(1))
         if not isinstance(items, list):
             items = []
     except Exception:  # noqa: BLE001
         items = []
     return clean.strip(), items
+
+
+def _parse_recommendation_json(draft: str) -> tuple[str, list[dict[str, Any]]]:
+    """draft 에서 <!--RECS:[...]–-> 블록을 추출하고 clean 본문과 파싱된 목록을 반환."""
+    clean, items = _extract_json_block(draft, "RECS")
+    recs = [i for i in items if isinstance(i, dict)]
+    return clean, recs
+
+
+def _parse_tips_diet(draft: str) -> tuple[str, list[str], list[str]]:
+    """draft 에서 <!--TIPS:[...]--> / <!--DIET:[...]--> 블록을 추출.
+
+    반환: (두 블록이 제거된 본문, tips 문자열 리스트, diet 문자열 리스트).
+    """
+    clean, raw_tips = _extract_json_block(draft, "TIPS")
+    clean, raw_diet = _extract_json_block(clean, "DIET")
+    # 응답·캐시 비대화 방지: 항목 수(최대 5개)·길이(200자) 상한 (악의/오작동 LLM 출력 가드).
+    tips = [str(t).strip()[:200] for t in raw_tips if str(t).strip()][:5]
+    diet = [str(d).strip()[:200] for d in raw_diet if str(d).strip()][:5]
+    return clean, tips, diet
 
 
 async def generate_recommendation(state: RiskState) -> dict[str, Any]:
@@ -825,7 +852,7 @@ async def generate_recommendation(state: RiskState) -> dict[str, Any]:
     templates_block = _format_eligible_templates_block(eligible)
 
     allowed_ids = {t.template_id for t in eligible}
-    json_instruction = (
+    recs_instruction = (
         (
             "\n\n답변 본문 작성 후, 아래 형식으로 추천 챌린지 JSON 블록을 **반드시** 본문 끝에 붙이세요 "
             "(템플릿 목록의 id 만 사용, 최대 3개):\n"
@@ -834,6 +861,14 @@ async def generate_recommendation(state: RiskState) -> dict[str, Any]:
         if allowed_ids
         else ""
     )
+    # 권고 칩(TIPS) + 끼니별 식단 칩(DIET) 구조화 블록도 함께 요청 (본문은 그대로 유지).
+    structured_instruction = (
+        "\n\n또한 본문에 작성한 핵심 생활습관 권고를 아래 형식으로 짧은 한국어 문장 리스트(3~5개)로 요약해 붙이세요:\n"
+        '<!--TIPS:["권고 한 줄", "..."]-->\n'
+        "끼니별 식단 제안(아침/점심/저녁 각 한 줄, 카탈로그·지침 근거)도 아래 형식으로 붙이세요:\n"
+        '<!--DIET:["아침: ...", "점심: ...", "저녁: ..."]-->'
+    )
+    json_instruction = recs_instruction + structured_instruction
 
     user_prompt = (
         f"{_format_predictions_block(predictions)}"
@@ -866,8 +901,15 @@ async def generate_recommendation(state: RiskState) -> dict[str, Any]:
     allowed_ids = {t.template_id for t in eligible}
     clean_draft, raw_recs = _parse_recommendation_json(draft)
     validated_recs = [r for r in raw_recs if isinstance(r.get("template_id"), int) and r["template_id"] in allowed_ids]
+    # 권고/식단 구조화 블록 추출 (본문에서 제거 — answer 는 평가기 통과본 유지)
+    clean_draft, tips, diet = _parse_tips_diet(clean_draft)
 
-    return {"draft_answer": clean_draft, "recommended_challenges": validated_recs}
+    return {
+        "draft_answer": clean_draft,
+        "recommended_challenges": validated_recs,
+        "recommended_tips": tips,
+        "recommended_diet": diet,
+    }
 
 
 # ─────────────────────────────────────────────
@@ -931,12 +973,16 @@ async def final_ok(state: RiskState) -> dict[str, Any]:
             return {
                 "final_answer": state.get("draft_answer", ""),
                 "sources": state.get("retrieved_docs", []),
+                "recommended_tips": state.get("recommended_tips", []),
+                "recommended_diet": state.get("recommended_diet", []),
                 "is_fallback": True,
             }
 
     return {
         "final_answer": state.get("draft_answer", ""),
         "sources": state.get("retrieved_docs", []),
+        "recommended_tips": state.get("recommended_tips", []),
+        "recommended_diet": state.get("recommended_diet", []),
         "is_fallback": False,
     }
 
@@ -1008,6 +1054,28 @@ def RiskRecommendationGraph() -> Any:  # noqa: N802 — API 계약 명칭 보존
 # ─────────────────────────────────────────────
 # 공개 진입점
 # ─────────────────────────────────────────────
+async def compute_feature_snapshot(user_id: Any) -> dict[str, Any] | None:
+    """그래프를 실행하지 않고 캐시 비교 기준 입력 snapshot 만 산출.
+
+    `validate_input`(DB fetch) + `preprocess` 두 노드만 재사용하므로 LLM·ML 호출이 없다.
+    필수 데이터(height/weight)가 없으면 None 을 반환 — 캐시 게이트는 이 경우 그래프 호출로
+    위임해 정상 missing-info 응답 경로를 타게 한다.
+
+    그래프 본 실행이 사용하는 snapshot 과 동일 코드 경로라 캐시 키 drift 가 없다.
+    """
+    fetch_state: RiskState = {"user_id": user_id}
+    fetched = await validate_input(fetch_state)
+    if not fetched.get("has_required_data", False):
+        return None
+    pre_state: RiskState = {
+        "profile": fetched.get("profile"),
+        "recent_records": fetched.get("recent_records") or {},
+    }
+    pre = await preprocess(pre_state)
+    snapshot = pre.get("feature_snapshot")
+    return dict(snapshot) if isinstance(snapshot, dict) else None
+
+
 async def run_risk_recommendation(
     user_id: Any,
     thread_id: str | None = None,
@@ -1055,8 +1123,11 @@ async def run_risk_recommendation(
             for p in (final_state.get("predictions") or [])
         ],
         sources=list(final_state.get("sources") or []),
+        tips=list(final_state.get("recommended_tips") or []),
+        diet=list(final_state.get("recommended_diet") or []),
         is_fallback=bool(final_state.get("is_fallback", False)),
         eval_revision_count=int(final_state.get("eval_revision_count", 0)),
+        feature_snapshot=dict(final_state.get("feature_snapshot") or {}),
     )
 
 
@@ -1070,6 +1141,7 @@ __all__ = [
     "RiskRecommendationGraph",
     "RiskRecommendationResult",
     "RiskState",
+    "compute_feature_snapshot",
     "run_risk_recommendation",
 ]
 
