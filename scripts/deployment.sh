@@ -21,6 +21,8 @@ build_and_push () {
 
   if [[ "$name" == "FastAPI" ]]; then
     tag_base="app"
+  elif [[ "$name" == "Risk Worker" ]]; then
+    tag_base="risk"
   else
     tag_base="ai"
   fi
@@ -58,7 +60,8 @@ echo ""
 echo "${COLOR_BLUE}배포 전 빌드 & 푸시할 이미지를 선택하세요(복수선택 가능, 띄어쓰기로 구분)${COLOR_NC}"
 echo "1) fastapi"
 echo "2) ai_worker"
-read -p "선택 (예: 1 2): " selections
+echo "3) risk_worker"
+read -p "선택 (예: 1 2 3): " selections
 echo ""
 
 
@@ -78,6 +81,12 @@ for choice in $selections; do
       read -p "AI-worker 앱 버젼: " ai_version
       build_and_push ${docker_user} ${docker_repo} "AI Worker" ${ai_version} "ai_worker/Dockerfile" "."
       DEPLOY_SERVICES+=("ai-worker")
+      ;;
+    3)
+      echo "${COLOR_BLUE}Risk-worker(위험도 예측 ML 추론) 앱의 배포 버젼을 입력하세요(ex. v1.0.0)${COLOR_NC}"
+      read -p "Risk-worker 앱 버젼: " risk_version
+      build_and_push ${docker_user} ${docker_repo} "Risk Worker" ${risk_version} "ai_worker/risk_inference/Dockerfile" "."
+      DEPLOY_SERVICES+=("risk-worker")
       ;;
     *)
       echo "${COLOR_RED}잘못된 선택입니다: $choice${COLOR_NC}"

@@ -46,6 +46,28 @@ services:
       redis:
         condition: service_healthy
 
+  # 3-2. Risk Inference Worker (위험도 예측 ML 추론 — CatBoost/LightGBM, queue:ml-inference)
+  # SigLIP 워커(ai-worker)와 분리된 전용 프로세스 — ML 추론을 API 프로세스에서 떼어내
+  # 장애/지연 격리. RISK_INFERENCE_ASYNC=true 일 때 fastapi 그래프가 이 워커로 큐 dispatch 한다.
+  # ⚠️ 모델 아티팩트(models/, git 미추적)는 EC2 호스트 ~/project/models 에 번들로 두고 마운트해야 한다.
+  #    번들이 없으면 추론 실패 → RISK_REQUIRE_ML=true 라 SUCCESS 미기록 → 그래프가 룰 폴백한다.
+  # 2개 워커가 같은 큐(queue:ml-inference)를 BRPOP → Redis 가 자동 분배. replicas 사용을 위해
+  # container_name 제거(고정 이름은 복제와 충돌). 2×2G=4G.
+  risk-worker:
+    image: ${DOCKER_USER}/${DOCKER_REPOSITORY}:risk-${RISK_WORKER_VERSION}
+    env_file: .env  # DB_HOST(RDS)·REDIS_HOST=redis·RISK_* 플래그를 그대로 사용(override 없음).
+    restart: always
+    mem_limit: 2G  # 워커당 상한. CatBoost/LightGBM 추론. 2×2G=4G.
+    deploy:
+      replicas: 2
+    volumes:
+      - ./models:/app/models  # ML 모델 아티팩트(preprocess.py + 가중치). 추론에 필수, 호스트 번들 마운트.
+    networks:
+      - ws
+    depends_on:
+      redis:
+        condition: service_healthy
+
   # 4. Nginx (웹 서버 - 요청 리버스 프록시로 전달)
   nginx:
     container_name: nginx
