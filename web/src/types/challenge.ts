@@ -12,6 +12,7 @@ export type ChallengeScope = "PERSONAL" | "GROUP";
 
 /* 챌린지 상태 */
 export type ChallengeStatus =
+  | "RECRUITING"
   | "ACTIVE"
   | "COMPLETED"
   | "CANCELLED"
