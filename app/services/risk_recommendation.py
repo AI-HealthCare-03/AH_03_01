@@ -6,11 +6,13 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException, status
+from tortoise.exceptions import DBConnectionError, OperationalError
 
 from app.dtos.risk_recommendation import (
     ContributingFactorItem,
@@ -30,6 +32,8 @@ from app.models.risk_recommendation_result import (
     RiskRecommendationResult as RiskRecommendationResultModel,
 )
 from app.services import risk_recommendation_cache as cache
+
+logger = logging.getLogger(__name__)
 
 _SNIPPET_MAX_LEN = 200  # 출처 카드용 본문 발췌 길이
 
@@ -58,35 +62,51 @@ class RiskRecommendationService:
         Redis 장애는 best-effort 로 흡수하고 DB/그래프 경로로 폴백한다 (진실 원본은 DB).
         (cache hit 시 throttle 미적용 — 무비용 경로.)
         """
-        cached_reco = await cache.get_reco(user_id)
+        # 건강데이터 read + 그래프 실행은 DB 입력 경로. DB 연결/조회 장애 시 raw 500 이나
+        # 일반 fallback 으로 가리지 않고 503(일시 오류)로 명확히 안내한다. (입력 미충족과 구분 —
+        # 미충족은 그래프가 정상 missing-info 응답으로 처리.)
+        try:
+            cached_reco = await cache.get_reco(user_id)
 
-        # 2. 현재 snapshot 확보 — Redis 히트면 DB 미접근, 미스면 DB read 후 캐싱.
-        current_snapshot = await cache.get_snapshot(user_id)
-        if current_snapshot is None:
-            current_snapshot = await compute_feature_snapshot(user_id)
-            if current_snapshot is not None:
-                await cache.set_snapshot(user_id, current_snapshot)
+            # 2. 현재 snapshot 확보 — Redis 히트면 DB 미접근, 미스면 DB read 후 캐싱.
+            current_snapshot = await cache.get_snapshot(user_id)
+            if current_snapshot is None:
+                current_snapshot = await compute_feature_snapshot(user_id)
+                if current_snapshot is not None:
+                    await cache.set_snapshot(user_id, current_snapshot)
 
-        # 3. reco 히트 + 입력/모델 버전 일치 → 저장본 즉시 반환 (그래프·DB 0회).
-        #    필수데이터 없음(snapshot None)이면 캐시 비교 생략하고 그래프(missing-info) 경로.
-        if (
-            current_snapshot is not None
-            and cached_reco is not None
-            and cached_reco.get("model_version") == MODEL_VERSION
-            and cached_reco.get("snapshot") == current_snapshot
-        ):
-            response = cached_reco.get("response")
-            if isinstance(response, dict):
-                return RiskRecommendationResponse(**response)
+            # 3. reco 히트 + 입력/모델 버전 일치 → 저장본 즉시 반환 (그래프·DB 0회).
+            #    필수데이터 없음(snapshot None)이면 캐시 비교 생략하고 그래프(missing-info) 경로.
+            if (
+                current_snapshot is not None
+                and cached_reco is not None
+                and cached_reco.get("model_version") == MODEL_VERSION
+                and cached_reco.get("snapshot") == current_snapshot
+            ):
+                response = cached_reco.get("response")
+                if isinstance(response, dict):
+                    return RiskRecommendationResponse(**response)
 
-        # 4. 미스/불일치 → throttle → 그래프 실행 → 저장 가드 통과 시 DB append + Redis SET.
-        await self._enforce_throttle(user_id)
-        result: RiskRecommendationResult = await run_risk_recommendation(user_id=user_id)
+            # 4. 미스/불일치 → throttle → 그래프 실행 → 저장 가드 통과 시 DB append + Redis SET.
+            await self._enforce_throttle(user_id)
+            result: RiskRecommendationResult = await run_risk_recommendation(user_id=user_id)
+        except (DBConnectionError, OperationalError) as exc:
+            logger.error("위험도 권고 DB 접근 실패 (user=%s): %s", user_id, exc)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="일시적으로 건강 데이터를 불러올 수 없습니다. 잠시 후 다시 시도해 주세요.",
+            ) from exc
+
         response = _to_response(result)
 
         # fallback / 데이터 미충족 결과는 캐싱하지 않음 (다음 호출에 재시도 가능해야 함).
         if result.has_required_data and not result.is_fallback:
-            await self._save_cache(user_id, result)
+            # DB append 는 best-effort — 이력 저장이 실패해도 이미 산출된 유효 결과는 반환한다.
+            # (여기서 500 을 내면 비용을 치른 LLM 결과를 버리고, 캐시도 못 채워 재호출이 반복됨.)
+            try:
+                await self._save_cache(user_id, result)
+            except Exception as exc:  # noqa: BLE001 — 이력 적재 실패는 응답을 막지 않는다
+                logger.warning("위험도 권고 DB 저장 실패, 이력 스킵 (user=%s): %s", user_id, exc)
             await cache.set_reco(
                 user_id,
                 snapshot=result.feature_snapshot,

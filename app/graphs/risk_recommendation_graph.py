@@ -47,6 +47,7 @@ from typing import Any, Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from openai import AsyncOpenAI
+from tortoise.exceptions import DBConnectionError, OperationalError
 from tortoise.transactions import in_transaction
 
 from app.core import config
@@ -1094,6 +1095,10 @@ async def run_risk_recommendation(
     }
     try:
         final_state: RiskState = await graph.ainvoke(initial)
+    except (DBConnectionError, OperationalError):
+        # DB 연결/조회 장애는 fallback 메시지로 가리지 않고 그대로 전파해
+        # 서비스 레이어가 503(일시 오류)로 명확히 안내하게 한다.
+        raise
     except Exception as e:  # noqa: BLE001
         _logger.error("RiskRecommendationGraph 실행 실패: %s", _safe_err_repr(e))
         return RiskRecommendationResult(
