@@ -61,6 +61,14 @@ from app.services.challenge import (
     total_pages,
 )
 
+
+def _effective_status(ch_status: ChallengeStatus, end_date: date) -> ChallengeStatus:
+    """크론잡 실행 전이라도 end_date가 지난 챌린지는 COMPLETED로 반환한다."""
+    if ch_status in (ChallengeStatus.ACTIVE, ChallengeStatus.RECRUITING) and end_date < date.today():
+        return ChallengeStatus.COMPLETED
+    return ch_status
+
+
 challenge_categories_router = APIRouter(prefix="/challenge-categories", tags=["challenge-categories"])
 challenges_router = APIRouter(prefix="/challenges", tags=["challenges"])
 challenge_invitations_router = APIRouter(prefix="/challenge-invitations", tags=["challenge-invitations"])
@@ -197,7 +205,7 @@ async def list_challenges(
                 id=ch.id,
                 title=ch.title,
                 scope=ch.scope,
-                status=ch.status,
+                status=_effective_status(ch.status, ch.end_date),
                 category=ch.category,
                 visibility=ch.visibility,
                 max_participants=ch.max_participants,
@@ -231,6 +239,7 @@ async def get_challenge(
     )
     payload = ChallengeResponse.model_validate(challenge).model_dump()
     payload["is_member"] = is_member
+    payload["status"] = _effective_status(challenge.status, challenge.end_date).value
     # 그룹 챌린지의 경우 참여자/방장에게 invite_code 노출 (코드 복사 기능)
     if challenge.scope.value == "GROUP" and is_member:
         invite_code = await service.get_active_invite_code(challenge.id)
