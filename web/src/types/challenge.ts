@@ -10,6 +10,9 @@ export type { ChallengeCategory };
 /* 챌린지 범위 */
 export type ChallengeScope = "PERSONAL" | "GROUP";
 
+/* 챌린지 공개 설정 */
+export type ChallengeVisibility = "PUBLIC" | "PRIVATE";
+
 /* 챌린지 상태 */
 export type ChallengeStatus =
   | "RECRUITING"
@@ -94,6 +97,7 @@ export interface CreateChallengeRequest {
   /* 신규 옵션 필드 */
   cadence?: ChallengeCadence;
   goal_config?: ChallengeGoalConfig;
+  visibility?: ChallengeVisibility;
 }
 
 /* 챌린지 수정 요청 */
@@ -268,6 +272,7 @@ export interface VerificationFeedResponse {
 /* ─── 위저드 폼 상태 ─── */
 export interface WizardFormState {
   scope: ChallengeScope;
+  visibility: ChallengeVisibility;
   category: ChallengeCategory | null;
   sub_category: ExerciseSubType | null;
   /* Step3 내 세부 모드 분기 */

@@ -9,6 +9,7 @@ export function useChallenges(params: {
   status?: ChallengeStatus;
   scope?: ChallengeScope;
   category?: string;
+  visibility?: string;
   size?: number;
   page?: number;
   from?: string;

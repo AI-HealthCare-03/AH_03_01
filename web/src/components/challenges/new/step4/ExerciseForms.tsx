@@ -7,7 +7,7 @@ import {
   DurationPicker,
   WeeklyDurationNote,
   TitleInput,
-  MaxParticipantsSlider,
+  MaxParticipantsChips,
   RewardPreview,
   Step4Header,
   GROUP_SUM_OPTIONS,
@@ -227,7 +227,7 @@ export function WalkingGroupForm({
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />
@@ -261,9 +261,11 @@ function initRunningMode(form: WizardFormState): RunningGoalMode {
 function RunningGoalPicker({
   form,
   onChange,
+  distanceOptions = RUNNING_DISTANCE_OPTIONS,
 }: {
   form: WizardFormState;
   onChange: (partial: Partial<WizardFormState>) => void;
+  distanceOptions?: { value: number; label: string }[];
 }) {
   // goal_config 파생이 아닌 로컬 state로 모드 관리 (파생 시 undefined → 모드 고정 버그 방지)
   const [mode, setMode] = useState<RunningGoalMode>(() =>
@@ -320,7 +322,7 @@ function RunningGoalPicker({
       {mode === "DISTANCE" && (
         <Chips
           label="목표 거리"
-          options={RUNNING_DISTANCE_OPTIONS}
+          options={distanceOptions}
           value={form.goal_config.distance_km}
           onChange={(v) =>
             onChange({ goal_config: { ...form.goal_config, distance_km: v } })
@@ -390,13 +392,10 @@ export function RunningGroupForm({
   return (
     <div className="space-y-6">
       <Step4Header />
-      <Chips
-        label="그룹 목표 거리"
-        options={RUNNING_GROUP_DISTANCE}
-        value={form.goal_config.distance_km}
-        onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, distance_km: v } })
-        }
+      <RunningGoalPicker
+        form={form}
+        onChange={onChange}
+        distanceOptions={RUNNING_GROUP_DISTANCE}
       />
       <Chips
         label="그룹 합산 목표 횟수"
@@ -409,7 +408,7 @@ export function RunningGroupForm({
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />
@@ -493,7 +492,7 @@ export function CyclingGroupForm({
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />
@@ -602,7 +601,7 @@ export function StrengthGroupForm({
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />
@@ -661,7 +660,7 @@ export function SwimmingGroupForm({
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />
@@ -815,7 +814,7 @@ export function OtherGroupForm({
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />

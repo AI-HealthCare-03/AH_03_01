@@ -5,10 +5,9 @@ import {
   DurationPicker,
   WeeklyDurationNote,
   TitleInput,
-  MaxParticipantsSlider,
+  MaxParticipantsChips,
   RewardPreview,
   Step4Header,
-  GROUP_MEMBERS_OPTIONS,
 } from "./_shared";
 import type { WizardFormState } from "@/types/challenge";
 
@@ -141,21 +140,16 @@ export function NoSmokingGroupForm({
     <div className="space-y-6">
       <Step4Header />
       <PhotoNote label="금연" />
-      <Chips
-        label="그룹 달성 목표 인원"
-        options={GROUP_MEMBERS_OPTIONS}
-        value={form.goal_config.group_target_members}
-        onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, group_target_members: v } })
-        }
+      <MaxParticipantsChips
+        value={form.max_participants}
+        onChange={(v) => onChange({
+          max_participants: v,
+          goal_config: { ...form.goal_config, group_target_members: v },
+        })}
       />
       <GroupDurationPicker
         value={form.duration_days}
         onChange={(v) => onChange({ duration_days: v })}
-      />
-      <MaxParticipantsSlider
-        value={form.max_participants}
-        onChange={(v) => onChange({ max_participants: v })}
       />
       <TitleInput value={form.title} onChange={(v) => onChange({ title: v })} />
       <RewardPreview durationDays={form.duration_days} isGroup />
@@ -224,21 +218,16 @@ export function NoAlcoholGroupForm({
     <div className="space-y-6">
       <Step4Header />
       <PhotoNote label="금주" />
-      <Chips
-        label="그룹 달성 목표 인원"
-        options={GROUP_MEMBERS_OPTIONS}
-        value={form.goal_config.group_target_members}
-        onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, group_target_members: v } })
-        }
+      <MaxParticipantsChips
+        value={form.max_participants}
+        onChange={(v) => onChange({
+          max_participants: v,
+          goal_config: { ...form.goal_config, group_target_members: v },
+        })}
       />
       <GroupDurationPicker
         value={form.duration_days}
         onChange={(v) => onChange({ duration_days: v })}
-      />
-      <MaxParticipantsSlider
-        value={form.max_participants}
-        onChange={(v) => onChange({ max_participants: v })}
       />
       <TitleInput value={form.title} onChange={(v) => onChange({ title: v })} />
       <RewardPreview durationDays={form.duration_days} isGroup />
