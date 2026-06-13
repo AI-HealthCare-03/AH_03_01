@@ -21,6 +21,7 @@ from app.dtos.challenge import (
 from app.models.challenge import (
     Challenge,
     ChallengeCategory,
+    ChallengeDifficulty,
     ChallengeInvite,
     ChallengeParticipant,
     ChallengeReaction,
@@ -29,6 +30,7 @@ from app.models.challenge import (
     ChallengeTemplate,
     ChallengeVerification,
     ChallengeVisibility,
+    GoalType,
     InviteStatus,
     InviteType,
     ParticipantRole,
@@ -65,6 +67,33 @@ MAX_MISSED_BEFORE_KICK = 3
 INVITE_TTL = timedelta(days=7)
 
 
+_GROUP_SUM_DIFFICULTY: list[tuple[int, ChallengeDifficulty]] = [
+    (35, ChallengeDifficulty.LEVEL_4),
+    (30, ChallengeDifficulty.LEVEL_3),
+    (15, ChallengeDifficulty.LEVEL_2),
+    (6,  ChallengeDifficulty.LEVEL_1),
+]
+_GROUP_MEMBERS_DIFFICULTY: list[tuple[int, ChallengeDifficulty]] = [
+    (5, ChallengeDifficulty.LEVEL_4),
+    (4, ChallengeDifficulty.LEVEL_3),
+    (3, ChallengeDifficulty.LEVEL_2),
+    (2, ChallengeDifficulty.LEVEL_1),
+]
+
+
+def _calc_group_difficulty(goal_type: GoalType, goal_config: dict) -> ChallengeDifficulty:
+    if goal_type == GoalType.GROUP_SUM:
+        target = goal_config.get("group_target_count", 0)
+        table = _GROUP_SUM_DIFFICULTY
+    else:
+        target = goal_config.get("group_target_members", 0)
+        table = _GROUP_MEMBERS_DIFFICULTY
+    for threshold, level in table:
+        if target >= threshold:
+            return level
+    return ChallengeDifficulty.LEVEL_1
+
+
 class ChallengeTemplateService:
     def __init__(self) -> None:
         self.repo = ChallengeTemplateRepository()
@@ -86,6 +115,12 @@ class ChallengeService:
         if data.template_id and template is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="템플릿을 찾을 수 없습니다.")
 
+        difficulty = (
+            _calc_group_difficulty(data.goal_type, data.goal_config or {})
+            if scope == ChallengeScope.GROUP
+            else data.difficulty
+        )
+
         async with in_transaction():
             challenge = await self.repo.create(
                 data={
@@ -102,7 +137,7 @@ class ChallengeService:
                     "cadence": data.cadence,
                     "goal_config": data.goal_config,
                     "verification_type": data.verification_type,
-                    "difficulty": data.difficulty,
+                    "difficulty": difficulty,
                     "visibility": data.visibility,
                     "max_participants": data.max_participants,
                     "start_date": data.start_date,
@@ -175,6 +210,8 @@ class ChallengeService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="방장만 수정할 수 있습니다.")
         if data.end_date is not None and data.end_date < challenge.start_date:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="end_date 가 잘못되었습니다.")
+        if data.status is not None and data.status != ChallengeStatus.CANCELLED:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="status 는 CANCELLED 로만 변경 가능합니다.")
         return await self.repo.update_instance(challenge, data.model_dump(exclude_unset=True))
 
     async def delete(self, user: User, challenge_id: int) -> None:
@@ -200,9 +237,10 @@ class ChallengeService:
         page: int,
         size: int,
         mine_only: bool,
+        left_only: bool = False,
     ) -> tuple[list[Challenge], int]:
         return await self.repo.list(
-            user_id=user.id if (user and mine_only) else None,
+            user_id=user.id if (user and (mine_only or left_only)) else None,
             scope=scope,
             status=challenge_status,
             category=category,
@@ -213,6 +251,7 @@ class ChallengeService:
             sort_by=sort_by,
             page=page,
             size=size,
+            left_only=left_only,
         )
 
 
