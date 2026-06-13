@@ -72,6 +72,9 @@ async def _grant_completion_rewards(challenge: Challenge) -> None:
     source = PointSource.CHALLENGE_GROUP if is_group else PointSource.CHALLENGE_PERIOD
 
     for participant in participants:
+        if not is_group and participant.current_score < 1:
+            continue
+
         already_granted = await PointTransaction.filter(
             user_id=participant.user_id,
             source=source,
