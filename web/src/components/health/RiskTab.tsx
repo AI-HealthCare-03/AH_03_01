@@ -227,6 +227,11 @@ interface DiseaseCardProps {
   score: number;
   grade: RiskGrade;
   riskLevelLabel?: string | null;
+  /** true이면 이전 예측 이력 오버레이를 표시 */
+  stale?: boolean;
+  latestDate?: string | null;
+  onPredict?: () => void;
+  isPredicting?: boolean;
 }
 
 function DiseaseCard({
@@ -234,12 +239,16 @@ function DiseaseCard({
   score,
   grade,
   riskLevelLabel,
+  stale,
+  latestDate,
+  onPredict,
+  isPredicting,
 }: DiseaseCardProps) {
   const accent = DISEASE_ACCENT[disease];
 
   return (
     <div
-      className="bg-white rounded-[16px] shadow-[0_2px_8px_rgba(0,0,0,0.07)] overflow-hidden flex flex-col items-center pt-0 pb-4"
+      className="relative bg-white rounded-[16px] shadow-[0_2px_8px_rgba(0,0,0,0.07)] overflow-hidden flex flex-col items-center pt-0 pb-4"
       style={{ borderTop: `3px solid ${accent}` }}
     >
       {/* 질환명 + 아이콘 */}
@@ -253,7 +262,7 @@ function DiseaseCard({
       </div>
 
       {/* 반원 게이지 */}
-      <div className="mt-2">
+      <div className={stale ? "mt-2 blur-[2px]" : "mt-2"}>
         <RiskSemiGauge
           score={score}
           grade={grade}
@@ -266,6 +275,15 @@ function DiseaseCard({
       <p className="mt-2 text-[11px] text-text-tertiary text-center px-3 leading-snug">
         {DISEASE_DESC[disease]}
       </p>
+
+      {/* 이전 예측 이력 오버레이 */}
+      {stale && onPredict && (
+        <StaleResultOverlay
+          latestDate={latestDate ?? null}
+          onPredict={onPredict}
+          isPredicting={isPredicting ?? false}
+        />
+      )}
     </div>
   );
 }
@@ -476,6 +494,37 @@ function ContributingBars({ factors }: ContributingBarsProps) {
   );
 }
 
+/* ========================================================
+   예측 실행 전 카드 오버레이 (이전 예측 이력임을 명시)
+   ======================================================== */
+
+interface StaleResultOverlayProps {
+  latestDate: string | null;
+  onPredict: () => void;
+  isPredicting: boolean;
+}
+
+function StaleResultOverlay({ latestDate, onPredict, isPredicting }: StaleResultOverlayProps) {
+  return (
+    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-[16px] bg-white/80 backdrop-blur-[2px] px-3 text-center">
+      <p className="text-[11px] font-semibold text-text-secondary leading-snug">
+        {latestDate ? `마지막 예측: ${latestDate}` : "이전 예측 결과"}
+      </p>
+      <p className="text-[10px] text-text-tertiary leading-snug">
+        최신 데이터로 다시 예측하세요
+      </p>
+      <button
+        type="button"
+        onClick={onPredict}
+        disabled={isPredicting}
+        className="mt-1 px-3 py-1.5 bg-brand-black text-white text-[11px] font-bold rounded-[8px] hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {isPredicting ? "분석 중..." : "예측 실행 →"}
+      </button>
+    </div>
+  );
+}
+
 /* ── 기여도 카드 (탭 포함) ──── */
 
 interface SelectedDetail {
@@ -572,11 +621,15 @@ function AiSuggestions({ ragResult }: AiSuggestionsProps) {
         <h3 className="font-bold text-text-primary">AI 맞춤 제안</h3>
       </div>
 
-      {/* AI 권고 본문 */}
+      {/* AI 권고 요약 (LLM 답변에서 첫 단락 — 전체 덤프 대신 핵심 1~2줄) */}
       {ragResult.answer && (
         <div className="bg-[#f8f9fa] rounded-[12px] p-4">
-          <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
-            {ragResult.answer}
+          <p className="text-xs font-semibold text-text-tertiary mb-1">AI 분석 요약</p>
+          <p className="text-sm text-text-secondary leading-relaxed">
+            {ragResult.answer
+              .split(/\n\n+/)
+              .map((p) => p.replace(/^#+\s*/, "").trim())
+              .find((p) => p.length > 10) ?? ""}
           </p>
         </div>
       )}
@@ -652,18 +705,26 @@ function AiSuggestions({ ragResult }: AiSuggestionsProps) {
               </Link>
             </>
           ) : (
-            <p className="text-xs text-text-tertiary">
-              추천 챌린지가 없습니다.
-            </p>
+            <div className="space-y-1.5">
+              <p className="text-xs text-text-tertiary">
+                챌린지 추천은 예측 결과와 연동됩니다.
+              </p>
+              <Link
+                href="/challenges"
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-surface text-text-secondary text-xs font-semibold rounded-[8px] hover:bg-brand hover:text-brand-black transition-colors"
+              >
+                전체 챌린지 보기 →
+              </Link>
+            </div>
           )}
         </div>
 
         {/* 식단 추천 */}
-        {dietItems.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-xs font-bold text-text-primary flex items-center gap-1">
-              <span aria-hidden="true">🍽️</span> 식단 추천
-            </p>
+        <div className="space-y-2">
+          <p className="text-xs font-bold text-text-primary flex items-center gap-1">
+            <span aria-hidden="true">🍽️</span> 식단 추천
+          </p>
+          {dietItems.length > 0 ? (
             <ul className="space-y-2">
               {dietItems.map((item, i) => (
                 <li
@@ -680,8 +741,12 @@ function AiSuggestions({ ragResult }: AiSuggestionsProps) {
                 </li>
               ))}
             </ul>
-          </div>
-        )}
+          ) : (
+            <p className="text-xs text-text-tertiary">
+              식단 제안을 불러올 수 없습니다.
+            </p>
+          )}
+        </div>
       </div>
 
       <p className="text-[10px] text-text-tertiary border-t border-border pt-3">
@@ -1121,6 +1186,14 @@ export default function RiskTab() {
       )}
 
       {/* 2. 질환 카드 3개 */}
+      {/* ragResult === null: 이번 세션에서 예측 미실행 → 이전 이력 카드는 stale 오버레이 */}
+      {ragResult === null && latestItems.length > 0 && (
+        <div className="flex items-center gap-2 px-1 pb-1">
+          <span className="text-xs text-[#856404] bg-[#fff3cd] border border-[#ffe082] rounded-full px-2.5 py-0.5">
+            마지막 예측: {latestDate ?? "이전 결과"} — 최신 데이터로 다시 예측해 보세요
+          </span>
+        </div>
+      )}
       <div className="grid grid-cols-3 gap-3">
         {diseaseData.map((d) => (
           <DiseaseCard
@@ -1129,6 +1202,10 @@ export default function RiskTab() {
             score={d.score}
             grade={d.grade}
             riskLevelLabel={d.riskLevelLabel}
+            stale={ragResult === null && latestItems.length > 0}
+            latestDate={latestDate}
+            onPredict={handlePredict}
+            isPredicting={isPredicting}
           />
         ))}
       </div>
