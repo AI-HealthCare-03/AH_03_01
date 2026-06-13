@@ -14,8 +14,8 @@ export default function NoticePage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-bold text-text-primary">공지사항</h2>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-black text-text-primary">공지사항</h1>
         <Link
           href="/community/notice/new"
           className="px-3 py-1.5 text-sm font-semibold bg-brand-black text-white rounded-[8px] hover:opacity-80 transition-opacity"

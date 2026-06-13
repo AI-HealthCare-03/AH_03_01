@@ -28,11 +28,19 @@ class PostCategory(StrEnum):
     FREE = "FREE"
 
 
+class InfoCategory(StrEnum):
+    HYPERTENSION = "HYPERTENSION"
+    DIABETES = "DIABETES"
+    CARDIOVASCULAR = "CARDIOVASCULAR"
+    LIFESTYLE = "LIFESTYLE"
+
+
 class Post(models.Model):
     id = fields.BigIntField(primary_key=True)
     title = fields.CharField(max_length=200)
     content = fields.TextField()
     category = fields.CharEnumField(PostCategory, max_length=20)
+    info_category = fields.CharEnumField(InfoCategory, max_length=20, null=True)
     is_pinned = fields.BooleanField(default=False)
     view_count = fields.IntField(default=0)
     author: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(

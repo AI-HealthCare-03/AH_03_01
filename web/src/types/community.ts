@@ -1,9 +1,11 @@
 export type PostCategory = "NOTICE" | "INFO" | "FREE";
+export type InfoCategory = "HYPERTENSION" | "DIABETES" | "CARDIOVASCULAR" | "LIFESTYLE";
 
 export interface PostListItem {
   id: number;
   title: string;
   category: PostCategory;
+  info_category: InfoCategory | null;
   is_pinned: boolean;
   view_count: number;
   comment_count: number;
@@ -30,6 +32,7 @@ export interface PostCreateRequest {
   title: string;
   content: string;
   category: PostCategory;
+  info_category?: InfoCategory | null;
 }
 
 export interface PostUpdateRequest {

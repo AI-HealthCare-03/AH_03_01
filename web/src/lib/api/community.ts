@@ -2,10 +2,12 @@ import apiClient from "./client";
 import { resolveMediaUrl } from "@/lib/api/media";
 import type {
   PostListResponse,
+  PostListItem,
   PostDetail,
   PostCreateRequest,
   PostUpdateRequest,
   PostCategory,
+  InfoCategory,
   Comment,
   CommentCreateRequest,
   LikeResponse,
@@ -21,8 +23,14 @@ export async function listPosts(params?: {
   page?: number;
   size?: number;
   category?: PostCategory;
+  info_category?: InfoCategory | null;
 }): Promise<PostListResponse> {
   const res = await apiClient.get<PostListResponse>("/api/v1/posts", { params });
+  return res.data;
+}
+
+export async function getPopularPosts(limit = 3): Promise<PostListItem[]> {
+  const res = await apiClient.get<PostListItem[]>("/api/v1/posts/popular", { params: { limit } });
   return res.data;
 }
 

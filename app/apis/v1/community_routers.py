@@ -21,7 +21,7 @@ from app.dtos.community import (
     QuizResponse,
     ReportCreateRequest,
 )
-from app.models.community import Comment, Post, PostCategory
+from app.models.community import Comment, InfoCategory, Post, PostCategory
 from app.models.notifications import NotificationType
 from app.models.users import User
 from app.repositories.community_repository import CommentRepository, LikeRepository, PostRepository, ReportRepository
@@ -36,6 +36,7 @@ def _to_item(p: Post) -> PostListItem:
         id=p.id,
         title=p.title,
         category=p.category,
+        info_category=p.info_category,
         is_pinned=p.is_pinned,
         view_count=p.view_count,
         comment_count=getattr(p, "comment_count", 0),
@@ -69,10 +70,20 @@ async def list_posts(
     page: int = Query(1, ge=1),  # noqa: B008
     size: int = Query(20, ge=1, le=100),  # noqa: B008
     category: PostCategory | None = Query(None),  # noqa: B008
+    info_category: InfoCategory | None = Query(None),  # noqa: B008
     _: User = Depends(get_request_user),  # noqa: B008
 ) -> PostListResponse:
-    posts, total = await PostRepository().list_posts(page, size, category)
+    posts, total = await PostRepository().list_posts(page, size, category, info_category)
     return PostListResponse(items=[_to_item(p) for p in posts], total=total, page=page, size=size)
+
+
+@posts_router.get("/popular", response_model=list[PostListItem])
+async def list_popular_posts(
+    limit: int = Query(3, ge=1, le=10),  # noqa: B008
+    _: User = Depends(get_request_user),  # noqa: B008
+) -> list[PostListItem]:
+    posts = await PostRepository().list_popular_posts(limit)
+    return [_to_item(p) for p in posts]
 
 
 @posts_router.get("/{post_id}", response_model=PostDetailResponse)
@@ -92,7 +103,11 @@ async def get_post(post_id: int, current_user: User = Depends(get_request_user))
 async def create_post(body: PostCreateRequest, current_user: User = Depends(get_request_user)) -> PostDetailResponse:  # noqa: B008
     repo = PostRepository()
     post = await repo.create_post(
-        author_id=current_user.id, title=body.title, content=body.content, category=body.category
+        author_id=current_user.id,
+        title=body.title,
+        content=body.content,
+        category=body.category,
+        info_category=body.info_category,
     )
     post = await repo.get_post(post.id)
     return PostDetailResponse(**_to_item(post).model_dump(), content=post.content, updated_at=post.updated_at)
@@ -110,7 +125,9 @@ async def update_post(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
     if post.author_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="수정 권한이 없습니다.")
-    post = await repo.update_post(post, title=body.title, content=body.content, category=body.category)
+    post = await repo.update_post(
+        post, title=body.title, content=body.content, category=body.category, info_category=body.info_category
+    )
     return PostDetailResponse(**_to_item(post).model_dump(), content=post.content, updated_at=post.updated_at)
 
 

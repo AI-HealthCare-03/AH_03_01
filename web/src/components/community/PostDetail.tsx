@@ -12,7 +12,21 @@ import { useMe } from "@/hooks/queries/useMe";
 import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
 import { useState } from "react";
-import type { PostCategory } from "@/types/community";
+import type { PostCategory, InfoCategory } from "@/types/community";
+
+const INFO_CATEGORY_LABEL: Record<InfoCategory, string> = {
+  HYPERTENSION: "고혈압",
+  DIABETES: "당뇨",
+  CARDIOVASCULAR: "심혈관",
+  LIFESTYLE: "생활습관",
+};
+
+const INFO_CATEGORY_COLOR: Record<InfoCategory, string> = {
+  HYPERTENSION: "bg-red-100 text-red-700",
+  DIABETES: "bg-blue-100 text-blue-700",
+  CARDIOVASCULAR: "bg-purple-100 text-purple-700",
+  LIFESTYLE: "bg-green-100 text-green-700",
+};
 
 const BACK_PATH: Record<PostCategory, string> = {
   INFO: "/community/board",
@@ -73,10 +87,17 @@ export default function PostDetail({ postId }: { postId: number }) {
       {/* 헤더 */}
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
-          <p className="text-xs text-text-tertiary mb-1">
-            {post.author_nickname ?? "익명"} · 조회 {post.view_count} ·{" "}
-            {new Date(post.created_at).toLocaleDateString("ko-KR")}
-          </p>
+          <div className="flex items-center gap-2 mb-1">
+            {post.category === "INFO" && post.info_category && (
+              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${INFO_CATEGORY_COLOR[post.info_category]}`}>
+                {INFO_CATEGORY_LABEL[post.info_category]}
+              </span>
+            )}
+            <p className="text-xs text-text-tertiary">
+              {post.author_nickname ?? "익명"} · 조회 {post.view_count} ·{" "}
+              {new Date(post.created_at).toLocaleDateString("ko-KR")}
+            </p>
+          </div>
           <h1 className="text-lg font-bold text-text-primary">{post.title}</h1>
         </div>
         <div className="flex gap-2 shrink-0">
