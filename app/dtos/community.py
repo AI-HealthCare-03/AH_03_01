@@ -4,13 +4,14 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.dtos.base import BaseSerializerModel
-from app.models.community import PostCategory, QuizCategory, QuizOption, ReportReason, ReportTargetType
+from app.models.community import InfoCategory, PostCategory, QuizCategory, QuizOption, ReportReason, ReportTargetType
 
 
 class PostListItem(BaseSerializerModel):
     id: int
     title: str
     category: PostCategory
+    info_category: InfoCategory | None = None
     is_pinned: bool
     view_count: int
     comment_count: int
@@ -37,12 +38,14 @@ class PostCreateRequest(BaseModel):
     title: str
     content: str
     category: PostCategory
+    info_category: InfoCategory | None = None
 
 
 class PostUpdateRequest(BaseModel):
     title: str | None = None
     content: str | None = None
     category: PostCategory | None = None
+    info_category: InfoCategory | None = None
 
 
 class CommentResponse(BaseSerializerModel):
