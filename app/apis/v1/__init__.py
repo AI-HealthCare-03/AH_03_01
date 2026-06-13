@@ -28,6 +28,7 @@ from app.apis.v1.pet_routers import (
     store_router,
 )
 from app.apis.v1.risk_recommendation_routers import risk_recommendations_router
+from app.apis.v1.support_routers import support_router
 from app.apis.v1.user_routers import user_router
 
 v1_routers = APIRouter(prefix="/api/v1")
@@ -58,3 +59,4 @@ v1_routers.include_router(comments_router)
 v1_routers.include_router(reports_router)
 v1_routers.include_router(quiz_router)
 v1_routers.include_router(notifications_router)
+v1_routers.include_router(support_router)

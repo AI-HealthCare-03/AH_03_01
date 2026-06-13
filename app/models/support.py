@@ -11,7 +11,7 @@ class FAQCategory(StrEnum):
     ACCOUNT = "ACCOUNT"
     CHALLENGE = "CHALLENGE"
     HEALTH_DATA = "HEALTH_DATA"
-    PAYMENT = "PAYMENT"
+    REWARD = "REWARD"
 
 
 class InquiryCategory(StrEnum):
