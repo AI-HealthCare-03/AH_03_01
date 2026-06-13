@@ -207,14 +207,3 @@ class AttendanceCheckResponse(BaseModel):
     transaction_ids: list[int]
 
 
-class RewardClaimRequest(BaseModel):
-    challenge_id: int
-    verification_id: int | None = None
-    difficulty_level: str | None = None
-
-
-class RewardClaimResponse(BaseModel):
-    transaction_id: int
-    reward_type: str
-    point_amount: int
-    point_balance: int

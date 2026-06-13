@@ -24,8 +24,7 @@ from app.dtos.pet import (
     PointTransactionResponse,
     PurchaseRequest,
     PurchaseResponse,
-    RewardClaimRequest,
-    RewardClaimResponse,
+
     StoreItemsResponse,
 )
 from app.models.pet import ItemCategory, PointSource, PointTransactionType
@@ -35,7 +34,7 @@ from app.services.pet import (
     InventoryService,
     PetService,
     PointService,
-    RewardClaimService,
+
     StoreService,
     equipped_items_payload,
     equipped_slots_payload,
@@ -264,24 +263,6 @@ async def check_attendance(
     payload = await service.check_in(user)
     return Response(payload, status_code=status.HTTP_201_CREATED)
 
-
-# ---------------------------------------------------------------------------
-# /rewards/claims
-# ---------------------------------------------------------------------------
-
-
-@rewards_router.post("/claims", response_model=RewardClaimResponse, status_code=status.HTTP_201_CREATED)
-async def claim_reward(
-    body: RewardClaimRequest,
-    user: Annotated[User, Depends(get_request_user)],
-    service: Annotated[RewardClaimService, Depends(RewardClaimService)],
-    source: Annotated[str, Query()] = "challenge",
-    reward_type: Annotated[str, Query(alias="rewardType")] = "daily",
-) -> Response:
-    if source != "challenge":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="source 는 challenge 만 지원합니다.")
-    payload = await service.claim(user, reward_type, body)
-    return Response(payload, status_code=status.HTTP_201_CREATED)
 
 
 def _next_bonus_at(current_streak: int) -> int | None:

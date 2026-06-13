@@ -27,11 +27,80 @@ from datetime import date
 from tortoise import Tortoise
 
 from app.core.db.databases import TORTOISE_ORM
-from app.models.challenge import Challenge, ChallengeStatus
+from app.models.challenge import Challenge, ChallengeParticipant, ChallengeScope, ChallengeStatus, GoalType, ParticipantStatus
+from app.models.pet import PointSource, PointTransaction
+from app.services.rewards import RewardService
 
 logger = logging.getLogger("app.jobs.complete_expired_challenges")
 
 DEFAULT_BATCH_SIZE = 100
+
+
+_reward_service = RewardService()
+
+
+def _group_goal_achieved(challenge: Challenge, participants: list[ChallengeParticipant]) -> bool:
+    """그룹 챌린지 목표 달성 여부를 반환한다."""
+    cfg = challenge.goal_config or {}
+    if challenge.goal_type == GoalType.GROUP_SUM:
+        total = sum(p.current_score for p in participants)
+        target = cfg.get("group_target_count", 0)
+        return total >= target
+    else:  # GROUP_MEMBERS
+        achieved = sum(1 for p in participants if p.current_score >= 1)
+        target = cfg.get("group_target_members", 0)
+        return achieved >= target
+
+
+async def _grant_completion_rewards(challenge: Challenge) -> None:
+    """챌린지 완료 시 APPROVED 참여자에게 보상을 자동 지급한다. 중복 지급 방지."""
+    participants = await ChallengeParticipant.filter(
+        challenge_id=challenge.id,
+        status=ParticipantStatus.APPROVED,
+    ).all()
+
+    is_group = challenge.scope == ChallengeScope.GROUP
+
+    if is_group and not _group_goal_achieved(challenge, participants):
+        logger.info(
+            "그룹 목표 미달성 — 보상 미지급 challenge_id=%d goal_type=%s",
+            challenge.id,
+            challenge.goal_type,
+        )
+        return
+
+    source = PointSource.CHALLENGE_GROUP if is_group else PointSource.CHALLENGE_PERIOD
+
+    for participant in participants:
+        already_granted = await PointTransaction.filter(
+            user_id=participant.user_id,
+            source=source,
+            source_id=challenge.id,
+        ).exists()
+        if already_granted:
+            continue
+
+        try:
+            if is_group:
+                await _reward_service.grant_group_completion(
+                    user_id=participant.user_id,
+                    challenge_id=challenge.id,
+                    difficulty_level=challenge.difficulty.value,
+                    challenge_title=challenge.title,
+                )
+            else:
+                await _reward_service.grant_period_completion(
+                    user_id=participant.user_id,
+                    challenge_id=challenge.id,
+                    challenge_title=challenge.title,
+                )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "보상 지급 실패 challenge_id=%d user_id=%d scope=%s",
+                challenge.id,
+                participant.user_id,
+                challenge.scope,
+            )
 
 
 async def complete_expired_challenges(*, dry_run: bool, batch_size: int) -> dict[str, int]:
@@ -73,6 +142,7 @@ async def complete_expired_challenges(*, dry_run: bool, batch_size: int) -> dict
             try:
                 challenge.status = ChallengeStatus.COMPLETED
                 await challenge.save(update_fields=["status"])
+                await _grant_completion_rewards(challenge)
                 done += 1
             except Exception:  # noqa: BLE001 — 건별 실패 격리
                 failed += 1
