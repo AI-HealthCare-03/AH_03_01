@@ -27,7 +27,7 @@ from datetime import date
 from tortoise import Tortoise
 
 from app.core.db.databases import TORTOISE_ORM
-from app.models.challenge import Challenge, ChallengeParticipant, ChallengeScope, ChallengeStatus, GoalType, ParticipantStatus
+from app.models.challenge import Challenge, ChallengeCadence, ChallengeParticipant, ChallengeScope, ChallengeStatus, GoalType, ParticipantStatus
 from app.models.pet import PointSource, PointTransaction
 from app.services.rewards import RewardService
 
@@ -37,6 +37,15 @@ DEFAULT_BATCH_SIZE = 100
 
 
 _reward_service = RewardService()
+
+
+def _personal_goal_achieved(challenge: Challenge, participant: ChallengeParticipant) -> bool:
+    """개인 챌린지 기간 보상 조건: 기간 내 목표 인증 횟수를 모두 달성해야 함."""
+    if challenge.cadence == ChallengeCadence.WEEKLY_COUNT:
+        required = (challenge.goal_config or {}).get("weekly_target_count", 1)
+    else:  # DAILY
+        required = (challenge.end_date - challenge.start_date).days + 1
+    return participant.current_score >= required
 
 
 def _group_goal_achieved(challenge: Challenge, participants: list[ChallengeParticipant]) -> bool:
@@ -72,7 +81,7 @@ async def _grant_completion_rewards(challenge: Challenge) -> None:
     source = PointSource.CHALLENGE_GROUP if is_group else PointSource.CHALLENGE_PERIOD
 
     for participant in participants:
-        if not is_group and participant.current_score < 1:
+        if not is_group and not _personal_goal_achieved(challenge, participant):
             continue
 
         already_granted = await PointTransaction.filter(
