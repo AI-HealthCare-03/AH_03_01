@@ -10,7 +10,6 @@ import {
   getBmiStatus,
   getBloodPressureStatus,
   getFastingGlucoseStatus,
-  getHba1cStatus,
 } from "@/lib/health/status";
 import StatusBadge from "./StatusBadge";
 
@@ -84,11 +83,6 @@ export default function SummaryTab() {
     subType: "FASTING",
     size: 1,
   });
-  const { data: hba1cList, isLoading: hba1cLoading } = useHealthRecordList({
-    recordType: "HBA1C",
-    size: 1,
-  });
-
   /* 날짜 지정 쿼리 (날짜 선택 시에만 실행) */
   const { data: bpDateList } = useHealthRecordList(
     { recordType: "BLOOD_PRESSURE", from: selectedDate, to: selectedDate },
@@ -98,23 +92,19 @@ export default function SummaryTab() {
     { recordType: "BLOOD_GLUCOSE", subType: "FASTING", from: selectedDate, to: selectedDate },
     { enabled: hasDateFilter }
   );
-  const { data: hba1cDateList } = useHealthRecordList(
-    { recordType: "HBA1C", from: selectedDate, to: selectedDate },
-    { enabled: hasDateFilter }
-  );
   const { data: weightDateList } = useHealthRecordList(
     { recordType: "WEIGHT", from: selectedDate, to: selectedDate },
     { enabled: hasDateFilter }
   );
 
-  const isLoading = profileLoading || bpLoading || bgLoading || hba1cLoading;
+  const isLoading = profileLoading || bpLoading || bgLoading;
 
   if (isLoading) {
     return (
       <div className="animate-pulse space-y-4">
         <div className="h-10 bg-surface rounded-[8px]" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[...Array(4)].map((_, i) => (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {[...Array(3)].map((_, i) => (
             <div key={i} className="h-36 bg-surface rounded-[16px]" />
           ))}
         </div>
@@ -125,7 +115,6 @@ export default function SummaryTab() {
   /* ── 활성 레코드 (날짜 필터 적용 여부에 따라 선택) ── */
   const activeBp = hasDateFilter ? (bpDateList?.[0] ?? null) : (bpList?.[0] ?? null);
   const activeBg = hasDateFilter ? (bgDateList?.[0] ?? null) : (bgList?.[0] ?? null);
-  const activeHba1c = hasDateFilter ? (hba1cDateList?.[0] ?? null) : (hba1cList?.[0] ?? null);
 
   /* ── 값 파싱 ── */
   const heightCm = profile?.height_cm ?? null;
@@ -139,16 +128,13 @@ export default function SummaryTab() {
   const sysParsed = activeBp ? parseFloat(activeBp.primary_value) : null;
   const diaParsed = activeBp ? parseFloat(activeBp.secondary_value ?? "0") : null;
   const bgParsed = activeBg ? parseFloat(activeBg.primary_value) : null;
-  const hba1cParsed = activeHba1c ? parseFloat(activeHba1c.primary_value) : null;
 
   /* 최근 측정일 — 날짜 필터가 없을 때만 계산 */
   const latestBp = bpList?.[0] ?? null;
   const latestBg = bgList?.[0] ?? null;
-  const latestHba1c = hba1cList?.[0] ?? null;
   const dates: number[] = [
     latestBp?.measured_at,
     latestBg?.measured_at,
-    latestHba1c?.measured_at,
     profile?.updated_at ?? profile?.recorded_at,
   ]
     .filter((d): d is string => Boolean(d))
@@ -206,7 +192,7 @@ export default function SummaryTab() {
           <p className="text-4xl">📊</p>
           <p className="font-semibold text-text-primary">건강 데이터를 입력해 보세요</p>
           <p className="text-sm text-text-secondary">
-            혈압, 혈당, HbA1c 등을 기록하면 맞춤 위험도 분석을 받을 수 있어요.
+            혈압, 혈당 등을 기록하면 맞춤 위험도 분석을 받을 수 있어요.
           </p>
           <Link
             href="/health-records/new"
@@ -219,7 +205,7 @@ export default function SummaryTab() {
 
       {/* 지표 카드 그리드 */}
       {hasAnyData && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <MetricCard
             label="BMI"
             value={bmi !== null ? bmi.toFixed(1) : null}
@@ -242,12 +228,6 @@ export default function SummaryTab() {
             value={bgParsed !== null ? bgParsed.toFixed(0) : null}
             unit="mg/dL"
             status={bgParsed !== null ? getFastingGlucoseStatus(bgParsed) : "N/A"}
-          />
-          <MetricCard
-            label="HbA1c"
-            value={hba1cParsed !== null ? hba1cParsed.toFixed(1) : null}
-            unit="%"
-            status={hba1cParsed !== null ? getHba1cStatus(hba1cParsed) : "N/A"}
           />
         </div>
       )}

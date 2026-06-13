@@ -19,7 +19,7 @@ interface RiskSummaryProps {
 const DISEASE_LABELS: Record<DiseaseType, string> = {
   HYPERTENSION: "고혈압",
   DIABETES: "당뇨",
-  CARDIOVASCULAR: "심혈관",
+  CARDIOVASCULAR: "이상지질혈증",
 };
 
 const DISEASE_ORDER: DiseaseType[] = [
