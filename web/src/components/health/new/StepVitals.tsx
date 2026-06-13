@@ -7,16 +7,17 @@ import { getBloodPressureStatus, getFastingGlucoseStatus } from "@/lib/health/st
 import type { WizardFormStep2 } from "@/types/health";
 
 interface StepVitalsProps {
+  defaultValues?: Partial<WizardFormStep2>;
   onSubmit: (data: WizardFormStep2) => void;
   onSkip: () => void;
   isLoading?: boolean;
 }
 
-export default function StepVitals({ onSubmit, onSkip, isLoading }: StepVitalsProps) {
-  const [systolic, setSystolic] = useState("");
-  const [diastolic, setDiastolic] = useState("");
-  const [env, setEnv] = useState<"HOME" | "HOSPITAL">("HOME");
-  const [fasting, setFasting] = useState("");
+export default function StepVitals({ defaultValues, onSubmit, onSkip, isLoading }: StepVitalsProps) {
+  const [systolic, setSystolic] = useState(defaultValues?.systolic ?? "");
+  const [diastolic, setDiastolic] = useState(defaultValues?.diastolic ?? "");
+  const [env, setEnv] = useState<"HOME" | "HOSPITAL">(defaultValues?.measurement_env ?? "HOME");
+  const [fasting, setFasting] = useState(defaultValues?.fasting_glucose ?? "");
 
   const sysParsed = systolic ? parseFloat(systolic) : null;
   const bpStatus = sysParsed !== null ? getBloodPressureStatus(sysParsed) : null;

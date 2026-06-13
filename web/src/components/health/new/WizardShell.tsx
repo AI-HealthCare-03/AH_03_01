@@ -4,6 +4,10 @@ import type { ReactNode } from "react";
 
 interface WizardShellProps {
   currentStep: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  /** 클릭 이동을 허용할 단계 번호 집합. 미전달 시 클릭 이동 비활성 (신규 첫 입력). */
+  clickableSteps?: Set<number>;
+  /** 단계 번호 클릭 시 호출. clickableSteps 에 포함된 단계만 동작. */
+  onStepClick?: (step: number) => void;
   children: ReactNode;
 }
 
@@ -17,7 +21,12 @@ const STEPS = [
   { num: 7, label: "추가 정보" },
 ] as const;
 
-export default function WizardShell({ currentStep, children }: WizardShellProps) {
+export default function WizardShell({
+  currentStep,
+  clickableSteps,
+  onStepClick,
+  children,
+}: WizardShellProps) {
   const progress = ((currentStep - 1) / (STEPS.length - 1)) * 100;
   /* 모바일에서는 스텝이 많아 번호+레이블 모두 표시하지 않고 진행바 + "X/7단계" 텍스트만 표시 */
 
@@ -44,46 +53,62 @@ export default function WizardShell({ currentStep, children }: WizardShellProps)
       {/* 데스크탑: 좌측 스텝 인디케이터 */}
       <div className="hidden md:flex flex-col w-52 shrink-0 pt-4">
         <div className="space-y-0">
-          {STEPS.map(({ num, label }, idx) => (
-            <div key={num} className="flex flex-col">
-              <div className="flex items-center gap-3">
-                <div
-                  className={[
-                    "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0",
-                    num < currentStep
-                      ? "bg-brand-black text-white"
-                      : num === currentStep
-                      ? "bg-brand text-brand-black"
-                      : "bg-surface text-text-tertiary border border-border",
-                  ].join(" ")}
-                >
-                  {num < currentStep ? "✓" : num}
-                </div>
-                <div>
-                  <p
+          {STEPS.map(({ num, label }, idx) => {
+            const isClickable = !!clickableSteps?.has(num) && num !== currentStep;
+            return (
+              <div key={num} className="flex flex-col">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={!isClickable}
+                    onClick={() => isClickable && onStepClick?.(num)}
                     className={[
-                      "text-sm font-semibold",
-                      num <= currentStep ? "text-text-primary" : "text-text-tertiary",
+                      "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 transition-colors",
+                      num < currentStep
+                        ? "bg-brand-black text-white"
+                        : num === currentStep
+                        ? "bg-brand text-brand-black"
+                        : "bg-surface text-text-tertiary border border-border",
+                      isClickable ? "cursor-pointer hover:opacity-80" : "cursor-default",
+                    ].join(" ")}
+                    aria-label={isClickable ? `${label} 단계로 이동` : undefined}
+                  >
+                    {num < currentStep ? "✓" : num}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!isClickable}
+                    onClick={() => isClickable && onStepClick?.(num)}
+                    className={[
+                      "text-left transition-colors",
+                      isClickable ? "cursor-pointer hover:opacity-70" : "cursor-default",
                     ].join(" ")}
                   >
-                    {label}
-                  </p>
-                  <p className="text-xs text-text-tertiary">
-                    {num === 1 ? "필수" : "선택"}
-                  </p>
+                    <p
+                      className={[
+                        "text-sm font-semibold",
+                        num <= currentStep ? "text-text-primary" : "text-text-tertiary",
+                      ].join(" ")}
+                    >
+                      {label}
+                    </p>
+                    <p className="text-xs text-text-tertiary">
+                      {num === 1 ? "필수" : "선택"}
+                    </p>
+                  </button>
                 </div>
+                {/* 연결선 */}
+                {idx < STEPS.length - 1 && (
+                  <div
+                    className={[
+                      "ml-4 w-0.5 h-8 transition-colors",
+                      num < currentStep ? "bg-brand-black" : "bg-border",
+                    ].join(" ")}
+                  />
+                )}
               </div>
-              {/* 연결선 */}
-              {idx < STEPS.length - 1 && (
-                <div
-                  className={[
-                    "ml-4 w-0.5 h-8 transition-colors",
-                    num < currentStep ? "bg-brand-black" : "bg-border",
-                  ].join(" ")}
-                />
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

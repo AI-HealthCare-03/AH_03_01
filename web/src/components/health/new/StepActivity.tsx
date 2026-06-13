@@ -65,21 +65,22 @@ function NumberField({
 /* ── 메인 ────────────────────────────────── */
 
 interface StepActivityProps {
+  defaultValues?: Partial<WizardFormStep5>;
   onSubmit: (data: WizardFormStep5) => void;
   onSkip: () => void;
   isLoading?: boolean;
 }
 
-export default function StepActivity({ onSubmit, onSkip, isLoading }: StepActivityProps) {
+export default function StepActivity({ defaultValues, onSubmit, onSkip, isLoading }: StepActivityProps) {
   const { control, handleSubmit } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      sleep_weekday: "",
-      sleep_weekend: "",
-      moderate_exercise_hour: "",
-      mid_act_day: "",
-      walk_day: "",
-      water_count: "",
+      sleep_weekday: defaultValues?.sleep_weekday ?? "",
+      sleep_weekend: defaultValues?.sleep_weekend ?? "",
+      moderate_exercise_hour: defaultValues?.moderate_exercise_hour ?? "",
+      mid_act_day: defaultValues?.mid_act_day ?? "",
+      walk_day: defaultValues?.walk_day ?? "",
+      water_count: defaultValues?.water_count ?? "",
     },
   });
 

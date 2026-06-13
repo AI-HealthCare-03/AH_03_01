@@ -5,6 +5,7 @@ import Button from "@/components/ui/Button";
 import type { WizardFormStep4 } from "@/types/health";
 
 interface StepSmokingDrinkingProps {
+  defaultValues?: Partial<WizardFormStep4>;
   onSubmit: (data: WizardFormStep4) => void;
   onSkip: () => void;
   isLoading?: boolean;
@@ -82,10 +83,10 @@ function SelectChip<T extends number | string>({
   );
 }
 
-export default function StepSmokingDrinking({ onSubmit, onSkip, isLoading }: StepSmokingDrinkingProps) {
-  const [smokingChoice, setSmokingChoice] = useState<SmokingChoice | null>(null);
-  const [alcoholFreq, setAlcoholFreq] = useState<number | null>(null);
-  const [alcoholCup, setAlcoholCup] = useState<number | null>(null);
+export default function StepSmokingDrinking({ defaultValues, onSubmit, onSkip, isLoading }: StepSmokingDrinkingProps) {
+  const [smokingChoice, setSmokingChoice] = useState<SmokingChoice | null>(defaultValues?.smoking_choice ?? null);
+  const [alcoholFreq, setAlcoholFreq] = useState<number | null>(defaultValues?.alcohol_freq_y ?? null);
+  const [alcoholCup, setAlcoholCup] = useState<number | null>(defaultValues?.alcohol_cup ?? null);
 
   /* alcohol_freq_y=1(전혀 안 마심) 이면 음주량 질문 숨김 */
   const isNonDrinker = alcoholFreq === 1;

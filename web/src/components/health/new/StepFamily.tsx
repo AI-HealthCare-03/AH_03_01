@@ -5,6 +5,7 @@ import Button from "@/components/ui/Button";
 import type { WizardFormStep3 } from "@/types/health";
 
 interface StepFamilyProps {
+  defaultValues?: Partial<WizardFormStep3>;
   onSubmit: (data: WizardFormStep3) => void;
   onSkip: () => void;
   isLoading?: boolean;
@@ -55,10 +56,10 @@ function TriField({
   );
 }
 
-export default function StepFamily({ onSubmit, onSkip, isLoading }: StepFamilyProps) {
-  const [familyDm, setFamilyDm] = useState<TriState>(-1);
-  const [familyHp, setFamilyHp] = useState<TriState>(-1);
-  const [familyHl, setFamilyHl] = useState<TriState>(-1);
+export default function StepFamily({ defaultValues, onSubmit, onSkip, isLoading }: StepFamilyProps) {
+  const [familyDm, setFamilyDm] = useState<TriState>((defaultValues?.family_dm as TriState) ?? -1);
+  const [familyHp, setFamilyHp] = useState<TriState>((defaultValues?.family_hp as TriState) ?? -1);
+  const [familyHl, setFamilyHl] = useState<TriState>((defaultValues?.family_hl as TriState) ?? -1);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
