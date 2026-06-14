@@ -273,12 +273,22 @@ export interface RagSource {
   source?: string;
 }
 
+export interface RecommendedChallengeItem {
+  template_id: number;
+  title: string;
+  category: string;
+  difficulty: string;
+  reason: string;
+  priority: "TOP" | "RECOMMENDED" | "OPTIONAL" | null;
+}
+
 export interface RagRiskRecommendationResponse {
   answer: string;
   predictions: RagPredictionItem[];
   sources: RagSource[];
   recommended_tips: string[];
   recommended_diet: string[];
+  recommended_challenges?: RecommendedChallengeItem[];
   has_required_data: boolean;
   missing_fields: string[];
   action_hint: "navigate_to_health_info" | null;
