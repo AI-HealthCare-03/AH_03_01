@@ -317,7 +317,7 @@ const DISEASE_TABS = [
 ] as const;
 
 function FactorBar({ weight }: { weight: number }) {
-  const pct = Math.min(Math.round(weight * 100), 100);
+  const pct = Math.max(0, Math.min(Math.round(weight * 100), 100));
   return (
     <div className="mt-1 h-1.5 bg-surface rounded-full overflow-hidden">
       <div
@@ -512,8 +512,12 @@ function ChallengeListSection({ challenges }: { challenges: ReportChallenge[] })
     (t) => t.key === "ALL" || presentCategories.has(t.key)
   );
 
+  const effectiveFilter = visibleTabs.some((t) => t.key === filter) ? filter : "ALL";
+
   const filtered =
-    filter === "ALL" ? challenges : challenges.filter((c) => c.category === filter);
+    effectiveFilter === "ALL"
+      ? challenges
+      : challenges.filter((c) => c.category === effectiveFilter);
 
   return (
     <SectionCard title="챌린지 수행 내역">
@@ -532,7 +536,7 @@ function ChallengeListSection({ challenges }: { challenges: ReportChallenge[] })
                 onClick={() => setFilter(tab.key)}
                 className={[
                   "shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-colors",
-                  filter === tab.key
+                  effectiveFilter === tab.key
                     ? "bg-brand-black text-white"
                     : "bg-surface text-text-secondary hover:bg-border",
                 ].join(" ")}
@@ -740,7 +744,7 @@ export default function ReportTab() {
         </div>
 
         {/* 헤더 통계 */}
-        {hasReport && <HeaderStatsRow stats={report.header_stats} />}
+        {hasReport && report.header_stats && <HeaderStatsRow stats={report.header_stats} />}
       </div>
 
       {/* 로딩 */}
