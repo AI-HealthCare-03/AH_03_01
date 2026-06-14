@@ -432,6 +432,11 @@ true 면 retrieve 가 의료 진료지침과 함께 CHALLENGE_CATALOG 도 함께
 - 약품명·의약품이 포함된 보관/용법/복용 질문: "인슐린", "스타틴", "와파린", "메트포르민" 등
 - 병원·진료·처방 안내 질문: "어느 병원", "진료과", "처방"
 - 증상·진단·합병증 질문 (service_guide 로 분류 절대 금지)
+- **위험도 점수/수치가 포함돼도 식단·운동·생활습관·약물 정보를 묻는 질문은 medical_inquiry**
+  예: "당뇨 위험도 점수가 45%이고 공복혈당 85, HbA1c 7.8%입니다. 어떤 식단이 좋을까요?" → medical_inquiry, diseases=["diabetes"], topics=["diet"]
+  예: "위험도 88%, 혈압 148/94mmHg입니다. 식단 추천 부탁드립니다." → medical_inquiry, diseases=["hypertension"], topics=["diet"]
+  예: "심혈관 위험도 점수가 78%, LDL 80, HDL 52 mg/dL인데 어떤 식단이 좋을까요?" → medical_inquiry, diseases=["dyslipidemia"], topics=["diet"]
+  예: "여성인데 심혈관 위험도 34%, LDL 110이면 식단 추천해줘." → medical_inquiry, diseases=["dyslipidemia"], topics=["diet"]
 
 == needs_health_data ==
 다음 조건 중 하나라도 해당하면 **true** (보수적으로 풀게 분류 — 본인 상태 의심되면 true):
