@@ -4,6 +4,12 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
+# 0. OpenMP 런타임 — lightgbm/catboost 가 libgomp.so.1 을 런타임에 dlopen 한다.
+#    python:3.13-slim 엔 미포함이라 없으면 모델 pkl 언피클(lightgbm import) 시
+#    `OSError: libgomp.so.1: cannot open shared object file` 로 모든 추론이 실패한다.
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # 1. uv 설치 (공식 이미지에서 복사)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
