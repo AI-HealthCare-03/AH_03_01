@@ -1,7 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
+from app.core.media import sign_media_url
 from app.dtos.base import BaseSerializerModel
 from app.models.support import FAQCategory, InquiryCategory, InquiryStatus
 
@@ -33,6 +34,10 @@ class InquiryDetailResponse(InquiryListItem):
     content: str
     attachment_url: str | None
     answer: InquiryAnswerResponse | None
+
+    @field_serializer("attachment_url")
+    def _sign_attachment_url(self, value: str | None) -> str | None:
+        return sign_media_url(value)
 
 
 class InquiryCreateRequest(BaseModel):

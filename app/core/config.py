@@ -49,6 +49,9 @@ class Config(BaseSettings):
     # 미디어/파일 업로드
     MEDIA_ROOT: str = "/app/media"
     MEDIA_URL_PREFIX: str = "/media"
+    # signed-URL 만료(초). 읽을 때마다 새 서명을 발급하므로, 응답을 받은 뒤
+    # 이 시간 안에 표시하면 된다(이미지 캐시 만료 방지 위해 넉넉히 1일).
+    MEDIA_URL_TTL: int = 24 * 60 * 60
     UPLOAD_MAX_BYTES: int = 50 * 1024 * 1024  # 50MB
     ALLOWED_IMAGE_MIME: tuple[str, ...] = ("image/jpeg", "image/png", "image/webp")
 
