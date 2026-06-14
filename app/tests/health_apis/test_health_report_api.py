@@ -237,6 +237,26 @@ class TestHealthReportApi(TestCase):
             res = await client.get("/api/v1/health-reports?period=custom", headers=headers)
             assert res.status_code == status.HTTP_400_BAD_REQUEST
 
+    async def test_custom_period_pdf_returns_pdf_url(self):
+        # custom + format=pdf 도 monthly 와 동일하게 동작해야 한다(#183 리뷰 확인 항목).
+        # build_for_range payload 가 build_and_store 로 흘러 200 + pdf_url 을 채워 응답한다.
+        from unittest.mock import AsyncMock, patch
+
+        async with make_client() as client:
+            token = await signup_and_login(client, email="report_custom_pdf@example.com", phone_number="01044440010")
+            headers = {"Authorization": f"Bearer {token}"}
+            fake_url = "/media/uploads/report_pdf/20260515/1/abc.pdf"
+            with patch(
+                "app.apis.v1.health_routers.ReportPdfService.build_and_store",
+                AsyncMock(return_value=fake_url),
+            ):
+                res = await client.get(
+                    "/api/v1/health-reports?period=custom&date_from=2026-05-01&date_to=2026-05-15&format=pdf",
+                    headers=headers,
+                )
+            assert res.status_code == status.HTTP_200_OK
+            assert res.json()["pdf_url"] == fake_url
+
 
 def test_build_trends_secondary_latest_with_trailing_none() -> None:
     """_build_trends: 마지막 혈압 레코드에 이완기(secondary)가 없어도 secondary_latest 가 마지막 '유효'값.
