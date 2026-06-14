@@ -352,3 +352,30 @@ export async function fetchMonthlyReportV2Range(
     return null;
   }
 }
+
+/** format=pdf 로 서버 렌더 PDF 생성 요청 → 저장된 pdf_url(상대경로) 반환. 실패 시 throw. */
+export type ReportPdfParams =
+  | { period: "monthly"; month: string /* YYYY-MM */ }
+  | { period: "custom"; dateFrom: string; dateTo: string /* YYYY-MM-DD */ };
+
+export async function requestMonthlyReportPdf(
+  params: ReportPdfParams
+): Promise<string> {
+  const query =
+    params.period === "monthly"
+      ? { period: "monthly", month: params.month, format: "pdf" }
+      : {
+          period: "custom",
+          date_from: params.dateFrom,
+          date_to: params.dateTo,
+          format: "pdf",
+        };
+  const { data } = await apiClient.get<MonthlyReportV2Response>(
+    "/api/v1/health-reports",
+    { params: query }
+  );
+  if (!data?.pdf_url) {
+    throw new Error("pdf_url 이 응답에 없습니다.");
+  }
+  return data.pdf_url;
+}

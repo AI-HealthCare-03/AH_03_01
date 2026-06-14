@@ -7,6 +7,8 @@ import {
   useMonthlyReportV2,
   useMonthlyReportV2Range,
 } from "@/hooks/queries/useMonthlyReport";
+import { requestMonthlyReportPdf } from "@/lib/api/health";
+import { resolveMediaUrl } from "@/lib/api/media";
 import { useToast } from "@/components/ui/Toast";
 import RiskSemiGauge from "@/components/health/RiskSemiGauge";
 import BPTrendChart from "@/components/health/charts/BPTrendChart";
@@ -678,8 +680,27 @@ export default function ReportTab() {
 
   const hasReport = !!report && !isLoading;
 
-  const handlePdfToast = () => {
-    showToast("PDF 저장 기능은 준비 중입니다.", "info");
+  const [isPdfLoading, setIsPdfLoading] = useState(false);
+  const handlePdfDownload = async () => {
+    if (isPdfLoading) return;
+    setIsPdfLoading(true);
+    try {
+      const pdfUrl = await requestMonthlyReportPdf(
+        mode === "monthly"
+          ? { period: "monthly", month: monthStr }
+          : { period: "custom", dateFrom: rangeFrom, dateTo: rangeTo },
+      );
+      const absoluteUrl = resolveMediaUrl(pdfUrl);
+      if (absoluteUrl) {
+        window.open(absoluteUrl, "_blank", "noopener,noreferrer");
+      } else {
+        showToast("PDF 주소를 불러오지 못했어요.", "error");
+      }
+    } catch {
+      showToast("PDF 생성에 실패했어요. 잠시 후 다시 시도해 주세요.", "error");
+    } finally {
+      setIsPdfLoading(false);
+    }
   };
 
   return (
@@ -704,17 +725,17 @@ export default function ReportTab() {
               onTo={setRangeTo}
             />
           )}
-          {/* PDF 버튼 — Phase 3 연결 전까지 비활성 */}
+          {/* PDF 버튼 — 서버 렌더(format=pdf) 요청 후 새 탭으로 열기 */}
           <button
             type="button"
-            onClick={handlePdfToast}
-            disabled
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border rounded-[8px] bg-surface text-text-tertiary cursor-not-allowed"
-            aria-label="PDF로 저장 (준비중)"
+            onClick={handlePdfDownload}
+            disabled={!hasReport || isPdfLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border rounded-[8px] bg-surface text-text-primary transition-colors hover:bg-border disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-label="PDF로 저장"
+            aria-busy={isPdfLoading}
           >
             <span aria-hidden="true">📄</span>
-            PDF 저장
-            <span className="text-[10px] bg-border px-1.5 py-0.5 rounded-full">준비중</span>
+            {isPdfLoading ? "생성 중…" : "PDF 저장"}
           </button>
         </div>
 
