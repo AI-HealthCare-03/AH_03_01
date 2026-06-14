@@ -115,10 +115,9 @@ _KDA2025: dict[str, list[str]] = {
     "KDA2025_SEC_0079": ["monitoring"],                         # 참고문헌 — CGM
 
     # V. 자기관리
-<<<<<<< Updated upstream
     "KDA2025_SEC_0009": ["lifestyle"],                          # 3-5-1. 당뇨병 자기관리
     "KDA2025_SEC_0080": ["lifestyle"],                          # V. 포괄적인 자기관리
-    "KDA2025_SEC_0081": ["lifestyle"],                          # 이득(편익) — 자기관리
+    "KDA2025_SEC_0081": ["lifestyle", "smoking"],               # 이득(편익) — 자기관리 (금연 언급)
     "KDA2025_SEC_0082": ["lifestyle"],                          # 자기관리교육 효과 근거
     "KDA2025_SEC_0083": ["lifestyle"],                          # 권고4. 다학제 자기관리교육
     "KDA2025_SEC_0084": ["lifestyle"],                          # 참고문헌 — 자기관리
@@ -126,25 +125,9 @@ _KDA2025: dict[str, list[str]] = {
     "KDA2025_SEC_0086": ["monitoring"],                         # 당뇨병 발생 위험도 감소효과
     "KDA2025_SEC_0087": ["monitoring", "medication"],           # 권고2. 저혈당 대처 방법
     "KDA2025_SEC_0088": ["medication"],                         # 권고3. 글루카곤 처방
-    "KDA2025_SEC_0089": ["complication"],                       # 미세혈관합병증 발생
+    "KDA2025_SEC_0089": ["complication"],                        # 미세혈관합병증 발생
     "KDA2025_SEC_0090": ["diagnosis"],                          # 당뇨병 발생
     "KDA2025_SEC_0091": ["monitoring"],                         # 참고문헌 — 저혈당관리
-
-=======
-    "KDA2025_SEC_0009": ["lifestyle"],  # 3-5-1. 당뇨병 자기관리
-    "KDA2025_SEC_0080": ["lifestyle"],  # V. 포괄적인 자기관리
-    "KDA2025_SEC_0081": ["lifestyle", "smoking"],  # 이득(편익) — 자기관리 (금연 언급)
-    "KDA2025_SEC_0082": ["lifestyle"],  # 자기관리교육 효과 근거
-    "KDA2025_SEC_0083": ["lifestyle"],  # 권고4. 다학제 자기관리교육
-    "KDA2025_SEC_0084": ["lifestyle"],  # 참고문헌 — 자기관리
-    "KDA2025_SEC_0085": ["monitoring", "medication"],  # 5-2. 저혈당관리
-    "KDA2025_SEC_0086": ["monitoring"],  # 당뇨병 발생 위험도 감소효과
-    "KDA2025_SEC_0087": ["monitoring", "medication"],  # 권고2. 저혈당 대처 방법
-    "KDA2025_SEC_0088": ["medication"],  # 권고3. 글루카곤 처방
-    "KDA2025_SEC_0089": ["complication"],  # 미세혈관합병증 발생
-    "KDA2025_SEC_0090": ["diagnosis"],  # 당뇨병 발생
-    "KDA2025_SEC_0091": ["monitoring"],  # 참고문헌 — 저혈당관리
->>>>>>> Stashed changes
     # 5-3. 의학영양요법
     "KDA2025_SEC_0010": ["diet"],                               # 3-5-3. 의학영양요법
     "KDA2025_SEC_0092": ["diet"],                               # 5-3. 의학영양요법 권고 목록
@@ -208,8 +191,7 @@ _KDA2025: dict[str, list[str]] = {
     "KDA2025_SEC_0142": ["medication"],                         # 참고문헌 — 2형당뇨병 약물
 
     # 7. 심혈관 위험관리
-<<<<<<< Updated upstream
-    "KDA2025_SEC_0143": ["risk", "complication"],               # 심혈관질환 위험관리 챕터
+    "KDA2025_SEC_0143": ["risk", "complication", "smoking"],    # 심혈관질환 위험관리 챕터 (흡연 위험인자 명시)
     "KDA2025_SEC_0013": ["medication", "complication"],         # 3-7. 고혈압관리
     "KDA2025_SEC_0144": ["medication", "complication"],         # 7-1. 고혈압관리 권고 목록
     "KDA2025_SEC_0145": ["medication", "monitoring"],           # 7-1. 혈압 측정·목표·생활습관교정
@@ -222,29 +204,14 @@ _KDA2025: dict[str, list[str]] = {
     "KDA2025_SEC_0151": ["medication"],                         # 7-2. 스타틴·에제티미브·PCSK9
     "KDA2025_SEC_0152": ["medication", "complication"],         # 7-2. 고중성지방혈증
     "KDA2025_SEC_0153": ["medication", "complication"],         # 7-3. 항혈소판제
-
-=======
-    "KDA2025_SEC_0143": ["risk", "complication", "smoking"],  # 심혈관질환 위험관리 챕터 (흡연 위험인자 명시)
-    "KDA2025_SEC_0013": ["medication", "complication"],  # 3-7. 고혈압관리
-    "KDA2025_SEC_0144": ["medication", "complication"],  # 7-1. 고혈압관리 권고 목록
-    "KDA2025_SEC_0145": ["medication", "monitoring"],  # 7-1. 혈압 측정·목표·생활습관교정
-    "KDA2025_SEC_0146": ["medication"],  # 7-1. 항고혈압제 선택·병용요법
-    "KDA2025_SEC_0147": ["medication", "complication"],  # 7-1. 그림·참고문헌
-    "KDA2025_SEC_0014": ["medication", "complication"],  # 3-8. 지질관리
-    "KDA2025_SEC_0148": ["medication", "complication"],  # 7-2. 지질관리 권고 목록
-    "KDA2025_SEC_0149": ["medication", "monitoring"],  # 7-2. LDL 조절목표 결정
-    "KDA2025_SEC_0150": ["medication"],  # 7-2. LDL 수치별 근거
-    "KDA2025_SEC_0151": ["medication"],  # 7-2. 스타틴·에제티미브·PCSK9
-    "KDA2025_SEC_0152": ["medication", "complication"],  # 7-2. 고중성지방혈증
-    "KDA2025_SEC_0153": ["medication", "complication"],  # 7-3. 항혈소판제
->>>>>>> Stashed changes
     # 8. 합병증 관리
-    "KDA2025_SEC_0154": ["complication"],                       # 당뇨병합병증관리 챕터
+    "KDA2025_SEC_0154": ["complication", "smoking"],             # 당뇨병합병증관리 챕터 (흡연 위험인자)
     "KDA2025_SEC_0155": ["complication"],                       # 8-1. 당뇨병신장질환 권고 목록
     "KDA2025_SEC_0156": ["complication", "monitoring"],         # 8-1. 신장질환 진단·혈당·혈압·단백질
     "KDA2025_SEC_0157": ["complication", "medication"],         # 8-1. ACE억제제/ARB/SGLT2/finerenone
     "KDA2025_SEC_0158": ["complication"],                       # 8-1. 그림·참고문헌
-    "KDA2025_SEC_0159": ["complication"],                       # 8-2. 당뇨병신경병증·발관리
+    "KDA2025_SEC_0159": ["complication"],                        # 8-2. 당뇨병신경병증·발관리
+    "KDA2025_SEC_0189": ["smoking", "complication"],             # 당뇨병 환자 흡연과 합병증 위험 (신규)
     "KDA2025_SEC_0160": ["complication"],                       # 8-3. 당뇨병망막병증
     "KDA2025_SEC_0161": ["complication", "medication"],         # 8-4. 당뇨병케토산증·고삼투질상태
 
@@ -280,6 +247,15 @@ _KDA2025: dict[str, list[str]] = {
     "KDA2025_SEC_0179": ["diagnosis"],                          # 진료지침 연혁 챕터
     "KDA2025_SEC_0180": ["diagnosis"],                          # 진료지침 연혁 본문
     "KDA2025_SEC_0181": ["diagnosis"],                          # 역대 위원 명단
+    # 환자 교육 자료 (인슐린 관리)
+    "KDA2025_SEC_0182": ["medication", "lifestyle"],            # 펜형 인슐린 주사 방법
+    "KDA2025_SEC_0183": ["medication", "lifestyle"],            # 인슐린 보관 방법 및 온도 관리
+    # 계절별 당뇨식단 (대한당뇨병학회 환자 교육 자료)
+    "KDA2025_SEC_0184": ["diet", "lifestyle"],                  # 계절별 당뇨식단 개요
+    "KDA2025_SEC_0185": ["diet", "lifestyle"],                  # 봄 당뇨식단 5종
+    "KDA2025_SEC_0186": ["diet", "lifestyle"],                  # 여름 당뇨식단 5종
+    "KDA2025_SEC_0187": ["diet", "lifestyle"],                  # 가을 당뇨식단 5종
+    "KDA2025_SEC_0188": ["diet", "lifestyle"],                  # 겨울 당뇨식단 5종
 }
 
 # ══════════════════════════════════════════════════════════════
@@ -427,6 +403,8 @@ _KSH2026: dict[str, list[str]] = {
     "KSH2026_SEC_0130": ["medication", "lifestyle"],            # 14.3. 치료 지속성 향상
     "KSH2026_SEC_0131": ["lifestyle"],                          # 14.4. 다학제 관리
     "KSH2026_SEC_0132": ["lifestyle"],                          # 14.5. 환자 중심 관리 한계
+    "KSH2026_SEC_0134": ["diet", "lifestyle"],                  # DASH 식단 개요 및 핵심 원칙
+    "KSH2026_SEC_0135": ["diet", "lifestyle"],                  # DASH 식단 식품군별 권장 섭취 횟수
 
     # 그림
     "KSH2026_FIG_001": ["diagnosis"],
@@ -464,6 +442,13 @@ _KSOLA2022: dict[str, list[str]] = {
     "KSOLA2022_SEC_0051": ["risk"],
     "KSOLA2022_SEC_0060_A": ["monitoring"],
     "KSOLA2022_SEC_0060_B": ["medication", "monitoring"],
+    "KSLA2022_SEC_0025": ["diet"],                              # Ch.3 식사요법 — 고콜레스테롤 에너지·지방 권고안
+    "KSLA2022_SEC_0026": ["diet"],                              # Ch.3 식사요법 — 고콜레스테롤 트랜스지방·식이섬유
+    "KSLA2022_SEC_0028": ["diet"],                              # 고중성지방혈증 탄수화물·당류·식이섬유·알코올
+    "KSLA2022_SEC_0029": ["diet"],                              # LDL 식사요법 — 포화지방·콜레스테롤 권고안
+    "KSLA2022_SEC_0030": ["diet"],                              # LDL 식사요법 — 식이섬유·식물성 스테롤 권고안
+    "KSLA2022_SEC_0048": ["diet", "medication"],                # 복합 이상지질혈증 식사요법
+    "KSLA2022_SEC_0068": ["diet"],                              # 이상지질혈증 식사요법 총론
     "KSOLA2022_SEC_0070": ["diet"],
     "KSOLA2022_SEC_0071_A": ["diet"],
     "KSOLA2022_SEC_0071_B": ["diet"],
@@ -494,6 +479,8 @@ _KSOLA2022: dict[str, list[str]] = {
     "KSOLA2022_SEC_0117_A": ["diagnosis", "medication"],
     "KSOLA2022_SEC_0117_B": ["complication"],
     "KSOLA2022_SEC_0117_C": ["complication"],
+    "KSLA2022_SEC_0081": ["diet", "lifestyle"],                 # 이상지질혈증 식사요법 실천 지침 (AMC)
+    "KSLA2022_SEC_0082": ["diet", "lifestyle"],                 # 고지혈증 영양관리 6대 원칙 (서울영양사회)
     # figures
     "DYS_FIG_001": ["diagnosis"],
     "DYS_FIG_002": ["medication", "risk"],
