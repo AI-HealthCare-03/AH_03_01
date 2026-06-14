@@ -23,13 +23,13 @@ class HealthQuizService:
 
     async def get_available_quizzes(self, user_id: UUID) -> list:
         today = _today()
+        today_start = datetime.combine(today, datetime.min.time()).replace(tzinfo=SEOUL)
         assignment_repo = DailyAssignmentRepository()
 
         assignments = await assignment_repo.get_today_assignments(user_id, today)
 
         if not assignments:
             # 오늘 이미 답한 수를 제외한 나머지 슬롯만 배정
-            today_start = datetime.combine(today, datetime.min.time()).replace(tzinfo=SEOUL)
             today_answered_count = await QuizAttempt.filter(
                 user_id=user_id, attempted_at__gte=today_start
             ).count()
@@ -42,14 +42,15 @@ class HealthQuizService:
         if not assignments:
             return []
 
-        # 오늘 배정된 퀴즈 중 아직 풀지 않은 것만 반환
-        answered_ids = set(
+        # 오늘 배정된 퀴즈 중 오늘 이미 푼 것만 제외 (재출제 대응: 전체 기간 아닌 오늘 기준)
+        answered_today_ids = set(
             await QuizAttempt.filter(
                 user_id=user_id,
                 quiz_id__in=[a.quiz_id for a in assignments],
+                attempted_at__gte=today_start,
             ).values_list("quiz_id", flat=True)
         )
-        return [a.quiz for a in assignments if a.quiz_id not in answered_ids]
+        return [a.quiz for a in assignments if a.quiz_id not in answered_today_ids]
 
     async def get_today_quiz(self, user_id: UUID) -> dict:
         quizzes = await self.get_available_quizzes(user_id)
@@ -58,10 +59,9 @@ class HealthQuizService:
         return {"quiz": quizzes[0], "already_answered": False}
 
     async def answer_quiz(self, user_id: UUID, quiz_id: int, selected_option: str) -> dict:
-        if await self.repo.get_attempt(user_id, quiz_id):
-            raise ValueError("already_answered")
-
         today_start = datetime.combine(_today(), datetime.min.time()).replace(tzinfo=SEOUL)
+        if await self.repo.get_today_attempt(user_id, quiz_id, today_start):
+            raise ValueError("already_answered")
         daily_count = await QuizAttempt.filter(user_id=user_id, attempted_at__gte=today_start).count()
         if daily_count >= DAILY_LIMIT:
             raise ValueError("daily_limit_exceeded")

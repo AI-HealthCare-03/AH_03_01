@@ -138,7 +138,6 @@ class QuizAttempt(models.Model):
 
     class Meta:
         table = "quiz_attempts"
-        unique_together = (("user", "quiz"),)
 
 
 class PostLike(models.Model):
