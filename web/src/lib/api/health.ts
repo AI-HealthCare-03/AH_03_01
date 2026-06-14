@@ -336,3 +336,19 @@ export async function fetchMonthlyReportV2(
     return null;
   }
 }
+
+/** 임의 기간 리포트 (period=custom, 캐싱 없음). date_from/date_to 는 YYYY-MM-DD, 양끝 포함. */
+export async function fetchMonthlyReportV2Range(
+  dateFrom: string /* YYYY-MM-DD */,
+  dateTo: string /* YYYY-MM-DD */
+): Promise<MonthlyReportV2Response | null> {
+  try {
+    const { data } = await apiClient.get<MonthlyReportV2Response>(
+      "/api/v1/health-reports",
+      { params: { period: "custom", date_from: dateFrom, date_to: dateTo, format: "json" } }
+    );
+    return data;
+  } catch {
+    return null;
+  }
+}

@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { format, addMonths, subMonths } from "date-fns";
+import { format, addMonths, subMonths, subDays } from "date-fns";
 import { ko } from "date-fns/locale";
-import { useMonthlyReportV2 } from "@/hooks/queries/useMonthlyReport";
+import {
+  useMonthlyReportV2,
+  useMonthlyReportV2Range,
+} from "@/hooks/queries/useMonthlyReport";
 import { useToast } from "@/components/ui/Toast";
 import RiskSemiGauge from "@/components/health/RiskSemiGauge";
 import BPTrendChart from "@/components/health/charts/BPTrendChart";
@@ -128,6 +131,86 @@ function MonthNav({ current, onPrev, onNext }: MonthNavProps) {
           ▶
         </button>
       </div>
+    </div>
+  );
+}
+
+/* ── 조회 모드 토글 (월 단위 / 기간 지정) ─── */
+
+type ReportMode = "monthly" | "custom";
+
+function ModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: ReportMode;
+  onChange: (m: ReportMode) => void;
+}) {
+  const tabs: { key: ReportMode; label: string }[] = [
+    { key: "monthly", label: "월 단위" },
+    { key: "custom", label: "기간 지정" },
+  ];
+  return (
+    <div className="inline-flex rounded-[8px] border border-border bg-surface p-0.5">
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          onClick={() => onChange(t.key)}
+          aria-pressed={mode === t.key}
+          className={`px-3 py-1.5 text-xs font-medium rounded-[6px] transition-colors ${
+            mode === t.key
+              ? "bg-white text-text-primary shadow-[0_1px_2px_rgba(0,0,0,0.1)]"
+              : "text-text-secondary"
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ── 임의 기간 선택 (date_from ~ date_to) ─── */
+
+function RangePicker({
+  from,
+  to,
+  onFrom,
+  onTo,
+}: {
+  from: string;
+  to: string;
+  onFrom: (v: string) => void;
+  onTo: (v: string) => void;
+}) {
+  const today = format(new Date(), "yyyy-MM-dd");
+  const invalid = !!from && !!to && from > to;
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <input
+          type="date"
+          value={from}
+          max={to || today}
+          onChange={(e) => onFrom(e.target.value)}
+          aria-label="시작일"
+          className="px-2 py-1.5 text-sm border border-border rounded-[8px] bg-white text-text-primary"
+        />
+        <span className="text-text-tertiary">~</span>
+        <input
+          type="date"
+          value={to}
+          min={from || undefined}
+          max={today}
+          onChange={(e) => onTo(e.target.value)}
+          aria-label="종료일"
+          className="px-2 py-1.5 text-sm border border-border rounded-[8px] bg-white text-text-primary"
+        />
+      </div>
+      {invalid && (
+        <p className="text-xs text-danger">시작일은 종료일보다 이후일 수 없어요.</p>
+      )}
     </div>
   );
 }
@@ -571,11 +654,27 @@ function SectionCard({
    ========================================================= */
 
 export default function ReportTab() {
+  const [mode, setMode] = useState<ReportMode>("monthly");
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  // 임의 기간 기본값: 최근 30일
+  const [rangeFrom, setRangeFrom] = useState<string>(
+    format(subDays(new Date(), 29), "yyyy-MM-dd"),
+  );
+  const [rangeTo, setRangeTo] = useState<string>(format(new Date(), "yyyy-MM-dd"));
   const { showToast } = useToast();
 
   const monthStr = format(currentMonth, "yyyy-MM");
-  const { data: report, isLoading } = useMonthlyReportV2(monthStr);
+  const rangeValid = !!rangeFrom && !!rangeTo && rangeFrom <= rangeTo;
+
+  // 두 훅 모두 호출하되 활성 모드만 enabled (hooks 규칙: 조건부 호출 불가).
+  const monthlyQuery = useMonthlyReportV2(monthStr, mode === "monthly");
+  const rangeQuery = useMonthlyReportV2Range(
+    rangeFrom,
+    rangeTo,
+    mode === "custom" && rangeValid,
+  );
+  const { data: report, isLoading } =
+    mode === "monthly" ? monthlyQuery : rangeQuery;
 
   const hasReport = !!report && !isLoading;
 
@@ -585,14 +684,26 @@ export default function ReportTab() {
 
   return (
     <div className="space-y-4">
-      {/* 헤더 영역: 월 네비게이션 */}
+      {/* 헤더 영역: 조회 모드 토글 + (월 네비게이션 | 기간 선택) */}
       <div className="bg-white rounded-[16px] p-5 shadow-[0_1px_4px_rgba(0,0,0,0.08)]">
+        <div className="mb-3">
+          <ModeToggle mode={mode} onChange={setMode} />
+        </div>
         <div className="flex items-center justify-between mb-4">
-          <MonthNav
-            current={currentMonth}
-            onPrev={() => setCurrentMonth((d) => subMonths(d, 1))}
-            onNext={() => setCurrentMonth((d) => addMonths(d, 1))}
-          />
+          {mode === "monthly" ? (
+            <MonthNav
+              current={currentMonth}
+              onPrev={() => setCurrentMonth((d) => subMonths(d, 1))}
+              onNext={() => setCurrentMonth((d) => addMonths(d, 1))}
+            />
+          ) : (
+            <RangePicker
+              from={rangeFrom}
+              to={rangeTo}
+              onFrom={setRangeFrom}
+              onTo={setRangeTo}
+            />
+          )}
           {/* PDF 버튼 — Phase 3 연결 전까지 비활성 */}
           <button
             type="button"
@@ -620,13 +731,26 @@ export default function ReportTab() {
         </div>
       )}
 
+      {/* 잘못된 기간 안내 (custom 모드) */}
+      {mode === "custom" && !rangeValid && (
+        <div className="text-center py-16 space-y-2">
+          <p className="text-4xl" aria-hidden="true">📅</p>
+          <p className="font-semibold text-text-primary">조회 기간을 확인해 주세요</p>
+          <p className="text-sm text-text-secondary">
+            시작일은 종료일보다 이후일 수 없어요.
+          </p>
+        </div>
+      )}
+
       {/* 데이터 없음 */}
-      {!isLoading && !hasReport && (
+      {(mode === "monthly" || rangeValid) && !isLoading && !hasReport && (
         <div className="text-center py-16 space-y-2">
           <p className="text-4xl" aria-hidden="true">📭</p>
-          <p className="font-semibold text-text-primary">해당 월 리포트가 없습니다</p>
+          <p className="font-semibold text-text-primary">
+            {mode === "monthly" ? "해당 월 리포트가 없습니다" : "해당 기간 리포트가 없습니다"}
+          </p>
           <p className="text-sm text-text-secondary">
-            건강 데이터를 기록하면 월간 리포트를 확인할 수 있어요.
+            건강 데이터를 기록하면 리포트를 확인할 수 있어요.
           </p>
         </div>
       )}

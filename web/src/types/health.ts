@@ -391,7 +391,10 @@ export interface ReportGoodHabit {
 }
 
 export interface MonthlyReportV2Response {
-  year_month: string; /* YYYY-MM */
+  year_month: string; /* monthly: "YYYY-MM" / custom: "YYYY-MM-DD~YYYY-MM-DD" */
+  period?: string; /* "monthly" | "custom" */
+  date_from?: string | null; /* YYYY-MM-DD (양끝 포함) */
+  date_to?: string | null; /* YYYY-MM-DD (양끝 포함) */
   header_stats: ReportHeaderStats;
   disease_risks: ReportDiseaseRisk[];
   trends: ReportTrend[];
