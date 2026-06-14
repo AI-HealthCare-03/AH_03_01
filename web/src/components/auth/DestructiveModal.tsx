@@ -4,7 +4,7 @@ import { useState } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
-import { DESTRUCT_ITEMS } from "@/constants";
+import { DESTRUCT_ITEM_LABELS } from "@/constants";
 
 /* =========================================
    파괴적 액션 확인 모달
@@ -53,12 +53,10 @@ export default function DestructiveModal({
 
         {/* 삭제될 항목 목록 */}
         <div className="bg-surface rounded-[12px] p-4 mb-5 space-y-2">
-          {DESTRUCT_ITEMS.map((item) => (
-            <div key={item.label} className="flex items-center justify-between">
-              <span className="text-sm text-text-secondary">{item.label}</span>
-              <span className="text-sm font-medium text-text-primary">
-                {item.value}
-              </span>
+          {DESTRUCT_ITEM_LABELS.map((label) => (
+            <div key={label} className="flex items-center gap-2">
+              <span className="text-status-danger text-xs" aria-hidden="true">•</span>
+              <span className="text-sm text-text-secondary">{label}</span>
             </div>
           ))}
         </div>
