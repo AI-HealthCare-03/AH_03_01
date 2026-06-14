@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import HTTPException, status
 from tortoise.transactions import in_transaction
 
+from app.core import config
 from app.dtos.health import (
     HealthProfileUpsertRequest,
     HealthRecordCreateRequest,
@@ -514,10 +515,20 @@ class DiseaseRiskService:
 
 
 class MonthlyReportService:
+    # 추이 노출 대상 지표 (참고 디자인: 혈압 / 혈당(공복) / 체중. HbA1c 는 미수집이라 제외)
+    _TREND_SPECS: tuple[tuple[str, RecordType, RecordSubType | None, str], ...] = (
+        ("blood_pressure", RecordType.BLOOD_PRESSURE, None, "mmHg"),
+        ("blood_glucose", RecordType.BLOOD_GLUCOSE, RecordSubType.FASTING, "mg/dL"),
+        ("weight", RecordType.WEIGHT, None, "kg"),
+    )
+    # 위험도 판단근거 상위 N
+    _TOP_FACTORS = 5
+
     def __init__(self) -> None:
         self.repo = MonthlyReportRepository()
         self.record_repo = HealthRecordRepository()
         self.risk_repo = DiseaseRiskRepository()
+        self.profile_repo = HealthProfileRepository()
 
     async def get_or_build(self, user: User, year_month: str) -> dict[str, Any]:
         try:
@@ -537,7 +548,7 @@ class MonthlyReportService:
         next_month = 1 if month_int == 12 else month_int + 1
         end = date(next_month_year, next_month, 1).fromordinal(date(next_month_year, next_month, 1).toordinal() - 1)
 
-        records = await self.record_repo.list_records(
+        records, _ = await self.record_repo.list_records(
             user_id=user.id,
             date_from=start,
             date_to=end,
@@ -550,27 +561,282 @@ class MonthlyReportService:
             date_to=end,
             latest_only=False,
         )
+        profile = await self.profile_repo.get_by_user(user.id)
 
-        summary = self._summarize_records(records[0])
+        # ── 구조화 섹션 집계 ──────────────────────────────────────────────────
+        header = self._build_header(records, profile)
+        disease_risks = self._build_disease_risks(risks)
+        trends = self._build_trends(records)
+        challenges = await self._build_challenges(user.id, start, end)
+        good_habits = self._build_good_habits(records, challenges, profile)
+
+        # ── 레거시 dict 섹션 (호환 유지) ─────────────────────────────────────
+        summary = self._summarize_records(records)
         risk_summary = self._summarize_risks(risks)
+
         report = await self.repo.upsert(
             user.id,
             year_month,
             data={
                 "disease_risk_summary": risk_summary,
                 "health_data_summary": summary,
-                "challenge_summary": {},
+                # 구조화 섹션을 challenge_summary JSONB 에 함께 영속 (마이그레이션 불요).
+                "challenge_summary": {
+                    "header_stats": header,
+                    "disease_risks": disease_risks,
+                    "trends": trends,
+                    "challenges": challenges,
+                    "good_habits": good_habits,
+                },
                 "pdf_file_id": None,
             },
         )
+        structured = report.challenge_summary or {}
         return {
             "year_month": report.year_month,
             "disease_risk_summary": report.disease_risk_summary,
             "health_data_summary": report.health_data_summary,
             "challenge_summary": report.challenge_summary,
+            "header_stats": structured.get("header_stats"),
+            "disease_risks": structured.get("disease_risks", []),
+            "trends": structured.get("trends", []),
+            "challenges": structured.get("challenges", []),
+            "good_habits": structured.get("good_habits", []),
             "pdf_url": None,
             "generated_at": report.generated_at,
         }
+
+    # ── 헤더 통계 ────────────────────────────────────────────────────────────
+    @staticmethod
+    def _build_header(records: list[HealthRecord], profile: UserHealthInfo | None) -> dict[str, Any]:
+        recorded_days = {r.measured_at.astimezone(config.TIMEZONE).date() for r in records}
+        sleep_vals = [float(r.primary_value) for r in records if r.record_type == RecordType.SLEEP]
+        step_vals = [float(r.primary_value) for r in records if r.record_type == RecordType.ACTIVITY]
+        avg_sleep: float | None = None
+        if sleep_vals:
+            avg_sleep = round(sum(sleep_vals) / len(sleep_vals), 2)
+        elif profile is not None and profile.sleep_weekday is not None:
+            avg_sleep = round(float(profile.sleep_weekday), 2)
+        avg_steps = round(sum(step_vals) / len(step_vals), 1) if step_vals else None
+        return {
+            "recorded_days": len(recorded_days),
+            "avg_sleep_hours": avg_sleep,
+            "avg_steps": avg_steps,
+        }
+
+    # ── 위험도 + 판단근거 TOP5 ──────────────────────────────────────────────
+    @classmethod
+    def _build_disease_risks(cls, risks: list[DiseaseRisk]) -> list[dict[str, Any]]:
+        latest_by_type: dict[DiseaseType, DiseaseRisk] = {}
+        for r in risks:
+            existing = latest_by_type.get(r.disease_type)
+            if existing is None or r.calculated_at > existing.calculated_at:
+                latest_by_type[r.disease_type] = r
+        result: list[dict[str, Any]] = []
+        for disease_type in DiseaseType:  # 질환 3종 모두 노출 (예측 없으면 has_prediction=False)
+            latest = latest_by_type.get(disease_type)
+            if latest is None:
+                result.append(
+                    {
+                        "disease_type": disease_type.value,
+                        "risk_score": None,
+                        "risk_level": None,
+                        "risk_level_label": None,
+                        "calculated_at": None,
+                        "has_prediction": False,
+                        "top_factors": [],
+                    }
+                )
+                continue
+            factors = sorted(
+                (latest.contributing_factors or []),
+                key=lambda f: abs(float(f.get("weight", 0.0))),
+                reverse=True,
+            )[: cls._TOP_FACTORS]
+            top_factors = [
+                {
+                    "factor": f.get("factor", ""),
+                    "weight": float(f.get("weight", 0.0)),
+                    "name_kor": f.get("name_kor"),
+                    "direction": f.get("direction"),
+                    "description": f.get("description"),
+                }
+                for f in factors
+            ]
+            result.append(
+                {
+                    "disease_type": disease_type.value,
+                    "risk_score": float(latest.risk_score),
+                    "risk_level": latest.risk_level.value,
+                    "risk_level_label": latest.risk_level_label,
+                    "calculated_at": latest.calculated_at.isoformat(),
+                    "has_prediction": True,
+                    "top_factors": top_factors,
+                }
+            )
+        return result
+
+    # ── 건강지표 추이 ────────────────────────────────────────────────────────
+    @classmethod
+    def _build_trends(cls, records: list[HealthRecord]) -> list[dict[str, Any]]:
+        trends: list[dict[str, Any]] = []
+        for metric, record_type, sub_type, unit in cls._TREND_SPECS:
+            matched = [
+                r
+                for r in records
+                if r.record_type == record_type and (sub_type is None or r.sub_type == sub_type)
+            ]
+            matched.sort(key=lambda r: r.measured_at)
+            series = [
+                {
+                    "date": r.measured_at.astimezone(config.TIMEZONE).date().isoformat(),
+                    "value": float(r.primary_value),
+                    "secondary_value": (float(r.secondary_value) if r.secondary_value is not None else None),
+                }
+                for r in matched
+            ]
+            primary_vals = [float(r.primary_value) for r in matched]
+            secondary_vals = [float(r.secondary_value) for r in matched if r.secondary_value is not None]
+            trends.append(
+                {
+                    "metric": metric,
+                    "unit": unit,
+                    "series": series,
+                    "avg": round(sum(primary_vals) / len(primary_vals), 2) if primary_vals else None,
+                    "latest": primary_vals[-1] if primary_vals else None,
+                    "secondary_avg": (
+                        round(sum(secondary_vals) / len(secondary_vals), 2) if secondary_vals else None
+                    ),
+                    "secondary_latest": (float(matched[-1].secondary_value) if secondary_vals else None),
+                }
+            )
+        return trends
+
+    # ── 챌린지 수행 내역 ─────────────────────────────────────────────────────
+    async def _build_challenges(self, user_id: Any, start: date, end: date) -> list[dict[str, Any]]:
+        """해당 월에 기간이 겹치는, 사용자가 참여(LEFT 제외)한 챌린지별 인증 집계."""
+        from app.models.challenge import (
+            Challenge,
+            ChallengeParticipant,
+            ChallengeVerification,
+            ParticipantStatus,
+            VerificationStatus,
+        )
+
+        participants = await ChallengeParticipant.filter(
+            user_id=user_id,
+            status__in=[ParticipantStatus.APPROVED, ParticipantStatus.PENDING],
+        ).prefetch_related("challenge")
+        result: list[dict[str, Any]] = []
+        for participant in participants:
+            challenge: Challenge = participant.challenge
+            if challenge is None or challenge.is_deleted:
+                continue
+            # 챌린지 기간이 해당 월과 겹치는지 (start_date <= end and end_date >= start)
+            if challenge.start_date > end or challenge.end_date < start:
+                continue
+            goal_days = (challenge.end_date - challenge.start_date).days + 1
+            success_days = await ChallengeVerification.filter(
+                challenge_id=challenge.id,
+                user_id=user_id,
+                status=VerificationStatus.APPROVED,
+                is_deleted=False,
+            ).count()
+            progress = round(success_days / goal_days * 100) if goal_days > 0 else 0
+            progress = max(0, min(100, progress))
+            today = datetime.now(config.TIMEZONE).date()
+            if success_days >= goal_days and goal_days > 0:
+                state = "success"
+            elif challenge.end_date < today:
+                state = "success" if progress >= 100 else "failed"
+            else:
+                state = "in_progress"
+            result.append(
+                {
+                    "challenge_id": challenge.id,
+                    "title": challenge.title,
+                    "category": challenge.category.value,
+                    "status": state,
+                    "progress_percent": progress,
+                    "success_days": success_days,
+                    "goal_days": goal_days,
+                }
+            )
+        result.sort(key=lambda c: c["challenge_id"])
+        return result
+
+    # ── 좋은 습관 (파생, 중립 톤) ───────────────────────────────────────────
+    @classmethod
+    def _build_good_habits(
+        cls,
+        records: list[HealthRecord],
+        challenges: list[dict[str, Any]],
+        profile: UserHealthInfo | None,
+    ) -> list[dict[str, Any]]:
+        """수집 데이터로 '잘 지킨 습관'을 보수적으로 도출. 의학적 단정 금지(근거 수치만 제시)."""
+        habits: list[dict[str, Any]] = []
+
+        # 걷기: 일평균 걸음 8000 이상이면 '꾸준한 걷기'
+        step_vals = [float(r.primary_value) for r in records if r.record_type == RecordType.ACTIVITY]
+        if step_vals:
+            avg_steps = sum(step_vals) / len(step_vals)
+            if avg_steps >= 8000:
+                habits.append(
+                    {
+                        "key": "walking",
+                        "label": "꾸준한 걷기",
+                        "evidence": f"이번 달 평균 {round(avg_steps):,}걸음을 기록했어요.",
+                    }
+                )
+
+        # 수분: 하루 물 섭취 8컵 이상(프로필 water_count)
+        if profile is not None and profile.water_count is not None and profile.water_count >= 8:
+            habits.append(
+                {
+                    "key": "hydration",
+                    "label": "충분한 수분 섭취",
+                    "evidence": f"하루 평균 물 {profile.water_count}컵을 섭취하고 있어요.",
+                }
+            )
+
+        # 수면: 평균 수면 7시간 이상 (SLEEP 레코드 우선, 없으면 프로필 sleep_weekday)
+        sleep_vals = [float(r.primary_value) for r in records if r.record_type == RecordType.SLEEP]
+        avg_sleep: float | None = None
+        if sleep_vals:
+            avg_sleep = sum(sleep_vals) / len(sleep_vals)
+        elif profile is not None and profile.sleep_weekday is not None:
+            avg_sleep = float(profile.sleep_weekday)
+        if avg_sleep is not None and avg_sleep >= 7:
+            habits.append(
+                {
+                    "key": "sleep",
+                    "label": "규칙적인 수면",
+                    "evidence": f"평균 수면 시간이 {round(avg_sleep, 1)}시간이에요.",
+                }
+            )
+
+        # 운동: 주당 중강도 운동 3일 이상(프로필 mid_act_day)
+        if profile is not None and profile.mid_act_day is not None and profile.mid_act_day >= 3:
+            habits.append(
+                {
+                    "key": "exercise",
+                    "label": "꾸준한 운동",
+                    "evidence": f"주 {profile.mid_act_day}일 중강도 운동을 실천하고 있어요.",
+                }
+            )
+
+        # 챌린지: 진행률 100% 달성(성공) 챌린지가 있으면 '챌린지 완수'
+        completed = [c for c in challenges if c["status"] == "success"]
+        if completed:
+            habits.append(
+                {
+                    "key": "challenge",
+                    "label": "챌린지 완수",
+                    "evidence": f"이번 달 {len(completed)}개 챌린지를 성공적으로 마쳤어요.",
+                }
+            )
+
+        return habits
 
     @staticmethod
     def _summarize_records(records: list[HealthRecord]) -> dict[str, Any]:
