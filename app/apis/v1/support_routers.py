@@ -13,6 +13,7 @@ from app.dtos.support import (
 )
 from app.models.support import FAQCategory, InquiryStatus
 from app.models.users import User
+from app.repositories.files_repository import FileUploadRepository
 from app.repositories.support_repository import FAQRepository, InquiryRepository
 
 support_router = APIRouter(prefix="/support", tags=["support"])
@@ -47,12 +48,18 @@ async def create_inquiry(
     body: InquiryCreateRequest,
     current_user: User = Depends(get_request_user),  # noqa: B008
 ) -> InquiryDetailResponse:
+    attachment_url: str | None = None
+    if body.attachment_file_id is not None:
+        file = await FileUploadRepository().get_owned(body.attachment_file_id, current_user.id)
+        if file is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="첨부 파일 접근 권한이 없습니다.")
+        attachment_url = file.access_url
     inquiry = await InquiryRepository().create_inquiry(
         user_id=current_user.id,
         title=body.title,
         content=body.content,
         category=body.category,
-        attachment_url=body.attachment_url,
+        attachment_url=attachment_url,
     )
     return InquiryDetailResponse(
         **InquiryListItem.model_validate(inquiry).model_dump(),
@@ -139,7 +146,8 @@ async def create_inquiry_answer(
         inquiry = await repo.get_inquiry_locked(inquiry_id)
         if not inquiry:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="문의를 찾을 수 없습니다.")
-        if inquiry.status == InquiryStatus.ANSWERED:
+        existing_answer = await repo.get_answer(inquiry_id)
+        if existing_answer:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 답변이 완료된 문의입니다.")
         answer = await repo.create_answer(inquiry, body.content)
     return InquiryAnswerResponse.model_validate(answer)
