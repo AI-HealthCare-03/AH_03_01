@@ -35,7 +35,13 @@ from app.models.rag import RAGDocument
 # ─────────────────────────────────────────────
 RRF_K = 60
 DEFAULT_TOP_K = 5
-DEFAULT_CANDIDATE_K = 10  # 각 채널에서 가져올 후보 수 (top_k * 2)
+DEFAULT_CANDIDATE_K = 16  # 각 채널에서 가져올 후보 수 — topic 필터 fallback 을 위해 여유 확보
+
+# topic 필터 적용 후 결과가 이 수 미만이면 필터를 제거하고 재검색 (Recall 개선).
+_TOPIC_FILTER_MIN_HITS = 3
+# Sparse BM25 에서 topic 일치 청크에 적용하는 점수 배율 (soft boost).
+# topic 불일치 청크를 제거하는 대신 일치 청크의 점수를 높여 순위를 올린다.
+_TOPIC_BOOST = 2.0
 
 SourceType = Literal["medical", "service", "all"]
 # RAGDocument.metadata.disease 값과 대응 (인덱싱 시점에 frontmatter.disease 그대로 저장).
@@ -323,13 +329,15 @@ def _sparse_search(  # noqa: C901
             if d not in disease_set:
                 scores[i] = mask_value
 
-    # topic 필터 (medical/all 케이스에만 — service 는 횡단). list 면 OR 매치.
-    # topics=[] 인 청크(매핑 누락)는 필터 통과시켜 검색 누락 방지.
+    # topic soft boost (medical/all 케이스에만 — service 는 횡단).
+    # 불일치 청크를 제거하는 대신 일치 청크의 BM25 점수를 _TOPIC_BOOST 배율로 상승시켜
+    # 순위를 높인다. 불일치 청크도 후보에 남아 multi-topic 질문(diagnosis+risk 등)에서
+    # 필요한 섹션이 누락되는 문제를 방지한다.
     if topics and source_type != "service":
         topic_set = set(topics)
         for i, chunk_topics in enumerate(bm.topics):
-            if chunk_topics and not topic_set.intersection(chunk_topics):
-                scores[i] = mask_value
+            if chunk_topics and topic_set.intersection(chunk_topics):
+                scores[i] *= _TOPIC_BOOST
 
     # pediatric_only 섹션 제외 (include_pediatric=False일 때 ped_args=["pediatric_only"])
     if ped_args and source_type != "service":
@@ -451,8 +459,10 @@ async def retrieve(
     else:
         ped_clause, ped_args = "", []
 
+    # Dense: topic 필터 미적용 — 벡터 유사도가 의미적으로 관련 청크를 자연스럽게 상위에 올림.
+    # Sparse: soft boost 방식으로 topic 일치 청크의 순위를 높임 (_sparse_search 내부 처리).
     dense = await _dense_search(
-        query_emb, candidate_k, source_type, diseases, effective_topics, ped_clause=ped_clause, ped_args=ped_args
+        query_emb, candidate_k, source_type, diseases, None, ped_clause=ped_clause, ped_args=ped_args
     )
     sparse = _sparse_search(
         bm, query, candidate_k, source_type, diseases, effective_topics, ped_clause=ped_clause, ped_args=ped_args

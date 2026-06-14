@@ -83,10 +83,10 @@ _logger = logging.getLogger(__name__)
 # 상수 / 정책
 # ─────────────────────────────────────────────
 MAX_REVISIONS = 1  # 재검색·재생성 합산 상한 (API 계약 eval_revision_count 0~2)
-RETRIEVE_TOP_K = 5  # 일반/서비스 기본
+RETRIEVE_TOP_K = 7   # 일반/서비스 기본 (5→7: BM25 동의어 미스 보정용 여유 청크)
 # medical_inquiry 는 생활요법·약물·추적·위험도 4측면이 한 번에 잡혀야 답변 완전성↑.
-# top_k 를 5→8 로 확장 (broader context). RRF 후보 풀도 자동으로 늘어남.
-RETRIEVE_TOP_K_MEDICAL = 8
+# 교차 주제(흡연·합병증·신장 등) 질문은 관련 섹션이 3개 이상이므로 8→12 로 확장.
+RETRIEVE_TOP_K_MEDICAL = 12
 # MIN_ANSWER_LEN 등 evaluator Rule 상수는 app/graphs/_shared/medical_evaluator.py 로 이동.
 
 MEDICAL_DISCLAIMER = "본 답변은 의학적 진단을 대체하지 않습니다."
