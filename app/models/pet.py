@@ -150,6 +150,7 @@ class PointTransaction(models.Model):
     class Meta:
         table = "point_transactions"
         indexes = [("user_id", "created_at"), ("user_id", "source")]
+        unique_together = (("user", "source", "source_id"),)
 
 
 class AttendanceCheck(models.Model):

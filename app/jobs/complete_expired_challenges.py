@@ -25,6 +25,7 @@ import time
 from datetime import date
 
 from tortoise import Tortoise
+from tortoise.exceptions import IntegrityError
 from tortoise.transactions import in_transaction
 
 from app.core.db.databases import TORTOISE_ORM
@@ -55,12 +56,16 @@ def _group_goal_achieved(challenge: Challenge, participants: list[ChallengeParti
     """그룹 챌린지 목표 달성 여부를 반환한다."""
     cfg = challenge.goal_config or {}
     if "group_target_count" in cfg:
-        total = sum(p.current_score for p in participants)
         target = int(cfg["group_target_count"] or 0)
+        if target <= 0:
+            return False
+        total = sum(p.current_score for p in participants)
         return total >= target
     else:  # GROUP_MEMBERS
-        achieved = sum(1 for p in participants if p.current_score >= 1)
         target = int(cfg.get("group_target_members") or 0)
+        if target <= 0:
+            return False
+        achieved = sum(1 for p in participants if p.current_score >= 1)
         return achieved >= target
 
 
@@ -96,19 +101,26 @@ async def _grant_completion_rewards(challenge: Challenge) -> None:
             continue
 
         try:
-            if is_group:
-                await _reward_service.grant_group_completion(
-                    user_id=participant.user_id,
-                    challenge_id=challenge.id,
-                    difficulty_level=challenge.difficulty.value,
-                    challenge_title=challenge.title,
-                )
-            else:
-                await _reward_service.grant_period_completion(
-                    user_id=participant.user_id,
-                    challenge_id=challenge.id,
-                    challenge_title=challenge.title,
-                )
+            async with in_transaction():  # savepoint: 개별 grant 실패가 외부 트랜잭션에 영향 없음
+                if is_group:
+                    await _reward_service.grant_group_completion(
+                        user_id=participant.user_id,
+                        challenge_id=challenge.id,
+                        difficulty_level=challenge.difficulty.value,
+                        challenge_title=challenge.title,
+                    )
+                else:
+                    await _reward_service.grant_period_completion(
+                        user_id=participant.user_id,
+                        challenge_id=challenge.id,
+                        challenge_title=challenge.title,
+                    )
+        except IntegrityError:
+            logger.info(
+                "이미 지급됨 (race condition) challenge_id=%d user_id=%d",
+                challenge.id,
+                participant.user_id,
+            )
         except Exception:  # noqa: BLE001
             logger.exception(
                 "보상 지급 실패 challenge_id=%d user_id=%d scope=%s",

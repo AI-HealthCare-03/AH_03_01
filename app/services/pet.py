@@ -14,7 +14,6 @@ from app.dtos.pet import (
     PetUpdateRequest,
     PurchaseRequest,
 )
-from app.models.challenge import Challenge
 from app.models.pet import (
     AttendanceCheck,
     GrowthEventSource,
