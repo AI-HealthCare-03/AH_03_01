@@ -186,3 +186,104 @@ class TestHealthReportApi(TestCase):
             weights = [f["weight"] for f in hyp["top_factors"]]
             assert weights == [0.9, 0.7, 0.5, 0.3, 0.2]  # TOP5, 절댓값 내림차순
             assert hyp["top_factors"][0]["name_kor"] == "요인1"
+
+    async def test_custom_period_returns_range_report(self):
+        """period=custom: date_from~date_to(양끝 포함) 범위만 집계, period/date_from/date_to 노출."""
+        async with make_client() as client:
+            token = await signup_and_login(client, email="report_custom@example.com", phone_number="01044440007")
+            headers = {"Authorization": f"Bearer {token}"}
+            # 범위 안(05-05) 1건 + 범위 밖(05-20) 1건
+            for v, day in [(70.0, "05"), (71.0, "20")]:
+                await client.post(
+                    "/api/v1/health-records",
+                    headers=headers,
+                    json={
+                        "record_type": "WEIGHT",
+                        "primary_value": v,
+                        "unit": "kg",
+                        "measured_at": f"2026-05-{day}T08:00:00+09:00",
+                    },
+                )
+            res = await client.get(
+                "/api/v1/health-reports?period=custom&date_from=2026-05-01&date_to=2026-05-15",
+                headers=headers,
+            )
+            assert res.status_code == status.HTTP_200_OK
+            body = res.json()
+            assert body["period"] == "custom"
+            assert body["date_from"] == "2026-05-01"
+            assert body["date_to"] == "2026-05-15"
+            # 05-05 만 범위 내 → weight 추이 1점 (05-20 제외)
+            weight = next(t for t in body["trends"] if t["metric"] == "weight")
+            assert len(weight["series"]) == 1
+            assert weight["latest"] == 70.0
+
+    async def test_custom_period_invalid_range_returns_400(self):
+        """date_from > date_to → 400."""
+        async with make_client() as client:
+            token = await signup_and_login(client, email="report_custom_bad@example.com", phone_number="01044440008")
+            headers = {"Authorization": f"Bearer {token}"}
+            res = await client.get(
+                "/api/v1/health-reports?period=custom&date_from=2026-05-20&date_to=2026-05-01",
+                headers=headers,
+            )
+            assert res.status_code == status.HTTP_400_BAD_REQUEST
+
+    async def test_custom_period_missing_dates_returns_400(self):
+        """period=custom 인데 date_from/date_to 누락 → 400."""
+        async with make_client() as client:
+            token = await signup_and_login(client, email="report_custom_miss@example.com", phone_number="01044440009")
+            headers = {"Authorization": f"Bearer {token}"}
+            res = await client.get("/api/v1/health-reports?period=custom", headers=headers)
+            assert res.status_code == status.HTTP_400_BAD_REQUEST
+
+    async def test_custom_period_pdf_returns_pdf_url(self):
+        # custom + format=pdf 도 monthly 와 동일하게 동작해야 한다(#183 리뷰 확인 항목).
+        # build_for_range payload 가 build_and_store 로 흘러 200 + pdf_url 을 채워 응답한다.
+        from unittest.mock import AsyncMock, patch
+
+        async with make_client() as client:
+            token = await signup_and_login(client, email="report_custom_pdf@example.com", phone_number="01044440010")
+            headers = {"Authorization": f"Bearer {token}"}
+            fake_url = "/media/uploads/report_pdf/20260515/1/abc.pdf"
+            with patch(
+                "app.apis.v1.health_routers.ReportPdfService.build_and_store",
+                AsyncMock(return_value=fake_url),
+            ):
+                res = await client.get(
+                    "/api/v1/health-reports?period=custom&date_from=2026-05-01&date_to=2026-05-15&format=pdf",
+                    headers=headers,
+                )
+            assert res.status_code == status.HTTP_200_OK
+            assert res.json()["pdf_url"] == fake_url
+
+
+def test_build_trends_secondary_latest_with_trailing_none() -> None:
+    """_build_trends: 마지막 혈압 레코드에 이완기(secondary)가 없어도 secondary_latest 가 마지막 '유효'값.
+
+    secondary_value 는 nullable — matched[-1].secondary_value 직접 캐스트 시 None→TypeError 였던 회귀 방지.
+    DB 불필요(순수 classmethod, 미저장 HealthRecord 인스턴스로 검증).
+    """
+    from datetime import datetime
+    from decimal import Decimal
+
+    from app.core import config
+    from app.models.health import HealthRecord, RecordType
+    from app.services.health import MonthlyReportService
+
+    def _bp(sys_v: float, dia_v: float | None, day: int) -> HealthRecord:
+        return HealthRecord(
+            record_type=RecordType.BLOOD_PRESSURE,
+            primary_value=Decimal(str(sys_v)),
+            secondary_value=(Decimal(str(dia_v)) if dia_v is not None else None),
+            unit="mmHg",
+            measured_at=datetime(2026, 5, day, 9, 0, tzinfo=config.TIMEZONE),
+            sub_type=None,
+        )
+
+    # 마지막(가장 최근) 레코드의 이완기 누락
+    records = [_bp(120, 80, 5), _bp(130, None, 12)]
+    bp_trend = next(t for t in MonthlyReportService._build_trends(records) if t["metric"] == "blood_pressure")
+    assert bp_trend["latest"] == 130.0
+    assert bp_trend["secondary_latest"] == 80.0  # 마지막 유효 이완기 (None 캐스트 회피)
+    assert bp_trend["secondary_avg"] == 80.0

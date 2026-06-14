@@ -530,24 +530,15 @@ class MonthlyReportService:
         self.risk_repo = DiseaseRiskRepository()
         self.profile_repo = HealthProfileRepository()
 
-    async def get_or_build(self, user: User, year_month: str) -> dict[str, Any]:
-        try:
-            year, month = year_month.split("-")
-            year_int = int(year)
-            month_int = int(month)
-            if not 1 <= month_int <= 12:
-                raise ValueError
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="month 형식은 YYYY-MM 이어야 합니다.",
-            ) from exc
+    # 임의 기간(custom) 리포트 최대 조회 범위. 너무 긴 범위의 풀스캔/레코드 폭주 방지.
+    _MAX_RANGE_DAYS = 366
 
-        start = date(year_int, month_int, 1)
-        next_month_year = year_int + (1 if month_int == 12 else 0)
-        next_month = 1 if month_int == 12 else month_int + 1
-        end = date(next_month_year, next_month, 1).fromordinal(date(next_month_year, next_month, 1).toordinal() - 1)
+    async def _aggregate(self, user: User, start: date, end: date) -> dict[str, Any]:
+        """기간(start~end, 양끝 포함) 집계 — 캐싱/영속 없이 구조화 섹션 dict 산출 (월/임의기간 공용).
 
+        ⚠️ records 는 size=1000 으로 제한 — 매우 긴 기간(_MAX_RANGE_DAYS 근처)에서 일 다건 기록이
+        쌓이면 상한에 걸려 잘릴 수 있다(월 단위에선 사실상 미발생). 필요 시 페이지네이션으로 확장.
+        """
         records, _ = await self.record_repo.list_records(
             user_id=user.id,
             date_from=start,
@@ -573,38 +564,126 @@ class MonthlyReportService:
         # ── 레거시 dict 섹션 (호환 유지) ─────────────────────────────────────
         summary = self._summarize_records(records)
         risk_summary = self._summarize_risks(risks)
+        return {
+            "disease_risk_summary": risk_summary,
+            "health_data_summary": summary,
+            "header_stats": header,
+            "disease_risks": disease_risks,
+            "trends": trends,
+            "challenges": challenges,
+            "good_habits": good_habits,
+        }
 
+    @staticmethod
+    def _payload(
+        *,
+        sections: dict[str, Any],
+        year_month: str,
+        period: str,
+        start: date,
+        end: date,
+        generated_at: datetime,
+    ) -> dict[str, Any]:
+        """집계 섹션 → 응답 payload(MonthlyReportResponse shape). 월/임의기간 공용."""
+        return {
+            "year_month": year_month,
+            "period": period,
+            "date_from": start,
+            "date_to": end,
+            "disease_risk_summary": sections["disease_risk_summary"],
+            "health_data_summary": sections["health_data_summary"],
+            "challenge_summary": {
+                "header_stats": sections["header_stats"],
+                "disease_risks": sections["disease_risks"],
+                "trends": sections["trends"],
+                "challenges": sections["challenges"],
+                "good_habits": sections["good_habits"],
+            },
+            "header_stats": sections["header_stats"],
+            "disease_risks": sections["disease_risks"],
+            "trends": sections["trends"],
+            "challenges": sections["challenges"],
+            "good_habits": sections["good_habits"],
+            "pdf_url": None,
+            "generated_at": generated_at,
+        }
+
+    async def get_or_build(self, user: User, year_month: str) -> dict[str, Any]:
+        """월 단위 리포트 — YYYY-MM. 결과를 MonthlyReport 에 upsert(캐싱·영속)."""
+        try:
+            year, month = year_month.split("-")
+            year_int = int(year)
+            month_int = int(month)
+            if not 1 <= month_int <= 12:
+                raise ValueError
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="month 형식은 YYYY-MM 이어야 합니다.",
+            ) from exc
+
+        start = date(year_int, month_int, 1)
+        next_month_year = year_int + (1 if month_int == 12 else 0)
+        next_month = 1 if month_int == 12 else month_int + 1
+        end = date(next_month_year, next_month, 1).fromordinal(date(next_month_year, next_month, 1).toordinal() - 1)
+
+        sections = await self._aggregate(user, start, end)
         report = await self.repo.upsert(
             user.id,
             year_month,
             data={
-                "disease_risk_summary": risk_summary,
-                "health_data_summary": summary,
+                "disease_risk_summary": sections["disease_risk_summary"],
+                "health_data_summary": sections["health_data_summary"],
                 # 구조화 섹션을 challenge_summary JSONB 에 함께 영속 (마이그레이션 불요).
                 "challenge_summary": {
-                    "header_stats": header,
-                    "disease_risks": disease_risks,
-                    "trends": trends,
-                    "challenges": challenges,
-                    "good_habits": good_habits,
+                    "header_stats": sections["header_stats"],
+                    "disease_risks": sections["disease_risks"],
+                    "trends": sections["trends"],
+                    "challenges": sections["challenges"],
+                    "good_habits": sections["good_habits"],
                 },
                 "pdf_file_id": None,
             },
         )
-        structured = report.challenge_summary or {}
-        return {
-            "year_month": report.year_month,
-            "disease_risk_summary": report.disease_risk_summary,
-            "health_data_summary": report.health_data_summary,
-            "challenge_summary": report.challenge_summary,
-            "header_stats": structured.get("header_stats"),
-            "disease_risks": structured.get("disease_risks", []),
-            "trends": structured.get("trends", []),
-            "challenges": structured.get("challenges", []),
-            "good_habits": structured.get("good_habits", []),
-            "pdf_url": None,
-            "generated_at": report.generated_at,
-        }
+        return self._payload(
+            sections=sections,
+            year_month=report.year_month,
+            period="monthly",
+            start=start,
+            end=end,
+            generated_at=report.generated_at,
+        )
+
+    async def build_for_range(self, user: User, date_from: str, date_to: str) -> dict[str, Any]:
+        """임의 기간 리포트 — date_from~date_to(YYYY-MM-DD, 양끝 포함). 캐싱/영속 없이 매번 산출."""
+        try:
+            start = date.fromisoformat(date_from)
+            end = date.fromisoformat(date_to)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="date_from/date_to 형식은 YYYY-MM-DD 이어야 합니다.",
+            ) from exc
+        if start > end:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="date_from 은 date_to 보다 이후일 수 없습니다.",
+            )
+        if (end - start).days > self._MAX_RANGE_DAYS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"조회 기간은 최대 {self._MAX_RANGE_DAYS}일까지 가능합니다.",
+            )
+
+        sections = await self._aggregate(user, start, end)
+        return self._payload(
+            sections=sections,
+            year_month=f"{start.isoformat()}~{end.isoformat()}",
+            period="custom",
+            start=start,
+            end=end,
+            generated_at=datetime.now(config.TIMEZONE),
+        )
 
     # ── 헤더 통계 ────────────────────────────────────────────────────────────
     @staticmethod
@@ -707,7 +786,9 @@ class MonthlyReportService:
                     "secondary_avg": (
                         round(sum(secondary_vals) / len(secondary_vals), 2) if secondary_vals else None
                     ),
-                    "secondary_latest": (float(matched[-1].secondary_value) if secondary_vals else None),
+                    # secondary_vals[-1] 사용: 마지막 레코드의 secondary 가 None 이어도(혈압 일부 누락)
+                    # 마지막 '유효' 이완기값을 안전하게 반환 (matched[-1].secondary_value 직접 캐스트 시 None→TypeError).
+                    "secondary_latest": (secondary_vals[-1] if secondary_vals else None),
                 }
             )
         return trends
