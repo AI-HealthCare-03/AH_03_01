@@ -83,7 +83,7 @@ export default function CommunityLayout({ children }: { children: ReactNode }) {
         {/* 우측 사이드바 */}
         <aside className="hidden lg:flex flex-col gap-4 w-60 shrink-0">
           <PopularPostsWidget />
-          <TodayQuizWidget />
+          {!pathname.startsWith("/community/quiz") && <TodayQuizWidget />}
         </aside>
       </div>
     </div>

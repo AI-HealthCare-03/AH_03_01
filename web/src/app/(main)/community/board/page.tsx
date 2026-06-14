@@ -50,7 +50,7 @@ function BoardContent() {
           href="/community/board/new?category=INFO"
           className="px-3 py-1.5 text-sm font-semibold bg-brand-black text-white rounded-[8px] hover:opacity-80 transition-opacity"
         >
-          + 글쓰기
+          글쓰기
         </Link>
       </div>
 
