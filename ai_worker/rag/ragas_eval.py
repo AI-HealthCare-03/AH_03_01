@@ -46,7 +46,8 @@ from ragas.metrics import (  # noqa: E402
 # ─────────────────────────────────────────────
 BASE = Path(__file__).parent
 EVAL_DATASET_PATH = BASE / "rag_eval_qa_dataset_v6.jsonl"
-EVAL_SAMPLE_SIZE = 50
+EVAL_SAMPLE_SIZE = 50  # legacy — stratified 샘플링으로 대체됨, 현재 미사용
+EVAL_SAMPLE_PER_CATEGORY = 10  # category당 최대 샘플 수; 이하면 전수 포함
 
 
 # ─────────────────────────────────────────────
@@ -166,24 +167,37 @@ def collect_answers(eval_dataset: list[dict], seed: int | None = None) -> dict:
 
     nest_asyncio.apply()
 
-    # RAGAS 평가용 필터링
-    # - out_of_scope: 서비스 범위 밖 질문 제외
-    # - inline_health_data: 새로 추가된 카테고리는 별도 eval_inline_health() 로 분리.
-    #   seed=42 기반 50개 샘플 비교의 안정성(재현성)을 위해 기존 풀에서 제외.
-    #   이 카테고리를 포함하면 데이터셋 크기 변화로 seed 출력이 매 실행마다 달라진다.
-    CORE_EVAL_EXCLUDE = {"out_of_scope", "inline_health_data"}
+    # RAGAS 평가용 필터링 — out_of_scope 제외
+    CORE_EVAL_EXCLUDE = {"out_of_scope"}
     filtered = [
         item
         for item in eval_dataset
         if item.get("category") not in CORE_EVAL_EXCLUDE and item.get("eval_type") not in ("out_of_scope",)
     ]
 
+    # category별 stratified 샘플링: EVAL_SAMPLE_PER_CATEGORY 이하면 전수, 초과면 N개만
+    from collections import defaultdict
+
+    by_category: dict[str, list[dict]] = defaultdict(list)
+    for item in filtered:
+        by_category[item.get("category", "unknown")].append(item)
+
     if seed is not None:
         random.seed(seed)
-    sampled = random.sample(filtered, min(EVAL_SAMPLE_SIZE, len(filtered)))
+
+    sampled = []
+    for cat, items in sorted(by_category.items()):
+        if len(items) <= EVAL_SAMPLE_PER_CATEGORY:
+            sampled.extend(items)
+        else:
+            sampled.extend(random.sample(items, EVAL_SAMPLE_PER_CATEGORY))
+
+    category_summary = {cat: min(len(items), EVAL_SAMPLE_PER_CATEGORY) for cat, items in sorted(by_category.items())}
     print(
-        f"  샘플링: {len(eval_dataset)}개 중 필터링 후 {len(filtered)}개 → {len(sampled)}개 선택 (seed={seed if seed else '랜덤'})"
+        f"  샘플링: {len(eval_dataset)}개 중 필터링 후 {len(filtered)}개 → {len(sampled)}개 선택 "
+        f"(stratified N={EVAL_SAMPLE_PER_CATEGORY}, seed={seed if seed else '랜덤'})"
     )
+    print(f"  category별: {category_summary}")
     return asyncio.run(_collect_all(sampled))
 
 
