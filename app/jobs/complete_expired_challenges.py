@@ -25,9 +25,10 @@ import time
 from datetime import date
 
 from tortoise import Tortoise
+from tortoise.transactions import in_transaction
 
 from app.core.db.databases import TORTOISE_ORM
-from app.models.challenge import Challenge, ChallengeCadence, ChallengeParticipant, ChallengeScope, ChallengeStatus, GoalType, ParticipantStatus
+from app.models.challenge import Challenge, ChallengeCadence, ChallengeParticipant, ChallengeScope, ChallengeStatus, ParticipantStatus
 from app.models.pet import PointSource, PointTransaction
 from app.services.rewards import RewardService
 
@@ -42,22 +43,24 @@ _reward_service = RewardService()
 def _personal_goal_achieved(challenge: Challenge, participant: ChallengeParticipant) -> bool:
     """개인 챌린지 기간 보상 조건: 기간 내 목표 인증 횟수를 모두 달성해야 함."""
     if challenge.cadence == ChallengeCadence.WEEKLY_COUNT:
-        required = (challenge.goal_config or {}).get("weekly_target_count", 1)
+        required = (challenge.goal_config or {}).get("weekly_target_count", 0)
     else:  # DAILY
         required = (challenge.end_date - challenge.start_date).days + 1
+    if required <= 0:
+        return False
     return participant.current_score >= required
 
 
 def _group_goal_achieved(challenge: Challenge, participants: list[ChallengeParticipant]) -> bool:
     """그룹 챌린지 목표 달성 여부를 반환한다."""
     cfg = challenge.goal_config or {}
-    if challenge.goal_type == GoalType.GROUP_SUM:
+    if "group_target_count" in cfg:
         total = sum(p.current_score for p in participants)
-        target = cfg.get("group_target_count", 0)
+        target = int(cfg["group_target_count"] or 0)
         return total >= target
     else:  # GROUP_MEMBERS
         achieved = sum(1 for p in participants if p.current_score >= 1)
-        target = cfg.get("group_target_members", 0)
+        target = int(cfg.get("group_target_members") or 0)
         return achieved >= target
 
 
@@ -152,9 +155,10 @@ async def complete_expired_challenges(*, dry_run: bool, batch_size: int) -> dict
         for challenge in batch:
             challenge_id = challenge.id
             try:
-                challenge.status = ChallengeStatus.COMPLETED
-                await challenge.save(update_fields=["status"])
-                await _grant_completion_rewards(challenge)
+                async with in_transaction():
+                    challenge.status = ChallengeStatus.COMPLETED
+                    await challenge.save(update_fields=["status"])
+                    await _grant_completion_rewards(challenge)
                 done += 1
             except Exception:  # noqa: BLE001 — 건별 실패 격리
                 failed += 1
