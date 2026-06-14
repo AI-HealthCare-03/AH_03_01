@@ -162,6 +162,7 @@ async def get_health_statistics(
         limit=limit,
         include_reference=include_reference,
     )
+    await _award_health_view(user.id)
     return Response(payload.model_dump(), status_code=status.HTTP_200_OK)
 
 
@@ -344,6 +345,7 @@ async def get_risk_recommendation(
         hospital_visit_recommended=hospital_visit,
         disclaimer=disclaimer,
     )
+    await _award_health_view(user.id)
     return Response(payload.model_dump(), status_code=status.HTTP_200_OK)
 
 
