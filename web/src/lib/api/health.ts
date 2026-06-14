@@ -18,6 +18,7 @@ import type {
   RiskRecommendationResponse,
   RagRiskRecommendationResponse,
   MonthlyReportResponse,
+  MonthlyReportV2Response,
   ProfileCompleteness,
 } from "@/types/health";
 import type { DiseaseType } from "@/types/api";
@@ -318,4 +319,63 @@ export async function fetchMonthlyReport(
   } catch {
     return null;
   }
+}
+
+/* ── 월간 리포트 v2 (format=json, Phase 2 구조화 응답) ── */
+
+export async function fetchMonthlyReportV2(
+  month: string /* YYYY-MM */
+): Promise<MonthlyReportV2Response | null> {
+  try {
+    const { data } = await apiClient.get<MonthlyReportV2Response>(
+      "/api/v1/health-reports",
+      { params: { period: "monthly", month, format: "json" } }
+    );
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+/** 임의 기간 리포트 (period=custom, 캐싱 없음). date_from/date_to 는 YYYY-MM-DD, 양끝 포함. */
+export async function fetchMonthlyReportV2Range(
+  dateFrom: string /* YYYY-MM-DD */,
+  dateTo: string /* YYYY-MM-DD */
+): Promise<MonthlyReportV2Response | null> {
+  try {
+    const { data } = await apiClient.get<MonthlyReportV2Response>(
+      "/api/v1/health-reports",
+      { params: { period: "custom", date_from: dateFrom, date_to: dateTo, format: "json" } }
+    );
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+/** format=pdf 로 서버 렌더 PDF 생성 요청 → 저장된 pdf_url(상대경로) 반환. 실패 시 throw. */
+export type ReportPdfParams =
+  | { period: "monthly"; month: string /* YYYY-MM */ }
+  | { period: "custom"; dateFrom: string; dateTo: string /* YYYY-MM-DD */ };
+
+export async function requestMonthlyReportPdf(
+  params: ReportPdfParams
+): Promise<string> {
+  const query =
+    params.period === "monthly"
+      ? { period: "monthly", month: params.month, format: "pdf" }
+      : {
+          period: "custom",
+          date_from: params.dateFrom,
+          date_to: params.dateTo,
+          format: "pdf",
+        };
+  const { data } = await apiClient.get<MonthlyReportV2Response>(
+    "/api/v1/health-reports",
+    { params: query }
+  );
+  if (!data?.pdf_url) {
+    throw new Error("pdf_url 이 응답에 없습니다.");
+  }
+  return data.pdf_url;
 }
