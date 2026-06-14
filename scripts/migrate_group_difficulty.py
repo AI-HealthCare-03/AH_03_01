@@ -12,6 +12,7 @@
 """
 
 import asyncio
+import json
 import os
 
 import asyncpg
@@ -58,6 +59,14 @@ def calc_difficulty(goal_config: dict) -> str:
 async def migrate() -> None:
     conn = await asyncpg.connect(**DB_CONFIG)
     try:
+        # asyncpg는 JSONB를 기본적으로 str로 반환 → dict로 받으려면 codec 등록 필수
+        await conn.set_type_codec(
+            "jsonb",
+            encoder=json.dumps,
+            decoder=json.loads,
+            schema="pg_catalog",
+        )
+
         rows = await conn.fetch(
             """
             SELECT id, goal_type, goal_config
@@ -68,18 +77,19 @@ async def migrate() -> None:
         print(f"대상 그룹 챌린지: {len(rows)}건")
 
         updated = 0
-        for row in rows:
-            goal_type = row["goal_type"]
-            goal_config = row["goal_config"] or {}
-            correct = calc_difficulty(goal_config)
+        async with conn.transaction():  # 부분 적용 방지: 전체 성공 or 전체 롤백
+            for row in rows:
+                goal_type = row["goal_type"]
+                goal_config = row["goal_config"] or {}
+                correct = calc_difficulty(goal_config)
 
-            await conn.execute(
-                "UPDATE challenges SET difficulty = $1 WHERE id = $2",
-                correct,
-                row["id"],
-            )
-            updated += 1
-            print(f"  challenge_id={row['id']} goal_type={goal_type} → {correct}")
+                await conn.execute(
+                    "UPDATE challenges SET difficulty = $1 WHERE id = $2",
+                    correct,
+                    row["id"],
+                )
+                updated += 1
+                print(f"  challenge_id={row['id']} goal_type={goal_type} → {correct}")
 
         print(f"\n완료: {updated}건 업데이트")
     finally:
