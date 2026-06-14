@@ -288,7 +288,7 @@ export interface RagRiskRecommendationResponse {
   model_version: string;
 }
 
-/* ── 월간 리포트 ─────────────────────────── */
+/* ── 월간 리포트 (구 스키마 — 하위 호환 유지) ─── */
 
 export interface ChallengeSummaryItem {
   id: number;
@@ -331,6 +331,74 @@ export interface MonthlyReportResponse {
   /* contributing_factors_top3 와 coaching_message 는 백엔드 응답에 없음.
      컴포넌트가 별도 prediction 응답에서 도출하거나 정적 fallback 사용. */
   coaching_message?: string;
+}
+
+/* ── 월간 리포트 v2 (Phase 2 구조화 응답) ─────── */
+
+export interface ReportHeaderStats {
+  recorded_days: number;
+  avg_sleep_hours: number | null;
+  avg_steps: number | null;
+}
+
+export interface ReportTopFactor {
+  factor: string;
+  weight: number;
+  name_kor: string | null;
+  direction: string | null;
+  description: string | null;
+}
+
+export interface ReportDiseaseRisk {
+  disease_type: "HYPERTENSION" | "DIABETES" | "CARDIOVASCULAR";
+  risk_score: number | null;
+  risk_level: "NORMAL" | "CAUTION" | "RISK" | "HIGH_RISK" | null;
+  risk_level_label: string | null;
+  has_prediction: boolean;
+  top_factors: ReportTopFactor[];
+}
+
+export interface ReportTrendPoint {
+  date: string; /* YYYY-MM-DD */
+  value: number;
+  secondary_value: number | null;
+}
+
+export interface ReportTrend {
+  metric: "blood_pressure" | "blood_glucose" | "weight";
+  unit: string;
+  series: ReportTrendPoint[];
+  avg: number | null;
+  latest: number | null;
+  secondary_avg: number | null;
+  secondary_latest: number | null;
+}
+
+export interface ReportChallenge {
+  challenge_id: number;
+  title: string;
+  category: string;
+  status: "success" | "in_progress" | "failed";
+  progress_percent: number;
+  success_days: number;
+  goal_days: number;
+}
+
+export interface ReportGoodHabit {
+  key: string;
+  label: string;
+  evidence: string;
+}
+
+export interface MonthlyReportV2Response {
+  year_month: string; /* YYYY-MM */
+  header_stats: ReportHeaderStats;
+  disease_risks: ReportDiseaseRisk[];
+  trends: ReportTrend[];
+  challenges: ReportChallenge[];
+  good_habits: ReportGoodHabit[];
+  pdf_url: string | null;
+  generated_at: string;
 }
 
 /* ── 위저드 폼 상태 (v2) ─────────────────── */

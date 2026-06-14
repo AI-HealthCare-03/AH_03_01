@@ -18,6 +18,7 @@ import type {
   RiskRecommendationResponse,
   RagRiskRecommendationResponse,
   MonthlyReportResponse,
+  MonthlyReportV2Response,
   ProfileCompleteness,
 } from "@/types/health";
 import type { DiseaseType } from "@/types/api";
@@ -313,6 +314,22 @@ export async function fetchMonthlyReport(
     const { data } = await apiClient.get<MonthlyReportResponse>(
       "/api/v1/health-reports",
       { params: { period: "monthly", month } }
+    );
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+/* ── 월간 리포트 v2 (format=json, Phase 2 구조화 응답) ── */
+
+export async function fetchMonthlyReportV2(
+  month: string /* YYYY-MM */
+): Promise<MonthlyReportV2Response | null> {
+  try {
+    const { data } = await apiClient.get<MonthlyReportV2Response>(
+      "/api/v1/health-reports",
+      { params: { period: "monthly", month, format: "json" } }
     );
     return data;
   } catch {
