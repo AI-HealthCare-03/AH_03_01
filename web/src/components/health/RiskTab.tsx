@@ -5,7 +5,6 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
 import { useLatestPredictions, LATEST_PREDICTIONS_KEY } from "@/hooks/queries/useLatestPredictions";
-import { useChallengeRecommendations } from "@/hooks/queries/useChallengeRecommendations";
 import { RAG_RISK_RECOMMENDATION_KEY } from "@/hooks/queries/useRagRiskRecommendation";
 import { streamRagRiskRecommendation } from "@/lib/api/health";
 import { useMe } from "@/hooks/queries/useMe";
@@ -13,7 +12,7 @@ import { useProfileCompleteness } from "@/hooks/queries/useProfileCompleteness";
 import RiskSemiGauge from "@/components/health/RiskSemiGauge";
 import { CATEGORY_CONFIG } from "@/components/challenges/common/ChallengeCategoryIcon";
 import type { RiskGrade, DiseaseType, ChallengeCategory } from "@/types/api";
-import type { RagRiskRecommendationResponse } from "@/types/health";
+import type { RagRiskRecommendationResponse, RecommendedChallengeItem } from "@/types/health";
 import { MISSING_FIELD_LABEL } from "@/lib/healthFields";
 
 /* ── 상수 ──────────────────────────── */
@@ -459,12 +458,19 @@ function ContributingBars({ factors }: ContributingBarsProps) {
                 {label}
                 {tooltip && (
                   <span
-                    title={tooltip}
                     aria-label={tooltip}
-                    role="img"
-                    className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-surface text-[10px] font-bold text-text-tertiary cursor-help select-none"
+                    role="tooltip"
+                    tabIndex={0}
+                    className="relative group/tip inline-flex items-center justify-center w-4 h-4 rounded-full bg-surface text-[10px] font-bold text-text-tertiary cursor-help select-none"
                   >
                     ?
+                    <span
+                      role="presentation"
+                      className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 hidden group-hover/tip:block group-focus/tip:block w-56 max-w-[min(14rem,calc(100vw-2rem))] rounded-[8px] bg-gray-800 px-3 py-2 text-[11px] leading-snug text-white whitespace-normal break-keep shadow-lg"
+                    >
+                      {tooltip}
+                      <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+                    </span>
                   </span>
                 )}
               </span>
@@ -598,17 +604,82 @@ interface AiSuggestionsProps {
   ragResult: RagRiskRecommendationResponse | null;
 }
 
+/* 난이도 뱃지 라벨 */
+const DIFFICULTY_LABEL: Record<string, string> = {
+  LEVEL_1: "입문",
+  LEVEL_2: "초급",
+  LEVEL_3: "중급",
+  LEVEL_4: "고급",
+};
+
+/* priority 뱃지 */
+const PRIORITY_BADGE: Record<string, { label: string; className: string }> = {
+  TOP: { label: "강력 추천", className: "bg-[#fff3cd] text-[#856404] border border-[#ffe082]" },
+  RECOMMENDED: { label: "추천", className: "bg-[#e8f5e9] text-[#2e7d32] border border-[#a5d6a7]" },
+  OPTIONAL: { label: "선택", className: "bg-surface text-text-tertiary border border-border" },
+};
+
+interface RecommendedChallengeCardProps {
+  item: RecommendedChallengeItem;
+}
+
+function RecommendedChallengeCard({ item }: RecommendedChallengeCardProps) {
+  const categoryConfig = CATEGORY_CONFIG[item.category as ChallengeCategory];
+  const difficultyLabel = DIFFICULTY_LABEL[item.difficulty] ?? item.difficulty;
+  const priorityBadge = item.priority ? PRIORITY_BADGE[item.priority] : null;
+
+  return (
+    <Link
+      href="/challenges"
+      className="flex items-start gap-3 p-3 bg-[#fffde7] rounded-[10px] hover:bg-[#fff9c4] transition-colors group"
+      aria-label={`${item.title} 챌린지 보기`}
+    >
+      {/* 카테고리 이모지 */}
+      <span className="text-xl shrink-0 mt-0.5" aria-hidden="true">
+        {categoryConfig?.emoji ?? "💪"}
+      </span>
+
+      <div className="min-w-0 flex-1">
+        {/* 제목 + priority 뱃지 */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <p className="text-xs font-bold text-text-primary leading-snug group-hover:underline">
+            {item.title}
+          </p>
+          {priorityBadge && (
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${priorityBadge.className}`}>
+              {priorityBadge.label}
+            </span>
+          )}
+        </div>
+
+        {/* 카테고리 + 난이도 뱃지 */}
+        <div className="flex items-center gap-1.5 mt-1">
+          <span className="px-1.5 py-0.5 bg-white rounded-full text-[10px] text-text-secondary border border-border">
+            {categoryConfig?.label ?? item.category}
+          </span>
+          <span className="px-1.5 py-0.5 bg-white rounded-full text-[10px] text-text-secondary border border-border">
+            {difficultyLabel}
+          </span>
+        </div>
+
+        {/* reason 한 줄 */}
+        {item.reason && (
+          <p className="text-[10px] text-text-tertiary mt-1 leading-snug">
+            {item.reason}
+          </p>
+        )}
+      </div>
+    </Link>
+  );
+}
+
 function AiSuggestions({ ragResult }: AiSuggestionsProps) {
-  // 챌린지 칩은 기존 훅 유지 (RAG 응답에 predictionId 없음 → disabled 상태로 빈 배열)
-  const { data: challengeData, isLoading: challengeLoading } =
-    useChallengeRecommendations(undefined, 3);
-
-  const challenges = challengeData?.items ?? [];
-
   // 권고 칩: recommended_tips (최대 3개 표시)
   const tips = ragResult?.recommended_tips?.slice(0, 3) ?? [];
   // 식단 칩: recommended_diet
   const dietItems = ragResult?.recommended_diet ?? [];
+  // RAG 응답의 추천 챌린지
+  const ragChallenges = ragResult?.recommended_challenges ?? [];
 
   if (!ragResult) return null;
 
@@ -660,40 +731,17 @@ function AiSuggestions({ ragResult }: AiSuggestionsProps) {
           </div>
         )}
 
-        {/* 추천 챌린지 */}
+        {/* 추천 챌린지 — RAG 응답 기반 */}
         <div className="space-y-2">
           <p className="text-xs font-bold text-text-primary flex items-center gap-1">
             <span aria-hidden="true">🚩</span> 추천 챌린지
           </p>
-          {challengeLoading ? (
-            <div className="animate-pulse space-y-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-8 bg-surface rounded-[8px]" />
-              ))}
-            </div>
-          ) : challenges.length > 0 ? (
+          {ragChallenges.length > 0 ? (
             <>
               <ul className="space-y-2">
-                {challenges.map((item, idx) => (
-                  <li
-                    key={item.template_id ?? item.challenge_id ?? idx}
-                    className="flex items-center gap-2 p-2 bg-[#fffde7] rounded-[8px]"
-                  >
-                    <span className="text-base shrink-0" aria-hidden="true">
-                      {CATEGORY_CONFIG[item.category as ChallengeCategory]
-                        ?.emoji ?? "💪"}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-text-primary truncate">
-                        {item.title && item.title !== item.category
-                          ? item.title
-                          : (CATEGORY_CONFIG[item.category as ChallengeCategory]
-                              ?.label ?? item.category)}
-                      </p>
-                      <p className="text-[10px] text-brand-black font-bold">
-                        +{item.reward_points ?? 200}P
-                      </p>
-                    </div>
+                {ragChallenges.map((item) => (
+                  <li key={item.template_id}>
+                    <RecommendedChallengeCard item={item} />
                   </li>
                 ))}
               </ul>
