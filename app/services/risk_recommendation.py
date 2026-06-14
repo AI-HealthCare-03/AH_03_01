@@ -293,8 +293,15 @@ def _prediction_to_dict(p: PredictionSummary) -> dict[str, Any]:
     }
 
 
-def _to_challenge_item(c: RecommendedChallenge) -> RecommendedChallengeItem:
-    """RecommendedChallenge → RecommendedChallengeItem (응답 DTO)."""
+def _to_challenge_item(c: RecommendedChallenge | dict[str, Any]) -> RecommendedChallengeItem:
+    """RecommendedChallenge(fresh, dataclass) 또는 이력 JSONB dict → RecommendedChallengeItem (응답 DTO).
+
+    캐시 히트는 응답 DTO 를 직접 복원하므로 이 함수를 타지 않지만, 향후 '권고 이력 조회' API 가
+    DB JSONB(list[dict]) 를 _to_response 에 넘길 수 있으므로 dict 입력도 안전하게 처리한다
+    (RecommendedChallengeItem.model_config extra="ignore" 로 잉여 키는 무시).
+    """
+    if isinstance(c, dict):
+        return RecommendedChallengeItem(**c)
     return RecommendedChallengeItem(
         template_id=c.template_id,
         title=c.title,

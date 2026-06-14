@@ -15,13 +15,14 @@ import pytest
 from fastapi import HTTPException, status
 from tortoise.exceptions import DBConnectionError, OperationalError
 
+from app.dtos.risk_recommendation import RecommendedChallengeItem
 from app.graphs.risk_recommendation_graph import (
     RecommendedChallenge,
     RiskRecommendationResult,
     _join_recommended_challenges,
 )
 from app.services.ml.challenge_eligibility_filter import EligibleTemplate
-from app.services.risk_recommendation import RiskRecommendationService, _to_response
+from app.services.risk_recommendation import RiskRecommendationService, _to_challenge_item, _to_response
 
 _MOD = "app.services.risk_recommendation"
 _CACHE = "app.services.risk_recommendation_cache"
@@ -154,3 +155,51 @@ async def test_save_cache_failure_is_best_effort() -> None:
     # 다음 요청이 캐시로 단락돼 LLM 재호출 루프가 끊긴다는 보장.
     set_reco.assert_awaited_once()
     set_snapshot.assert_awaited()  # snapshot 캐싱 + 결과 저장 두 경로에서 호출
+
+
+def test_to_challenge_item_accepts_dataclass_and_dict() -> None:
+    """_to_challenge_item: fresh(dataclass) 와 이력 JSONB(dict) 입력 모두 안전 변환.
+
+    향후 '권고 이력 조회' API 가 DB JSONB(list[dict]) 를 _to_response 에 넘겨도
+    c.template_id AttributeError 없이 동작해야 한다.
+    """
+    fresh = RecommendedChallenge(
+        template_id=12, title="하루 8천보", category="EXERCISE", difficulty="LEVEL_2", reason="혈압 관리", priority="TOP"
+    )
+    from_dataclass = _to_challenge_item(fresh)
+    from_dict = _to_challenge_item(
+        {
+            "template_id": 12,
+            "title": "하루 8천보",
+            "category": "EXERCISE",
+            "difficulty": "LEVEL_2",
+            "reason": "혈압 관리",
+            "priority": "TOP",
+            "ignored_extra": "무시됨",  # extra="ignore" 로 잉여 키 무시
+        }
+    )
+    assert isinstance(from_dataclass, RecommendedChallengeItem)
+    assert isinstance(from_dict, RecommendedChallengeItem)
+    assert from_dataclass == from_dict
+    assert from_dict.template_id == 12  # dict 입력에서도 정상 (AttributeError 없음)
+
+
+def test_to_response_handles_history_dict_challenges() -> None:
+    """이력 재구성 시나리오: recommended_challenges 가 list[dict] 여도 _to_response 가 예외 없이 DTO 생성."""
+    result = RiskRecommendationResult(
+        answer="권고 본문",
+        recommended_challenges=[  # type: ignore[list-item]  # 이력 JSONB 재구성 모사
+            {
+                "template_id": 7,
+                "title": "물 8컵",
+                "category": "DIET",
+                "difficulty": "LEVEL_1",
+                "reason": "수분",
+                "priority": None,
+            }
+        ],
+    )
+    resp = _to_response(result)
+    assert len(resp.recommended_challenges) == 1
+    assert resp.recommended_challenges[0].template_id == 7
+    assert isinstance(resp.recommended_challenges[0], RecommendedChallengeItem)
