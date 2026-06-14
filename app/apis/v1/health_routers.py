@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 from typing import Annotated, Any
 
@@ -39,16 +40,22 @@ health_records_router = APIRouter(prefix="/health-records", tags=["health-record
 health_reports_router = APIRouter(prefix="/health-reports", tags=["health-reports"])
 predictions_router = APIRouter(prefix="/predictions", tags=["predictions"])
 
+logger = logging.getLogger(__name__)
+
 
 async def _award_health_view(user_id) -> None:  # type: ignore[no-untyped-def]  # user_id: UUID
-    """건강 데이터 확인 활동량 EXP 적립 (1일 1회). best-effort."""
+    """건강 데이터 확인 활동량 EXP 적립 (1일 1회). best-effort.
+
+    EXP 적립은 조회 응답의 부수효과이므로, dedupe(Redis/DB) 일시 장애로 실패해도
+    데이터 응답을 막지 않는다(500 방지). 단 무음 삼킴은 장애를 가리므로 경고 로그를 남긴다.
+    """
     try:
         from app.models.experience import XpKind
         from app.services.experience import ExperienceService
 
         await ExperienceService().award(user_id=user_id, kind=XpKind.HEALTH_VIEW)
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001 — best-effort 부수효과, 조회 응답 차단 금지
+        logger.warning("HEALTH_VIEW EXP 적립 실패(무시): %s: %s", type(e).__name__, e)
 
 
 # ---------------------------------------------------------------------------
