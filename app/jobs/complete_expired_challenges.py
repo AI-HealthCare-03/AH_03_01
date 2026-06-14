@@ -44,7 +44,7 @@ _reward_service = RewardService()
 def _personal_goal_achieved(challenge: Challenge, participant: ChallengeParticipant) -> bool:
     """개인 챌린지 기간 보상 조건: 기간 내 목표 인증 횟수를 모두 달성해야 함."""
     if challenge.cadence == ChallengeCadence.WEEKLY_COUNT:
-        required = (challenge.goal_config or {}).get("weekly_target_count", 0)
+        required = int((challenge.goal_config or {}).get("weekly_target_count") or 0)
     else:  # DAILY
         required = (challenge.end_date - challenge.start_date).days + 1
     if required <= 0:
