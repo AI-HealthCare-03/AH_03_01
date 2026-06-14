@@ -19,6 +19,7 @@ from tortoise.exceptions import DBConnectionError, OperationalError
 from app.dtos.risk_recommendation import (
     ContributingFactorItem,
     RecommendationSourceItem,
+    RecommendedChallengeItem,
     RiskPredictionItem,
     RiskRecommendationResponse,
 )
@@ -26,6 +27,7 @@ from app.graphs.risk_recommendation_graph import (
     MODEL_VERSION,
     STAGE_LABELS,
     PredictionSummary,
+    RecommendedChallenge,
     RiskRecommendationResult,
     compute_feature_snapshot,
     run_risk_recommendation,
@@ -220,6 +222,7 @@ class RiskRecommendationService:
             diet=list(result.diet),
             sources=[_source_to_dict(s) for s in result.sources],
             predictions=[_prediction_to_dict(p) for p in result.predictions],
+            recommended_challenges=[_challenge_to_dict(c) for c in result.recommended_challenges],
             is_fallback=result.is_fallback,
             eval_revision_count=result.eval_revision_count,
         )
@@ -257,6 +260,7 @@ def _to_response(r: RiskRecommendationResult) -> RiskRecommendationResponse:
         sources=[_to_source_item(c) for c in r.sources],
         recommended_tips=list(r.tips),
         recommended_diet=list(r.diet),
+        recommended_challenges=[_to_challenge_item(c) for c in r.recommended_challenges],
         has_required_data=r.has_required_data,
         missing_fields=list(r.missing_fields),
         action_hint=("navigate_to_health_info" if not r.has_required_data else None),
@@ -286,6 +290,30 @@ def _prediction_to_dict(p: PredictionSummary) -> dict[str, Any]:
         "risk_score": p.risk_score,
         "risk_level": p.risk_level,
         "contributing_factors": list(p.contributing_factors),
+    }
+
+
+def _to_challenge_item(c: RecommendedChallenge) -> RecommendedChallengeItem:
+    """RecommendedChallenge → RecommendedChallengeItem (응답 DTO)."""
+    return RecommendedChallengeItem(
+        template_id=c.template_id,
+        title=c.title,
+        category=c.category,
+        difficulty=c.difficulty,
+        reason=c.reason,
+        priority=c.priority,
+    )
+
+
+def _challenge_to_dict(c: RecommendedChallenge) -> dict[str, Any]:
+    """RecommendedChallenge → 이력 저장 dict (RecommendedChallengeItem 필드와 동형)."""
+    return {
+        "template_id": c.template_id,
+        "title": c.title,
+        "category": c.category,
+        "difficulty": c.difficulty,
+        "reason": c.reason,
+        "priority": c.priority,
     }
 
 

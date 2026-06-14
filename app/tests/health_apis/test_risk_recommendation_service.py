@@ -15,8 +15,13 @@ import pytest
 from fastapi import HTTPException, status
 from tortoise.exceptions import DBConnectionError, OperationalError
 
-from app.graphs.risk_recommendation_graph import RiskRecommendationResult
-from app.services.risk_recommendation import RiskRecommendationService
+from app.graphs.risk_recommendation_graph import (
+    RecommendedChallenge,
+    RiskRecommendationResult,
+    _join_recommended_challenges,
+)
+from app.services.ml.challenge_eligibility_filter import EligibleTemplate
+from app.services.risk_recommendation import RiskRecommendationService, _to_response
 
 _MOD = "app.services.risk_recommendation"
 _CACHE = "app.services.risk_recommendation_cache"
@@ -32,6 +37,73 @@ def _valid_result() -> RiskRecommendationResult:
         is_fallback=False,
         feature_snapshot={"age": 50},
     )
+
+
+def _eligible(template_id: int, title: str = "주 5일 30분 걷기") -> EligibleTemplate:
+    from app.models.challenge import RecommendationPriority
+
+    return EligibleTemplate(
+        template_id=template_id,
+        category="EXERCISE",
+        sub_category="WALKING",
+        title=title,
+        difficulty="LEVEL_1",
+        priority_hint=RecommendationPriority.TOP,
+    )
+
+
+def test_join_recommended_challenges_joins_meta_by_template_id() -> None:
+    """state.recommended_challenges(id/priority/reason) + eligible_templates(메타) → 구조화 카드."""
+    state = {
+        "recommended_challenges": [
+            {"template_id": 7, "priority": "TOP", "reason": "혈압 관리 핵심"},
+            {"template_id": 99, "priority": "OPTIONAL", "reason": "카탈로그 외 — 제외돼야 함"},
+            {"priority": "TOP", "reason": "id 없음 — 제외"},
+        ],
+        "eligible_templates": [_eligible(7)],
+    }
+    out = _join_recommended_challenges(state)  # type: ignore[arg-type]
+    assert len(out) == 1
+    item = out[0]
+    assert item.template_id == 7
+    assert item.title == "주 5일 30분 걷기"
+    assert item.category == "EXERCISE"
+    assert item.difficulty == "LEVEL_1"
+    assert item.reason == "혈압 관리 핵심"
+    assert item.priority == "TOP"
+
+
+def test_join_recommended_challenges_empty_when_no_selection() -> None:
+    """LLM 미선정(빈 recommended_challenges) → 빈 리스트."""
+    assert _join_recommended_challenges({"recommended_challenges": [], "eligible_templates": [_eligible(7)]}) == []  # type: ignore[arg-type]
+
+
+def test_to_response_serializes_recommended_challenges() -> None:
+    """결과의 recommended_challenges 가 응답 DTO(JSON) 에 키·타입대로 직렬화된다."""
+    result = RiskRecommendationResult(
+        answer="권고 본문",
+        recommended_challenges=[
+            RecommendedChallenge(
+                template_id=7,
+                title="주 5일 30분 걷기",
+                category="EXERCISE",
+                difficulty="LEVEL_1",
+                reason="혈압 관리 핵심",
+                priority="TOP",
+            )
+        ],
+    )
+    payload = _to_response(result).model_dump(mode="json")
+    assert payload["recommended_challenges"] == [
+        {
+            "template_id": 7,
+            "title": "주 5일 30분 걷기",
+            "category": "EXERCISE",
+            "difficulty": "LEVEL_1",
+            "reason": "혈압 관리 핵심",
+            "priority": "TOP",
+        }
+    ]
 
 
 @pytest.mark.parametrize("db_exc", [DBConnectionError("db down"), OperationalError("db down")])
