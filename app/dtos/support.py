@@ -1,4 +1,5 @@
 from datetime import datetime
+from urllib.parse import unquote
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -46,7 +47,7 @@ class InquiryCreateRequest(BaseModel):
     def validate_attachment_url(cls, v: str | None) -> str | None:
         if v is None:
             return v
-        if not v.startswith("/media/") or ".." in v:
+        if not v.startswith("/media/") or ".." in unquote(v):
             raise ValueError("attachment_url은 /media/ 하위 경로만 허용됩니다.")
         return v
 
@@ -54,3 +55,7 @@ class InquiryCreateRequest(BaseModel):
 class InquiryUpdateRequest(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     content: str | None = Field(default=None, max_length=5000)
+
+
+class InquiryAnswerCreateRequest(BaseModel):
+    content: str = Field(max_length=5000)
