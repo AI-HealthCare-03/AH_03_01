@@ -112,7 +112,7 @@ def parse_sec_file(filepath: Path) -> list[dict]:
 
         # 섹션 메타데이터
         sec_meta = {}
-        meta_match = re.search(r"### Section Metadata\s*\n(.*?)(?=### |\Z)", block, re.DOTALL)
+        meta_match = re.search(r"### Section Metadata\s*\n(.*?)(?=\n### |\Z)", block, re.DOTALL)
         if meta_match:
             sec_meta = parse_section_metadata(meta_match.group(1))
 
@@ -125,15 +125,15 @@ def parse_sec_file(filepath: Path) -> list[dict]:
         # 임베딩 텍스트: Content + RAG요약 + 키워드
         content_parts = []
 
-        content_match = re.search(r"### Content\s*\n(.*?)(?=### |\Z)", block, re.DOTALL)
+        content_match = re.search(r"### Content\s*\n(.*?)(?=\n### |\Z)", block, re.DOTALL)
         if content_match:
             content_parts.append(content_match.group(1).strip())
 
-        rag_match = re.search(r"#{3,5}.*?RAG 검색용 요약.*?\n(.*?)(?=#{3,5}|\Z)", block, re.DOTALL)
+        rag_match = re.search(r"\n#{3} .*?RAG 검색용 요약.*?\n(.*?)(?=\n#{3} |\Z)", block, re.DOTALL)
         if rag_match:
             content_parts.append("[RAG요약] " + rag_match.group(1).strip())
 
-        kw_match = re.search(r"#{3,5}.*?검색 키워드.*?\n(.*?)(?=#{3,5}|\Z)", block, re.DOTALL)
+        kw_match = re.search(r"\n#{3} .*?검색 키워드.*?\n(.*?)(?=\n#{3} |\Z)", block, re.DOTALL)
         if kw_match:
             keywords = [
                 line.strip().lstrip("- ").strip()
