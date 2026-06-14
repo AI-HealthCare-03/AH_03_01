@@ -21,6 +21,7 @@ from app.dtos.challenge import (
 from app.models.challenge import (
     Challenge,
     ChallengeCategory,
+    ChallengeDifficulty,
     ChallengeInvite,
     ChallengeParticipant,
     ChallengeReaction,
@@ -65,6 +66,34 @@ MAX_MISSED_BEFORE_KICK = 3
 INVITE_TTL = timedelta(days=7)
 
 
+_GROUP_SUM_DIFFICULTY: list[tuple[int, ChallengeDifficulty]] = [
+    (35, ChallengeDifficulty.LEVEL_4),
+    (30, ChallengeDifficulty.LEVEL_3),
+    (15, ChallengeDifficulty.LEVEL_2),
+    (6,  ChallengeDifficulty.LEVEL_1),
+]
+_GROUP_MEMBERS_DIFFICULTY: list[tuple[int, ChallengeDifficulty]] = [
+    (5, ChallengeDifficulty.LEVEL_4),
+    (4, ChallengeDifficulty.LEVEL_3),
+    (3, ChallengeDifficulty.LEVEL_2),
+    (2, ChallengeDifficulty.LEVEL_1),
+]
+
+
+def _calc_group_difficulty(goal_config: dict) -> ChallengeDifficulty:
+    cfg = goal_config or {}
+    if "group_target_count" in cfg:
+        target = int(cfg["group_target_count"] or 0)
+        table = _GROUP_SUM_DIFFICULTY
+    else:
+        target = int(cfg.get("group_target_members") or 0)
+        table = _GROUP_MEMBERS_DIFFICULTY
+    for threshold, level in table:
+        if target >= threshold:
+            return level
+    return ChallengeDifficulty.LEVEL_1
+
+
 class ChallengeTemplateService:
     def __init__(self) -> None:
         self.repo = ChallengeTemplateRepository()
@@ -86,6 +115,12 @@ class ChallengeService:
         if data.template_id and template is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="템플릿을 찾을 수 없습니다.")
 
+        difficulty = (
+            _calc_group_difficulty(data.goal_config or {})
+            if scope == ChallengeScope.GROUP
+            else data.difficulty
+        )
+
         async with in_transaction():
             challenge = await self.repo.create(
                 data={
@@ -102,7 +137,7 @@ class ChallengeService:
                     "cadence": data.cadence,
                     "goal_config": data.goal_config,
                     "verification_type": data.verification_type,
-                    "difficulty": data.difficulty,
+                    "difficulty": difficulty,
                     "visibility": data.visibility,
                     "max_participants": data.max_participants,
                     "start_date": data.start_date,
