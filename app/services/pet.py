@@ -13,9 +13,7 @@ from app.dtos.pet import (
     PetCreateRequest,
     PetUpdateRequest,
     PurchaseRequest,
-    RewardClaimRequest,
 )
-from app.models.challenge import Challenge
 from app.models.pet import (
     AttendanceCheck,
     GrowthEventSource,
@@ -554,68 +552,6 @@ class AttendanceService:
             "reward_point": RewardService.ATTENDANCE_DAILY,
             "bonus_point": bonus_point,
             "transaction_ids": tx_ids,
-        }
-
-
-class RewardClaimService:
-    """챌린지 보상 명시 클레임 API. 자동 지급되지 않은 보상을 사용자가 요청해 받을 때 사용."""
-
-    def __init__(self) -> None:
-        self.reward_service = RewardService()
-        self.point_repo = PointTransactionRepository()
-
-    async def claim(
-        self,
-        user: User,
-        reward_type: str,
-        data: RewardClaimRequest,
-    ) -> dict[str, Any]:
-        async with in_transaction():
-            # 챌린지 제목 조회 (포인트 내역 설명에 ID 대신 제목 표시)
-            challenge = await Challenge.get_or_none(id=data.challenge_id)
-            challenge_title = challenge.title if challenge else None
-
-            if reward_type == "daily":
-                if data.verification_id is None:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="daily 보상은 verification_id 가 필요합니다.",
-                    )
-                result = await self.reward_service.grant_daily(
-                    user_id=user.id,
-                    challenge_id=data.challenge_id,
-                    verification_id=data.verification_id,
-                    challenge_title=challenge_title,
-                )
-            elif reward_type == "period":
-                result = await self.reward_service.grant_period_completion(
-                    user_id=user.id,
-                    challenge_id=data.challenge_id,
-                    challenge_title=challenge_title,
-                )
-            elif reward_type == "group":
-                if not data.difficulty_level:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="group 보상은 difficulty_level 이 필요합니다.",
-                    )
-                result = await self.reward_service.grant_group_completion(
-                    user_id=user.id,
-                    challenge_id=data.challenge_id,
-                    difficulty_level=data.difficulty_level,
-                    challenge_title=challenge_title,
-                )
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="rewardType 은 daily|period|group 입니다.",
-                )
-            new_balance = await self.point_repo.balance(user.id)
-        return {
-            "transaction_id": result.transaction.id,
-            "reward_type": result.reward_type,
-            "point_amount": result.amount,
-            "point_balance": new_balance,
         }
 
 

@@ -25,13 +25,109 @@ import time
 from datetime import date
 
 from tortoise import Tortoise
+from tortoise.exceptions import IntegrityError
+from tortoise.transactions import in_transaction
 
 from app.core.db.databases import TORTOISE_ORM
-from app.models.challenge import Challenge, ChallengeStatus
+from app.models.challenge import Challenge, ChallengeCadence, ChallengeParticipant, ChallengeScope, ChallengeStatus, ParticipantStatus
+from app.models.pet import PointSource, PointTransaction
+from app.services.rewards import RewardService
 
 logger = logging.getLogger("app.jobs.complete_expired_challenges")
 
 DEFAULT_BATCH_SIZE = 100
+
+
+_reward_service = RewardService()
+
+
+def _personal_goal_achieved(challenge: Challenge, participant: ChallengeParticipant) -> bool:
+    """개인 챌린지 기간 보상 조건: 기간 내 목표 인증 횟수를 모두 달성해야 함."""
+    if challenge.cadence == ChallengeCadence.WEEKLY_COUNT:
+        required = int((challenge.goal_config or {}).get("weekly_target_count") or 0)
+    else:  # DAILY
+        required = (challenge.end_date - challenge.start_date).days + 1
+    if required <= 0:
+        return False
+    return participant.current_score >= required
+
+
+def _group_goal_achieved(challenge: Challenge, participants: list[ChallengeParticipant]) -> bool:
+    """그룹 챌린지 목표 달성 여부를 반환한다."""
+    cfg = challenge.goal_config or {}
+    if "group_target_count" in cfg:
+        target = int(cfg["group_target_count"] or 0)
+        if target <= 0:
+            return False
+        total = sum(p.current_score for p in participants)
+        return total >= target
+    else:  # GROUP_MEMBERS
+        target = int(cfg.get("group_target_members") or 0)
+        if target <= 0:
+            return False
+        achieved = sum(1 for p in participants if p.current_score >= 1)
+        return achieved >= target
+
+
+async def _grant_completion_rewards(challenge: Challenge) -> None:
+    """챌린지 완료 시 APPROVED 참여자에게 보상을 자동 지급한다. 중복 지급 방지."""
+    participants = await ChallengeParticipant.filter(
+        challenge_id=challenge.id,
+        status=ParticipantStatus.APPROVED,
+    ).all()
+
+    is_group = challenge.scope == ChallengeScope.GROUP
+
+    if is_group and not _group_goal_achieved(challenge, participants):
+        logger.info(
+            "그룹 목표 미달성 — 보상 미지급 challenge_id=%d goal_type=%s",
+            challenge.id,
+            challenge.goal_type,
+        )
+        return
+
+    source = PointSource.CHALLENGE_GROUP if is_group else PointSource.CHALLENGE_PERIOD
+
+    for participant in participants:
+        if not is_group and not _personal_goal_achieved(challenge, participant):
+            continue
+
+        already_granted = await PointTransaction.filter(
+            user_id=participant.user_id,
+            source=source,
+            source_id=challenge.id,
+        ).exists()
+        if already_granted:
+            continue
+
+        try:
+            async with in_transaction():  # savepoint: 개별 grant 실패가 외부 트랜잭션에 영향 없음
+                if is_group:
+                    await _reward_service.grant_group_completion(
+                        user_id=participant.user_id,
+                        challenge_id=challenge.id,
+                        difficulty_level=challenge.difficulty.value,
+                        challenge_title=challenge.title,
+                    )
+                else:
+                    await _reward_service.grant_period_completion(
+                        user_id=participant.user_id,
+                        challenge_id=challenge.id,
+                        challenge_title=challenge.title,
+                    )
+        except IntegrityError:
+            logger.info(
+                "이미 지급됨 (race condition) challenge_id=%d user_id=%d",
+                challenge.id,
+                participant.user_id,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "보상 지급 실패 challenge_id=%d user_id=%d scope=%s",
+                challenge.id,
+                participant.user_id,
+                challenge.scope,
+            )
 
 
 async def complete_expired_challenges(*, dry_run: bool, batch_size: int) -> dict[str, int]:
@@ -71,8 +167,10 @@ async def complete_expired_challenges(*, dry_run: bool, batch_size: int) -> dict
         for challenge in batch:
             challenge_id = challenge.id
             try:
-                challenge.status = ChallengeStatus.COMPLETED
-                await challenge.save(update_fields=["status"])
+                async with in_transaction():
+                    challenge.status = ChallengeStatus.COMPLETED
+                    await challenge.save(update_fields=["status"])
+                    await _grant_completion_rewards(challenge)
                 done += 1
             except Exception:  # noqa: BLE001 — 건별 실패 격리
                 failed += 1
