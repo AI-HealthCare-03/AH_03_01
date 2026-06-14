@@ -5,8 +5,11 @@ challenges / good_habits)를 기준으로, 데이터 유/무 양쪽에서 섹션
 """
 
 from datetime import datetime
+from unittest.mock import AsyncMock, patch
 
-from app.services.report_pdf import build_report_html
+import pytest
+
+from app.services.report_pdf import ReportPdfService, build_report_html
 
 
 def test_html_with_full_data_contains_all_sections():
@@ -116,3 +119,23 @@ def test_html_handles_missing_keys():
     html = build_report_html({"year_month": "2026-07", "generated_at": None})
     assert "케어로그 월간 건강 리포트" in html
     assert "2026-07" in html
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("2026-05", "care_report_2026-05.pdf"),
+        # 개행/따옴표 등 헤더 인젝션 시도 → 안전 문자만 남김.
+        ('2026-05"\r\nSet-Cookie: x', "care_report_2026-05Set-Cookiex.pdf"),
+        ("2026-05\n", "care_report_2026-05.pdf"),
+        ("/../../etc", "care_report_etc.pdf"),
+    ],
+)
+async def test_build_bytes_filename_is_header_safe(raw, expected):
+    # build_bytes 의 다운로드 파일명은 Content-Disposition 에 들어가므로
+    # 사용자 유래 year_month 의 위험 문자를 제거해야 한다. (chromium 은 목으로 대체)
+    with patch("app.services.report_pdf.render_pdf_bytes", AsyncMock(return_value=b"%PDF-1.4")):
+        pdf_bytes, filename = await ReportPdfService().build_bytes({"year_month": raw})
+    assert pdf_bytes == b"%PDF-1.4"
+    assert filename == expected
+    assert "\n" not in filename and "\r" not in filename and '"' not in filename

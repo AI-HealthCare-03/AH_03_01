@@ -3,6 +3,7 @@ from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import Response as BinaryResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 
@@ -226,7 +227,7 @@ async def get_health_report(
     date_from: Annotated[str | None, Query()] = None,
     date_to: Annotated[str | None, Query()] = None,
     output_format: Annotated[str, Query(alias="format")] = "json",
-) -> Response:
+) -> BinaryResponse:
     if period not in {"monthly", "custom"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="period 는 monthly 또는 custom 입니다.")
     if output_format not in {"json", "pdf"}:
@@ -243,10 +244,15 @@ async def get_health_report(
             )
         payload = await service.build_for_range(user, date_from, date_to)
     if output_format == "pdf":
-        # 서버사이드 렌더(Playwright chromium): 데이터→HTML→PDF→파일저장→pdf_url.
-        pdf_url = await pdf_service.build_and_store(user, payload)
-        payload = {**payload, "pdf_url": pdf_url}
-        return Response(payload, status_code=status.HTTP_200_OK)
+        # 서버사이드 렌더(Playwright chromium): 데이터→HTML→PDF bytes.
+        # PHI 보호: 디스크/미디어에 저장하지 않고 인증된 사용자에게 바로 다운로드시킨다.
+        pdf_bytes, filename = await pdf_service.build_bytes(payload)
+        return BinaryResponse(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            status_code=status.HTTP_200_OK,
+        )
     await _award_health_view(user.id)
     return Response(payload, status_code=status.HTTP_200_OK)
 
