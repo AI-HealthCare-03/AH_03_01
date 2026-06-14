@@ -88,6 +88,17 @@ class ChallengeCreateRequest(BaseModel):
             raise ValueError("end_date 는 start_date 이상이어야 합니다.")
         return self
 
+    @model_validator(mode="after")
+    def _validate_group_goal(self) -> "ChallengeCreateRequest":
+        if self.max_participants > 1:
+            has_sum = isinstance(self.goal_config.get("group_target_count"), int)
+            has_members = isinstance(self.goal_config.get("group_target_members"), int)
+            if has_sum == has_members:
+                raise ValueError(
+                    "그룹 챌린지는 group_target_count 또는 group_target_members 중 하나를 양의 정수로 지정해야 합니다."
+                )
+        return self
+
 
 class ChallengeUpdateRequest(BaseModel):
     title: Annotated[str | None, Field(None, min_length=2, max_length=120)] = None
