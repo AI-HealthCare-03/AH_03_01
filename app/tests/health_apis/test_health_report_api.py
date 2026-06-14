@@ -187,6 +187,56 @@ class TestHealthReportApi(TestCase):
             assert weights == [0.9, 0.7, 0.5, 0.3, 0.2]  # TOP5, 절댓값 내림차순
             assert hyp["top_factors"][0]["name_kor"] == "요인1"
 
+    async def test_custom_period_returns_range_report(self):
+        """period=custom: date_from~date_to(양끝 포함) 범위만 집계, period/date_from/date_to 노출."""
+        async with make_client() as client:
+            token = await signup_and_login(client, email="report_custom@example.com", phone_number="01044440007")
+            headers = {"Authorization": f"Bearer {token}"}
+            # 범위 안(05-05) 1건 + 범위 밖(05-20) 1건
+            for v, day in [(70.0, "05"), (71.0, "20")]:
+                await client.post(
+                    "/api/v1/health-records",
+                    headers=headers,
+                    json={
+                        "record_type": "WEIGHT",
+                        "primary_value": v,
+                        "unit": "kg",
+                        "measured_at": f"2026-05-{day}T08:00:00+09:00",
+                    },
+                )
+            res = await client.get(
+                "/api/v1/health-reports?period=custom&date_from=2026-05-01&date_to=2026-05-15",
+                headers=headers,
+            )
+            assert res.status_code == status.HTTP_200_OK
+            body = res.json()
+            assert body["period"] == "custom"
+            assert body["date_from"] == "2026-05-01"
+            assert body["date_to"] == "2026-05-15"
+            # 05-05 만 범위 내 → weight 추이 1점 (05-20 제외)
+            weight = next(t for t in body["trends"] if t["metric"] == "weight")
+            assert len(weight["series"]) == 1
+            assert weight["latest"] == 70.0
+
+    async def test_custom_period_invalid_range_returns_400(self):
+        """date_from > date_to → 400."""
+        async with make_client() as client:
+            token = await signup_and_login(client, email="report_custom_bad@example.com", phone_number="01044440008")
+            headers = {"Authorization": f"Bearer {token}"}
+            res = await client.get(
+                "/api/v1/health-reports?period=custom&date_from=2026-05-20&date_to=2026-05-01",
+                headers=headers,
+            )
+            assert res.status_code == status.HTTP_400_BAD_REQUEST
+
+    async def test_custom_period_missing_dates_returns_400(self):
+        """period=custom 인데 date_from/date_to 누락 → 400."""
+        async with make_client() as client:
+            token = await signup_and_login(client, email="report_custom_miss@example.com", phone_number="01044440009")
+            headers = {"Authorization": f"Bearer {token}"}
+            res = await client.get("/api/v1/health-reports?period=custom", headers=headers)
+            assert res.status_code == status.HTTP_400_BAD_REQUEST
+
 
 def test_build_trends_secondary_latest_with_trailing_none() -> None:
     """_build_trends: 마지막 혈압 레코드에 이완기(secondary)가 없어도 secondary_latest 가 마지막 '유효'값.

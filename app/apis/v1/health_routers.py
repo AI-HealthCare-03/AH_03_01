@@ -223,15 +223,25 @@ async def get_health_report(
     pdf_service: Annotated[ReportPdfService, Depends(ReportPdfService)],
     period: Annotated[str, Query()] = "monthly",
     month: Annotated[str | None, Query()] = None,
+    date_from: Annotated[str | None, Query()] = None,
+    date_to: Annotated[str | None, Query()] = None,
     output_format: Annotated[str, Query(alias="format")] = "json",
 ) -> Response:
-    if period != "monthly":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="현재는 monthly 만 지원합니다.")
-    if month is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="month 쿼리(YYYY-MM)가 필요합니다.")
+    if period not in {"monthly", "custom"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="period 는 monthly 또는 custom 입니다.")
     if output_format not in {"json", "pdf"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="format 은 json 또는 pdf 입니다.")
-    payload = await service.get_or_build(user, month)
+    if period == "monthly":
+        if month is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="month 쿼리(YYYY-MM)가 필요합니다.")
+        payload = await service.get_or_build(user, month)
+    else:  # custom — 임의 기간(캐싱 없음)
+        if date_from is None or date_to is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="custom 기간은 date_from, date_to(YYYY-MM-DD)가 필요합니다.",
+            )
+        payload = await service.build_for_range(user, date_from, date_to)
     if output_format == "pdf":
         # 서버사이드 렌더(Playwright chromium): 데이터→HTML→PDF→파일저장→pdf_url.
         pdf_url = await pdf_service.build_and_store(user, payload)

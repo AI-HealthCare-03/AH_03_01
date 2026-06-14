@@ -274,7 +274,10 @@ class MonthlyReportGoodHabit(BaseModel):
 
 
 class MonthlyReportResponse(BaseModel):
-    year_month: str
+    year_month: str  # monthly: "YYYY-MM" / custom: "YYYY-MM-DD~YYYY-MM-DD" (표시용 라벨)
+    period: str = "monthly"  # "monthly" | "custom" (임의 기간)
+    date_from: date | None = None  # 집계 기간 시작(양끝 포함). 두 모드 모두 채움
+    date_to: date | None = None  # 집계 기간 끝(양끝 포함)
     disease_risk_summary: dict[str, Any]
     health_data_summary: dict[str, Any]
     challenge_summary: dict[str, Any]
