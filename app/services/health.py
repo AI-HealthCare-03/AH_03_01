@@ -707,7 +707,9 @@ class MonthlyReportService:
                     "secondary_avg": (
                         round(sum(secondary_vals) / len(secondary_vals), 2) if secondary_vals else None
                     ),
-                    "secondary_latest": (float(matched[-1].secondary_value) if secondary_vals else None),
+                    # secondary_vals[-1] 사용: 마지막 레코드의 secondary 가 None 이어도(혈압 일부 누락)
+                    # 마지막 '유효' 이완기값을 안전하게 반환 (matched[-1].secondary_value 직접 캐스트 시 None→TypeError).
+                    "secondary_latest": (secondary_vals[-1] if secondary_vals else None),
                 }
             )
         return trends

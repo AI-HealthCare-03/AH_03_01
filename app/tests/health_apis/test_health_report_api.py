@@ -186,3 +186,34 @@ class TestHealthReportApi(TestCase):
             weights = [f["weight"] for f in hyp["top_factors"]]
             assert weights == [0.9, 0.7, 0.5, 0.3, 0.2]  # TOP5, 절댓값 내림차순
             assert hyp["top_factors"][0]["name_kor"] == "요인1"
+
+
+def test_build_trends_secondary_latest_with_trailing_none() -> None:
+    """_build_trends: 마지막 혈압 레코드에 이완기(secondary)가 없어도 secondary_latest 가 마지막 '유효'값.
+
+    secondary_value 는 nullable — matched[-1].secondary_value 직접 캐스트 시 None→TypeError 였던 회귀 방지.
+    DB 불필요(순수 classmethod, 미저장 HealthRecord 인스턴스로 검증).
+    """
+    from datetime import datetime
+    from decimal import Decimal
+
+    from app.core import config
+    from app.models.health import HealthRecord, RecordType
+    from app.services.health import MonthlyReportService
+
+    def _bp(sys_v: float, dia_v: float | None, day: int) -> HealthRecord:
+        return HealthRecord(
+            record_type=RecordType.BLOOD_PRESSURE,
+            primary_value=Decimal(str(sys_v)),
+            secondary_value=(Decimal(str(dia_v)) if dia_v is not None else None),
+            unit="mmHg",
+            measured_at=datetime(2026, 5, day, 9, 0, tzinfo=config.TIMEZONE),
+            sub_type=None,
+        )
+
+    # 마지막(가장 최근) 레코드의 이완기 누락
+    records = [_bp(120, 80, 5), _bp(130, None, 12)]
+    bp_trend = next(t for t in MonthlyReportService._build_trends(records) if t["metric"] == "blood_pressure")
+    assert bp_trend["latest"] == 130.0
+    assert bp_trend["secondary_latest"] == 80.0  # 마지막 유효 이완기 (None 캐스트 회피)
+    assert bp_trend["secondary_avg"] == 80.0
