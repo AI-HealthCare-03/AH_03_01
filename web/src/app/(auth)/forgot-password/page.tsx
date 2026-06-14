@@ -16,6 +16,7 @@ import {
 } from "@/lib/validators";
 import { checkEmailVerified, resetPassword, sendEmailVerification } from "@/lib/api/auth";
 import { extractErrorMessage } from "@/lib/api/client";
+import axios from "axios";
 import { ROUTES } from "@/constants";
 
 /* =========================================
@@ -121,7 +122,7 @@ export default function ForgotPasswordPage() {
     }
     setEmailVerify("sending");
     try {
-      await sendEmailVerification(email);
+      await sendEmailVerification(email, name);
       setEmailVerify("sent");
       setVerifyDeadline(Date.now() + TOKEN_TTL_SEC * 1000);
       setStep(2);
@@ -161,8 +162,8 @@ export default function ForgotPasswordPage() {
       setDone(true);
     } catch (err) {
       const msg = extractErrorMessage(err);
-      // "이미 사용한 번호입니다" 등 비밀번호 관련 오류는 필드에 표시
-      if (msg.includes("번호") || msg.includes("비밀번호")) {
+      // 400: 백엔드가 비밀번호 자체를 거부한 경우 (예: 이미 사용된 비밀번호) → 필드 인라인 에러
+      if (axios.isAxiosError(err) && err.response?.status === 400) {
         setError("new_password", { message: msg });
       } else {
         showToast(msg, "error");

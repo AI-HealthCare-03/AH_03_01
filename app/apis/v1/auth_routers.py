@@ -130,8 +130,11 @@ async def send_email_verification(
     payload: SendVerificationRequest,
     service: Annotated[EmailVerificationService, Depends(EmailVerificationService)],
 ) -> Response:
-    """입력 이메일로 본인 인증 링크 메일을 발송한다. (계정 열거 방지: 항상 202)"""
-    await service.send_verification(str(payload.email))
+    """입력 이메일로 본인 인증 링크 메일을 발송한다. (계정 열거 방지: 항상 202)
+
+    name 이 함께 오면(비밀번호 찾기) email+name 일치 계정에만 발송한다 — 불일치여도 응답은 동일한 202.
+    """
+    await service.send_verification(str(payload.email), payload.name)
     return Response(content={"detail": "인증 메일을 발송했습니다."}, status_code=status.HTTP_202_ACCEPTED)
 
 
