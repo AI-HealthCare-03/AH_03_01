@@ -45,7 +45,7 @@ from ragas.metrics import (  # noqa: E402
 # 경로 설정
 # ─────────────────────────────────────────────
 BASE = Path(__file__).parent
-EVAL_DATASET_PATH = BASE / "rag_eval_qa_dataset_v3.jsonl"
+EVAL_DATASET_PATH = BASE / "rag_eval_qa_dataset_v6.jsonl"
 EVAL_SAMPLE_SIZE = 50
 
 
@@ -81,23 +81,29 @@ load_env(BASE)
 # ChatRAGGraph 로 답변 및 컨텍스트 수집
 # ─────────────────────────────────────────────
 async def _collect_single(
-    graph,
     question: str,
     idx: int,
     total: int,
 ) -> tuple[str, list[str]]:
-    """단일 질문에 대해 ChatRAGGraph를 실행하고 (answer, ctx_texts) 반환."""
+    """단일 질문에 대해 ChatRAGGraph를 실행하고 (answer, ctx_texts) 반환.
 
+    실제 서비스의 run_chat_rag() 와 동일한 파이프라인을 거친다:
+      classify_intent → retrieve(PGVector+BM25) → generate(LLM) → evaluate → final_ok/fallback
+    단, eval_mode=True 로 fetch_health_data(DB 개인 건강 데이터 조회) 노드를 건너뜀.
+
+    인라인 수치 질문(예: "수축기 혈압 145 mmHg이고 LDL 140 mg/dL인데 어떤 챌린지가 맞아?")은
+    classify_intent 의 N3 가드가 needs_health_data=False 로 자동 처리하므로 별도 모킹 불필요.
+    LLM 은 question 문자열 내 수치를 컨텍스트로 직접 사용한다.
+    """
     print(f"\n  [{idx}/{total}] {question}")
     try:
-        from app.graphs.chat_rag_graph import ChatRAGGraph, _state_to_result
+        from app.graphs.chat_rag_graph import ChatRAGGraph, _build_initial_state, _state_to_result
 
         graph = ChatRAGGraph()
+        # run_chat_rag() 와 동일한 초기 state + eval_mode=True:
+        # _build_initial_state 가 바뀌어도 평가 파이프라인이 자동으로 동기화된다.
         initial = {
-            "user_id": None,
-            "thread_id": f"ragas-eval-{idx}",
-            "original_question": question,
-            "eval_revision_count": 0,
+            **_build_initial_state(question, user_id=None, thread_id=f"ragas-eval-{idx}"),
             "eval_mode": True,
         }
         final_state = await graph.ainvoke(initial)
@@ -119,7 +125,8 @@ async def _collect_all(eval_dataset: list[dict]) -> dict:
     from app.core.db.databases import TORTOISE_ORM
     from app.graphs.chat_rag_graph import ChatRAGGraph  # noqa: F401
 
-    # Tortoise ORM 초기화를 가장 먼저
+    # Tortoise ORM 초기화 — RAG 검색(PGVector dense SQL + BM25 RAGDocument 로드) 전용.
+    # 실제 유저 건강 데이터(fetch_health_data 노드)는 eval_mode=True 로 완전히 건너뜀.
     await Tortoise.init(config=TORTOISE_ORM)
 
     questions: list[str] = []
@@ -136,7 +143,7 @@ async def _collect_all(eval_dataset: list[dict]) -> dict:
         for i, item in enumerate(eval_dataset, start=1):
             question = item["question"]
             ground_truth = item.get("ground_truth") or item.get("answer", "")
-            answer, ctx_texts = await _collect_single(None, question, i, total)
+            answer, ctx_texts = await _collect_single(question, i, total)
             questions.append(question)
             answers.append(answer)
             contexts.append(ctx_texts)
@@ -159,11 +166,16 @@ def collect_answers(eval_dataset: list[dict], seed: int | None = None) -> dict:
 
     nest_asyncio.apply()
 
-    # RAGAS 평가용 필터링 — 서비스 범위 밖 질문 제외
+    # RAGAS 평가용 필터링
+    # - out_of_scope: 서비스 범위 밖 질문 제외
+    # - inline_health_data: 새로 추가된 카테고리는 별도 eval_inline_health() 로 분리.
+    #   seed=42 기반 50개 샘플 비교의 안정성(재현성)을 위해 기존 풀에서 제외.
+    #   이 카테고리를 포함하면 데이터셋 크기 변화로 seed 출력이 매 실행마다 달라진다.
+    CORE_EVAL_EXCLUDE = {"out_of_scope", "inline_health_data"}
     filtered = [
         item
         for item in eval_dataset
-        if item.get("category") not in ("out_of_scope",) and item.get("eval_type") not in ("out_of_scope",)
+        if item.get("category") not in CORE_EVAL_EXCLUDE and item.get("eval_type") not in ("out_of_scope",)
     ]
 
     if seed is not None:
@@ -257,7 +269,7 @@ def run_ragas_evaluation(data: dict) -> tuple[dict, list[float]]:
 # ─────────────────────────────────────────────
 # 결과 출력
 # ─────────────────────────────────────────────
-def print_results(ragas_result, ko_ar_scores: list[float], data: dict):
+def print_results(ragas_result, ko_ar_scores: list[float], data: dict, output_filename: str = "ragas_result.json"):
     import numpy as np
 
     print("\n" + "=" * 60)
@@ -301,7 +313,7 @@ def print_results(ragas_result, ko_ar_scores: list[float], data: dict):
         print(f"  ⚠️  Faithfulness 목표 미달 ({faith_score:.4f}, {gap:.4f} 부족)")
     print("=" * 60)
 
-    output_path = BASE / "output" / "ragas_result.json"
+    output_path = BASE / "output" / output_filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_data = {
         "summary": {k: float(v) for k, v in scores.items()},
@@ -318,8 +330,27 @@ def print_results(ragas_result, ko_ar_scores: list[float], data: dict):
 # 실행
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
-    # seed=42 고정 — 매번 같은 50개 샘플로 평가해 개선 효과를 정확히 측정
+    import argparse
+
+    parser = argparse.ArgumentParser(description="RAGAS 평가 실행")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="샘플링 시드 (기본값: 42). 다른 값으로 다른 질문셋 평가 가능.",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="결과 저장 파일명 (output/ 하위). 기본값: ragas_result_seed{seed}.json",
+    )
+    args = parser.parse_args()
+
+    seed = args.seed
+    output_filename = args.output or f"ragas_result_seed{seed}.json"
+
     dataset = load_eval_dataset(EVAL_DATASET_PATH)
-    data = collect_answers(dataset, seed=42)
+    data = collect_answers(dataset, seed=seed)
     result, ko_ar = run_ragas_evaluation(data)
-    print_results(result, ko_ar, data)
+    print_results(result, ko_ar, data, output_filename=output_filename)
