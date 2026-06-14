@@ -46,15 +46,25 @@ class TestHealthReportApi(TestCase):
             )
             assert res.status_code == status.HTTP_400_BAD_REQUEST
 
-    async def test_pdf_not_implemented(self):
+    async def test_pdf_returns_pdf_url(self):
+        # 실제 chromium/디스크 저장은 무거우므로 build_and_store 를 목으로 대체.
+        # 라우터가 PDF 경로에서 200 + pdf_url 을 채워 응답하는지만 검증.
+        from unittest.mock import AsyncMock, patch
+
         async with make_client() as client:
             token = await signup_and_login(client, email="report_pdf@example.com", phone_number="01044440003")
             headers = {"Authorization": f"Bearer {token}"}
-            res = await client.get(
-                "/api/v1/health-reports?period=monthly&month=2026-05&format=pdf",
-                headers=headers,
-            )
-            assert res.status_code == status.HTTP_501_NOT_IMPLEMENTED
+            fake_url = "/media/uploads/report_pdf/20260514/1/abc.pdf"
+            with patch(
+                "app.apis.v1.health_routers.ReportPdfService.build_and_store",
+                AsyncMock(return_value=fake_url),
+            ):
+                res = await client.get(
+                    "/api/v1/health-reports?period=monthly&month=2026-05&format=pdf",
+                    headers=headers,
+                )
+            assert res.status_code == status.HTTP_200_OK
+            assert res.json()["pdf_url"] == fake_url
 
     async def test_empty_month_is_null_safe(self):
         """데이터 없는 월: 빈/널 안전. 질환 3종은 has_prediction=False 로 모두 노출."""

@@ -35,6 +35,7 @@ from app.services.health import (
     total_pages,
 )
 from app.services.ml.risk_predictor import MLUnavailableError
+from app.services.report_pdf import ReportPdfService
 
 health_records_router = APIRouter(prefix="/health-records", tags=["health-records"])
 health_reports_router = APIRouter(prefix="/health-reports", tags=["health-reports"])
@@ -219,6 +220,7 @@ async def delete_health_record(
 async def get_health_report(
     user: Annotated[User, Depends(get_request_user)],
     service: Annotated[MonthlyReportService, Depends(MonthlyReportService)],
+    pdf_service: Annotated[ReportPdfService, Depends(ReportPdfService)],
     period: Annotated[str, Query()] = "monthly",
     month: Annotated[str | None, Query()] = None,
     output_format: Annotated[str, Query(alias="format")] = "json",
@@ -231,8 +233,10 @@ async def get_health_report(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="format 은 json 또는 pdf 입니다.")
     payload = await service.get_or_build(user, month)
     if output_format == "pdf":
-        # PDF 생성 파이프라인은 별도 작업(FILE_UPLOAD/렌더러)이라 현 단계에서 미지원.
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="PDF 다운로드는 추후 지원 예정입니다.")
+        # 서버사이드 렌더(Playwright chromium): 데이터→HTML→PDF→파일저장→pdf_url.
+        pdf_url = await pdf_service.build_and_store(user, payload)
+        payload = {**payload, "pdf_url": pdf_url}
+        return Response(payload, status_code=status.HTTP_200_OK)
     await _award_health_view(user.id)
     return Response(payload, status_code=status.HTTP_200_OK)
 
