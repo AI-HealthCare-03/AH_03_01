@@ -65,6 +65,9 @@ class RestoredAccountResponse(BaseModel):
 
 class SendVerificationRequest(BaseModel):
     email: Annotated[EmailStr, Field(max_length=40)]
+    # 비밀번호 찾기 흐름에서만 전달. 주어지면 email+name 일치 계정에만 메일을 보낸다.
+    # (가입 흐름은 name 없이 호출 — 기존 동작 유지)
+    name: Annotated[str | None, Field(default=None, min_length=1, max_length=20)] = None
 
 
 class VerifyEmailRequest(BaseModel):

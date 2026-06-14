@@ -52,6 +52,10 @@ class UserRepository:
     async def get_user_by_name_and_phone(self, name: str, phone_number: str) -> User | None:
         return await self._model.filter(name=name, phone_number=phone_number, is_deleted=False).first()
 
+    async def get_active_user_by_email_and_name(self, email: str, name: str) -> User | None:
+        """email + name 이 모두 일치하는 활성(미탈퇴) 계정을 조회. (비밀번호 찾기 본인 확인)"""
+        return await self._model.filter(email=email, name=name, is_deleted=False).first()
+
     async def get_deleted_by_email(self, email: str) -> User | None:
         """이메일로 탈퇴(soft delete) 계정을 조회. 가장 최근 탈퇴 건."""
         return await self._model.filter(email=email, is_deleted=True).order_by("-deleted_at").first()

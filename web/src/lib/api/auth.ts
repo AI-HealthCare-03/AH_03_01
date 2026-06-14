@@ -92,8 +92,10 @@ export async function findId(
  * 이메일 본인 인증 메일 발송
  * POST /api/v1/auth/email/send-verification
  */
-export async function sendEmailVerification(email: string): Promise<void> {
-  await apiClient.post("/api/v1/auth/email/send-verification", { email });
+export async function sendEmailVerification(email: string, name?: string): Promise<void> {
+  // name 을 보내면 백엔드가 email+name 일치 활성 계정에만 메일을 발송한다(비번 찾기 본인확인).
+  // 회원가입/계정복구는 name 없이 호출(기존 동작 유지).
+  await apiClient.post("/api/v1/auth/email/send-verification", { email, ...(name ? { name } : {}) });
 }
 
 /**
