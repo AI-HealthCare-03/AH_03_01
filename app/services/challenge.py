@@ -30,7 +30,6 @@ from app.models.challenge import (
     ChallengeTemplate,
     ChallengeVerification,
     ChallengeVisibility,
-    GoalType,
     InviteStatus,
     InviteType,
     ParticipantRole,
@@ -81,12 +80,13 @@ _GROUP_MEMBERS_DIFFICULTY: list[tuple[int, ChallengeDifficulty]] = [
 ]
 
 
-def _calc_group_difficulty(goal_type: GoalType, goal_config: dict) -> ChallengeDifficulty:
-    if goal_type == GoalType.GROUP_SUM:
-        target = goal_config.get("group_target_count", 0)
+def _calc_group_difficulty(goal_config: dict) -> ChallengeDifficulty:
+    cfg = goal_config or {}
+    if "group_target_count" in cfg:
+        target = int(cfg["group_target_count"] or 0)
         table = _GROUP_SUM_DIFFICULTY
     else:
-        target = goal_config.get("group_target_members", 0)
+        target = int(cfg.get("group_target_members") or 0)
         table = _GROUP_MEMBERS_DIFFICULTY
     for threshold, level in table:
         if target >= threshold:
@@ -116,7 +116,7 @@ class ChallengeService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="템플릿을 찾을 수 없습니다.")
 
         difficulty = (
-            _calc_group_difficulty(data.goal_type, data.goal_config or {})
+            _calc_group_difficulty(data.goal_config or {})
             if scope == ChallengeScope.GROUP
             else data.difficulty
         )

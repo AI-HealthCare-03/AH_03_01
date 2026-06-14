@@ -41,12 +41,13 @@ GROUP_MEMBERS_TABLE = [
 ]
 
 
-def calc_difficulty(goal_type: str, goal_config: dict) -> str:
-    if goal_type == "GROUP_SUM":
-        target = goal_config.get("group_target_count", 0)
+def calc_difficulty(goal_config: dict) -> str:
+    cfg = goal_config or {}
+    if "group_target_count" in cfg:
+        target = int(cfg["group_target_count"] or 0)
         table = GROUP_SUM_TABLE
-    else:  # GROUP_MEMBERS
-        target = goal_config.get("group_target_members", 0)
+    else:
+        target = int(cfg.get("group_target_members") or 0)
         table = GROUP_MEMBERS_TABLE
     for threshold, level in table:
         if target >= threshold:
@@ -70,7 +71,7 @@ async def migrate() -> None:
         for row in rows:
             goal_type = row["goal_type"]
             goal_config = row["goal_config"] or {}
-            correct = calc_difficulty(goal_type, goal_config)
+            correct = calc_difficulty(goal_config)
 
             await conn.execute(
                 "UPDATE challenges SET difficulty = $1 WHERE id = $2",
