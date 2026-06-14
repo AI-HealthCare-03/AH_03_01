@@ -179,12 +179,25 @@ class PredictionSummary:
 
 
 @dataclass(slots=True)
+class RecommendedChallenge:
+    """프론트 카드용 구조화 추천 챌린지 — LLM 선정(template_id/priority/reason) + 카탈로그 메타(title/category/difficulty) 조인."""
+
+    template_id: int
+    title: str
+    category: str
+    difficulty: str
+    reason: str
+    priority: str | None = None  # "TOP"/"RECOMMENDED"/"OPTIONAL" (LLM 미지정 시 None)
+
+
+@dataclass(slots=True)
 class RiskRecommendationResult:
     answer: str  # 권고·챌린지 추천 본문 (LLM 생성)
     predictions: list[PredictionSummary] = field(default_factory=list)
     sources: list[RetrievedChunk] = field(default_factory=list)
     tips: list[str] = field(default_factory=list)  # 생활습관 권고 (구조화 칩)
     diet: list[str] = field(default_factory=list)  # 끼니별 식단 제안 (구조화 칩)
+    recommended_challenges: list[RecommendedChallenge] = field(default_factory=list)  # 프론트 카드용 구조화 추천
     has_required_data: bool = True
     missing_fields: list[str] = field(default_factory=list)
     is_fallback: bool = False
@@ -1110,6 +1123,37 @@ async def run_risk_recommendation(
     return _state_to_result(final_state)
 
 
+def _join_recommended_challenges(final_state: RiskState) -> list[RecommendedChallenge]:
+    """state.recommended_challenges(template_id/priority/reason) 를 eligible_templates(메타) 와
+    template_id 로 조인해 프론트 카드용 구조화 목록 생성.
+
+    LLM 미선정이거나 eligible 카탈로그에 없는 id 는 제외 → 비면 빈 리스트.
+    """
+    recommended = final_state.get("recommended_challenges") or []
+    eligible = final_state.get("eligible_templates") or []
+    meta_by_id: dict[int, EligibleTemplate] = {t.template_id: t for t in eligible}
+
+    items: list[RecommendedChallenge] = []
+    for r in recommended:
+        tid = r.get("template_id")
+        if not isinstance(tid, int):
+            continue
+        meta = meta_by_id.get(tid)
+        if meta is None:  # 카탈로그에 없는 id (whitelist 외) → 카드 메타 채울 수 없으므로 스킵
+            continue
+        items.append(
+            RecommendedChallenge(
+                template_id=tid,
+                title=meta.title,
+                category=meta.category,
+                difficulty=meta.difficulty,
+                reason=str(r.get("reason") or ""),
+                priority=str(r["priority"]) if r.get("priority") else None,
+            )
+        )
+    return items
+
+
 def _state_to_result(final_state: RiskState) -> RiskRecommendationResult:
     """그래프 누적 최종 state → RiskRecommendationResult 매핑 (sync/stream 공용)."""
     if not final_state.get("has_required_data", True):
@@ -1136,6 +1180,7 @@ def _state_to_result(final_state: RiskState) -> RiskRecommendationResult:
         sources=list(final_state.get("sources") or []),
         tips=list(final_state.get("recommended_tips") or []),
         diet=list(final_state.get("recommended_diet") or []),
+        recommended_challenges=_join_recommended_challenges(final_state),
         is_fallback=bool(final_state.get("is_fallback", False)),
         eval_revision_count=int(final_state.get("eval_revision_count", 0)),
         feature_snapshot=dict(final_state.get("feature_snapshot") or {}),
@@ -1217,6 +1262,7 @@ __all__ = [
     "MISSING_INFO_MESSAGE",
     "PredictionSummary",
     "RISK_HIGH_THRESHOLD",
+    "RecommendedChallenge",
     "RiskRecommendationGraph",
     "RiskRecommendationResult",
     "RiskState",

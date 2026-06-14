@@ -21,6 +21,8 @@ class ContributingFactorItem(BaseModel):
     factor: str
     weight: float
     description: str | None = None
+    name_kor: str | None = None  # 한글명 (ML 경로; 룰 폴백은 None → UI 는 factor/description 사용)
+    direction: str | None = None  # "위험 증가↑"/"위험 감소↓"
 
 
 class RiskPredictionItem(BaseModel):
@@ -39,6 +41,22 @@ class RecommendationSourceItem(BaseModel):
     document_id: int | None = None
     snippet: str | None = None
     source: str | None = None  # 예: "KSLA2022" / "CHALLENGE_CATALOG"
+
+
+class RecommendedChallengeItem(BaseModel):
+    """추천 챌린지 카드 (프론트가 바로 렌더). LLM 선정 + 카탈로그 메타 조인 결과."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    template_id: int = Field(description="챌린지 템플릿 id (참여 등록 시 사용)")
+    title: str = Field(description="챌린지 제목")
+    category: str = Field(description="카테고리 (예: DIET/EXERCISE/...)")
+    difficulty: str = Field(description="난이도 (예: LEVEL_1~LEVEL_4)")
+    reason: str = Field(default="", description="추천 이유 한 줄 (LLM 생성)")
+    priority: str | None = Field(
+        default=None,
+        description='"TOP"/"RECOMMENDED"/"OPTIONAL" (LLM 미지정 시 null)',
+    )
 
 
 class RiskRecommendationResponse(BaseModel):
@@ -60,6 +78,10 @@ class RiskRecommendationResponse(BaseModel):
     recommended_diet: list[str] = Field(
         default_factory=list,
         description="끼니별 식단 제안 칩 (아침/점심/저녁)",
+    )
+    recommended_challenges: list[RecommendedChallengeItem] = Field(
+        default_factory=list,
+        description="구조화 추천 챌린지 카드 (프론트가 카드로 렌더; LLM 미선정·eligible 없음이면 빈 배열)",
     )
     has_required_data: bool = True
     missing_fields: list[str] = Field(default_factory=list)

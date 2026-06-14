@@ -39,6 +39,8 @@ class RiskRecommendationResult(models.Model):
     diet: list[str] = fields.JSONField(default=list)  # type: ignore[assignment]
     sources: list[dict[str, Any]] = fields.JSONField(default=list)  # type: ignore[assignment]
     predictions: list[dict[str, Any]] = fields.JSONField(default=list)  # type: ignore[assignment]
+    # 프론트 카드용 구조화 추천 챌린지 (template_id/title/category/difficulty/reason/priority)
+    recommended_challenges: list[dict[str, Any]] = fields.JSONField(default=list)  # type: ignore[assignment]
     is_fallback = fields.BooleanField(default=False)
     eval_revision_count = fields.IntField(null=True)
     created_at = fields.DatetimeField(auto_now_add=True)

@@ -19,6 +19,7 @@ from tortoise.exceptions import DBConnectionError, OperationalError
 from app.dtos.risk_recommendation import (
     ContributingFactorItem,
     RecommendationSourceItem,
+    RecommendedChallengeItem,
     RiskPredictionItem,
     RiskRecommendationResponse,
 )
@@ -26,6 +27,7 @@ from app.graphs.risk_recommendation_graph import (
     MODEL_VERSION,
     STAGE_LABELS,
     PredictionSummary,
+    RecommendedChallenge,
     RiskRecommendationResult,
     compute_feature_snapshot,
     run_risk_recommendation,
@@ -220,6 +222,7 @@ class RiskRecommendationService:
             diet=list(result.diet),
             sources=[_source_to_dict(s) for s in result.sources],
             predictions=[_prediction_to_dict(p) for p in result.predictions],
+            recommended_challenges=[_challenge_to_dict(c) for c in result.recommended_challenges],
             is_fallback=result.is_fallback,
             eval_revision_count=result.eval_revision_count,
         )
@@ -257,6 +260,7 @@ def _to_response(r: RiskRecommendationResult) -> RiskRecommendationResponse:
         sources=[_to_source_item(c) for c in r.sources],
         recommended_tips=list(r.tips),
         recommended_diet=list(r.diet),
+        recommended_challenges=[_to_challenge_item(c) for c in r.recommended_challenges],
         has_required_data=r.has_required_data,
         missing_fields=list(r.missing_fields),
         action_hint=("navigate_to_health_info" if not r.has_required_data else None),
@@ -286,6 +290,37 @@ def _prediction_to_dict(p: PredictionSummary) -> dict[str, Any]:
         "risk_score": p.risk_score,
         "risk_level": p.risk_level,
         "contributing_factors": list(p.contributing_factors),
+    }
+
+
+def _to_challenge_item(c: RecommendedChallenge | dict[str, Any]) -> RecommendedChallengeItem:
+    """RecommendedChallenge(fresh, dataclass) 또는 이력 JSONB dict → RecommendedChallengeItem (응답 DTO).
+
+    캐시 히트는 응답 DTO 를 직접 복원하므로 이 함수를 타지 않지만, 향후 '권고 이력 조회' API 가
+    DB JSONB(list[dict]) 를 _to_response 에 넘길 수 있으므로 dict 입력도 안전하게 처리한다
+    (RecommendedChallengeItem.model_config extra="ignore" 로 잉여 키는 무시).
+    """
+    if isinstance(c, dict):
+        return RecommendedChallengeItem(**c)
+    return RecommendedChallengeItem(
+        template_id=c.template_id,
+        title=c.title,
+        category=c.category,
+        difficulty=c.difficulty,
+        reason=c.reason,
+        priority=c.priority,
+    )
+
+
+def _challenge_to_dict(c: RecommendedChallenge) -> dict[str, Any]:
+    """RecommendedChallenge → 이력 저장 dict (RecommendedChallengeItem 필드와 동형)."""
+    return {
+        "template_id": c.template_id,
+        "title": c.title,
+        "category": c.category,
+        "difficulty": c.difficulty,
+        "reason": c.reason,
+        "priority": c.priority,
     }
 
 
