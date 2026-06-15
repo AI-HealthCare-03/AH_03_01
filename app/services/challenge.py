@@ -41,8 +41,10 @@ from app.models.challenge import (
     VerificationType,
 )
 from app.models.health import DiseaseRisk
+from app.models.notifications import NotificationType
 from app.models.pet import GrowthEventSource
 from app.models.users import User
+from app.repositories.notification_repository import NotificationRepository
 from app.repositories.challenge_repository import (
     ChallengeInviteRepository,
     ChallengeParticipantRepository,
@@ -336,6 +338,18 @@ class ParticipantService:
             active_count = await self.repo.count_active(challenge_id)
             if challenge.status == ChallengeStatus.ACTIVE and active_count < (challenge.max_participants or 0):
                 await self.challenge_repo.update_instance(challenge, {"status": ChallengeStatus.RECRUITING})
+        try:
+            title = challenge.title[:80]
+            await NotificationRepository().create(
+                recipient_id=target_user_id,
+                actor_id=owner.id,
+                notification_type=NotificationType.CHALLENGE_KICK,
+                target_type="CHALLENGE",
+                target_id=challenge_id,
+                message=f"'{title}' 챌린지에서 탈퇴되었습니다.",
+            )
+        except Exception:
+            pass
         return result
 
     async def respond_to_pending(

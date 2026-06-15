@@ -176,39 +176,45 @@ export function useNotificationScheduler() {
         } catch { /* 무시 */ }
       }
 
-      // ── 소셜 알림 폴링 (챌린지 소통 / 커뮤니티) ──
+      // ── 소셜 알림 + 시스템 알림 폴링 ──
+      // 강제 탈퇴(CHALLENGE_KICK) 같은 중요 알림은 설정과 무관하게 항상 수신
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
       }
-      if (settings.challengeInteraction || settings.community) {
-        const poll = async () => {
-          try {
-            const lastPoll = localStorage.getItem(notifSocialPollKey())
-              ?? new Date(Date.now() - 60_000).toISOString();
-            const now = new Date().toISOString();
-            const notifs = await listNotifications(lastPoll);
-            localStorage.setItem(notifSocialPollKey(), now);
+      const poll = async () => {
+        try {
+          const lastPoll = localStorage.getItem(notifSocialPollKey())
+            ?? new Date(Date.now() - 60_000).toISOString();
+          const now = new Date().toISOString();
+          const notifs = await listNotifications(lastPoll);
+          localStorage.setItem(notifSocialPollKey(), now);
 
-            for (const n of notifs) {
-              const isChallenge = n.target_type === "VERIFICATION";
-              const isCommunity = n.target_type === "POST" || n.target_type === "COMMENT";
+          for (const n of notifs) {
+            const isKick = n.notification_type === "CHALLENGE_KICK";
+            const isChallenge = n.target_type === "VERIFICATION";
+            const isCommunity = n.target_type === "POST" || n.target_type === "COMMENT";
+
+            // 강제 탈퇴는 항상 노출, 나머지는 설정값 따름
+            if (!isKick) {
               if (isChallenge && !settings.challengeInteraction) continue;
               if (isCommunity && !settings.community) continue;
-
-              const category = isChallenge ? "챌린지" : "커뮤니티";
-              const title = n.notification_type === "LIKE"
-                ? "❤️ 좋아요"
-                : n.notification_type === "REPLY"
-                ? "💬 새 답글"
-                : "💬 새 댓글";
-              pushNotification({ category, title, body: n.message });
-              await sendBrowserNotification(title, n.message);
             }
-          } catch { /* 무시 */ }
-        };
-        pollIntervalRef.current = setInterval(poll, 30_000);
-      }
+
+            const category = isCommunity ? "커뮤니티" : "챌린지";
+            const title = isKick
+              ? "⛔ 챌린지 탈퇴"
+              : n.notification_type === "LIKE"
+              ? "❤️ 좋아요"
+              : n.notification_type === "REPLY"
+              ? "💬 새 답글"
+              : "💬 새 댓글";
+            pushNotification({ category, title, body: n.message });
+            await sendBrowserNotification(title, n.message);
+          }
+        } catch { /* 무시 */ }
+      };
+      pollIntervalRef.current = setInterval(poll, 30_000);
 
       // ── 챌린지 리마인드 ──────────────────────────
       if (settings.challengeRemind) {
