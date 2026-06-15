@@ -135,10 +135,11 @@ class QuizAttempt(models.Model):
     is_correct = fields.BooleanField()
     points_earned = fields.IntField(default=0)
     attempted_at = fields.DatetimeField(auto_now_add=True)
+    attempted_date = fields.DateField()  # Seoul 기준 날짜, 일일 중복 방지 인덱스 키
 
     class Meta:
         table = "quiz_attempts"
-        unique_together = (("user", "quiz"),)
+        unique_together = (("user", "quiz", "attempted_date"),)
 
 
 class PostLike(models.Model):

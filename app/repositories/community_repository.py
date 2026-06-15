@@ -6,6 +6,8 @@ from uuid import UUID
 
 from tortoise.functions import Count
 
+QUIZ_COOLDOWN_DAYS = 3
+
 from app.models.community import (
     Comment,
     CommentLike,
@@ -183,6 +185,9 @@ class DailyAssignmentRepository:
             await DailyQuizAssignment.get_or_create(user_id=user_id, quiz_id=quiz_id, assigned_date=today)
 
 
+QUIZ_COOLDOWN_DAYS = 3  # 한 번 푼 퀴즈는 N일 후 다시 출제 가능
+
+
 class QuizRepository:
     async def get_quiz_by_date(self, quiz_date: date) -> HealthQuiz | None:
         return await HealthQuiz.get_or_none(quiz_date=quiz_date, is_active=True)
@@ -191,16 +196,31 @@ class QuizRepository:
         return await HealthQuiz.get_or_none(id=quiz_id, is_active=True)
 
     async def list_unanswered_quizzes(self, user_id: UUID, limit: int) -> list[HealthQuiz]:
-        attempted_ids = list(await QuizAttempt.filter(user_id=user_id).values_list("quiz_id", flat=True))
-        quizzes = list(await HealthQuiz.filter(is_active=True).exclude(id__in=attempted_ids))
+        # 쿨다운 기간 내 푼 퀴즈만 제외 — 기간 초과 시 재출제 가능
+        cooldown_cutoff = datetime.now(timezone.utc) - timedelta(days=QUIZ_COOLDOWN_DAYS)
+        recent_ids = list(
+            await QuizAttempt.filter(user_id=user_id, attempted_at__gte=cooldown_cutoff).values_list(
+                "quiz_id", flat=True
+            )
+        )
+        quizzes = list(await HealthQuiz.filter(is_active=True).exclude(id__in=recent_ids))
         random.shuffle(quizzes)
         return quizzes[:limit]
 
     async def get_attempt(self, user_id: UUID, quiz_id: int) -> QuizAttempt | None:
         return await QuizAttempt.get_or_none(user_id=user_id, quiz_id=quiz_id)
 
+    async def get_today_attempt(self, user_id: UUID, quiz_id: int, today_start: datetime) -> QuizAttempt | None:
+        return await QuizAttempt.get_or_none(user_id=user_id, quiz_id=quiz_id, attempted_at__gte=today_start)
+
     async def create_attempt(
-        self, user_id: UUID, quiz_id: int, selected_option: QuizOption, is_correct: bool, points_earned: int
+        self,
+        user_id: UUID,
+        quiz_id: int,
+        selected_option: QuizOption,
+        is_correct: bool,
+        points_earned: int,
+        attempted_date: date,
     ) -> QuizAttempt:
         return await QuizAttempt.create(
             user_id=user_id,
@@ -208,6 +228,7 @@ class QuizRepository:
             selected_option=selected_option,
             is_correct=is_correct,
             points_earned=points_earned,
+            attempted_date=attempted_date,
         )
 
     async def list_attempts(self, user_id: UUID, page: int = 1, size: int = 20) -> tuple[list[QuizAttempt], int]:
