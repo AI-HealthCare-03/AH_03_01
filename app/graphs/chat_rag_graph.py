@@ -536,21 +536,7 @@ def _heuristic_prefilter(question: str) -> dict[str, Any] | None:
                 "is_greeting": False,
             }
 
-    # B. 명백한 개인정보 질문 → 범위 외 general 즉시 반환
-    if _PERSONAL_INFO_PREFILTER_PATTERN.match(stripped):
-        _logger.info("classify_intent prefilter PERSONAL_INFO hit: %s", stripped[:30])
-        return {
-            "intent": "general",
-            "diseases": [],
-            "topics": [],
-            "needs_health_data": False,
-            "needs_challenge_catalog": False,
-            "missing_fields": [],
-            "action_hint": None,
-            "is_greeting": True,
-        }
-
-    # C. 인사·감사·작별 (기존 로직 유지)
+    # B. 인사·감사·작별 (기존 로직 유지) — 개인정보 질문은 classify_intent 상단에서 단일 처리
     if len(stripped) > _PREFILTER_MAX_LEN:
         return None
     lowered = stripped.lower()
