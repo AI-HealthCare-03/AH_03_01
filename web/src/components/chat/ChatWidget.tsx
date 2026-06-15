@@ -23,10 +23,10 @@ export default function ChatWidget() {
         <div
           className={[
             "fixed z-50",
-            /* 모바일: 하단 탭바(56px) + 버튼 여백(80px) 위, 전체 너비 */
-            "bottom-[136px] left-0 right-0 mx-2",
-            /* 데스크탑: 우하단 고정, 크기 패널에 위임 */
-            "md:bottom-[88px] md:left-auto md:right-5 md:mx-0",
+            /* 모바일: 하단 탭바(56px) + 버튼 여백(80px) 위, 전체 너비, 최대 높이 지정 */
+            "bottom-[136px] left-0 right-0 mx-2 h-[60vh]",
+            /* 데스크탑: 우하단 고정, 뷰포트 높이 제한으로 작은 창에서도 스크롤 동작 */
+            "md:bottom-[88px] md:left-auto md:right-5 md:mx-0 md:h-auto md:max-h-[calc(100vh-120px)]",
           ].join(" ")}
         >
           <ChatPanel />
