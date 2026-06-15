@@ -474,13 +474,16 @@ def _get_top5_features(
             return []
         explainer = shap.TreeExplainer(lgbm_model)
         shap_vals = explainer.shap_values(X_in)
-        # 항상 위험 클래스(마지막) 기준으로 SHAP 계산
-        # → positive = 위험 증가↑, negative = 위험 감소↓ 로 일관된 해석
+        # 예측된 클래스 기준으로 SHAP 계산 (모델 아티팩트 원본 risk_predictor.py 와 동일).
+        # 마지막(최고위험) 클래스를 고정으로 쓰면, 예측 클래스가 중간 단계(전당뇨·주의혈압·
+        # 고혈압1기 등)인 사용자에서 핵심 위험인자(혈당·혈압)가 최고위험 클래스 대비
+        # 음수가 되어 "위험 감소↓" 로 뒤집혀 점수와 모순된다. 예측 클래스로 설명해야
+        # positive = 해당 위험 단계로의 기여 증가↑ 로 점수 방향과 일치한다.
         if isinstance(shap_vals, list):
-            risk_cls_idx = len(shap_vals) - 1
+            risk_cls_idx = min(predicted_class, len(shap_vals) - 1)
             sv = np.array(shap_vals[risk_cls_idx]).flatten()[: len(feature_cols)]
         elif isinstance(shap_vals, np.ndarray) and shap_vals.ndim == 3:
-            risk_cls_idx = shap_vals.shape[2] - 1
+            risk_cls_idx = min(predicted_class, shap_vals.shape[2] - 1)
             sv = shap_vals[0, :, risk_cls_idx]
         else:
             sv = np.array(shap_vals).flatten()[: len(feature_cols)]
