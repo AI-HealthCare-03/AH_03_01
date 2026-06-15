@@ -238,6 +238,7 @@ export default function MyPage() {
           { href: "/mypage/password", label: "비밀번호 변경", icon: "🔒" },
           { href: "/mypage/display-settings", label: "화면 설정", icon: "🖥️" },
           { href: "/mypage/notification-settings", label: "알림 설정", icon: "🔔" },
+          { href: "/mypage/wearable", label: "웨어러블 기기 연동", icon: "⌚" },
           { href: "/mypage/invitations", label: "받은 초대", icon: "📨" },
           { href: "/mypage/points", label: "포인트 내역", icon: "💰" },
           { href: "/attendance", label: "출석 체크", icon: "📅" },
