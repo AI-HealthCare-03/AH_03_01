@@ -46,25 +46,27 @@ class TestHealthReportApi(TestCase):
             )
             assert res.status_code == status.HTTP_400_BAD_REQUEST
 
-    async def test_pdf_returns_pdf_url(self):
-        # 실제 chromium/디스크 저장은 무거우므로 build_and_store 를 목으로 대체.
-        # 라우터가 PDF 경로에서 200 + pdf_url 을 채워 응답하는지만 검증.
+    async def test_pdf_returns_inline_download(self):
+        # 실제 chromium 렌더는 무거우므로 build_bytes 를 목으로 대체.
+        # PHI 보호: 디스크 저장 없이 PDF 바이트를 attachment 로 바로 내려주는지 검증.
         from unittest.mock import AsyncMock, patch
 
         async with make_client() as client:
             token = await signup_and_login(client, email="report_pdf@example.com", phone_number="01044440003")
             headers = {"Authorization": f"Bearer {token}"}
-            fake_url = "/media/uploads/report_pdf/20260514/1/abc.pdf"
+            fake_pdf = b"%PDF-1.4 fake"
             with patch(
-                "app.apis.v1.health_routers.ReportPdfService.build_and_store",
-                AsyncMock(return_value=fake_url),
+                "app.apis.v1.health_routers.ReportPdfService.build_bytes",
+                AsyncMock(return_value=(fake_pdf, "care_report_2026-05.pdf")),
             ):
                 res = await client.get(
                     "/api/v1/health-reports?period=monthly&month=2026-05&format=pdf",
                     headers=headers,
                 )
             assert res.status_code == status.HTTP_200_OK
-            assert res.json()["pdf_url"] == fake_url
+            assert res.headers["content-type"] == "application/pdf"
+            assert "attachment" in res.headers["content-disposition"]
+            assert res.content == fake_pdf
 
     async def test_empty_month_is_null_safe(self):
         """데이터 없는 월: 빈/널 안전. 질환 3종은 has_prediction=False 로 모두 노출."""
@@ -237,25 +239,27 @@ class TestHealthReportApi(TestCase):
             res = await client.get("/api/v1/health-reports?period=custom", headers=headers)
             assert res.status_code == status.HTTP_400_BAD_REQUEST
 
-    async def test_custom_period_pdf_returns_pdf_url(self):
+    async def test_custom_period_pdf_returns_download(self):
         # custom + format=pdf 도 monthly 와 동일하게 동작해야 한다(#183 리뷰 확인 항목).
-        # build_for_range payload 가 build_and_store 로 흘러 200 + pdf_url 을 채워 응답한다.
+        # PHI 보호: build_for_range payload 가 build_bytes 로 흘러 attachment 다운로드된다.
         from unittest.mock import AsyncMock, patch
 
         async with make_client() as client:
             token = await signup_and_login(client, email="report_custom_pdf@example.com", phone_number="01044440010")
             headers = {"Authorization": f"Bearer {token}"}
-            fake_url = "/media/uploads/report_pdf/20260515/1/abc.pdf"
+            fake_pdf = b"%PDF-1.4 custom"
             with patch(
-                "app.apis.v1.health_routers.ReportPdfService.build_and_store",
-                AsyncMock(return_value=fake_url),
+                "app.apis.v1.health_routers.ReportPdfService.build_bytes",
+                AsyncMock(return_value=(fake_pdf, "care_report_2026-05-01~2026-05-15.pdf")),
             ):
                 res = await client.get(
                     "/api/v1/health-reports?period=custom&date_from=2026-05-01&date_to=2026-05-15&format=pdf",
                     headers=headers,
                 )
             assert res.status_code == status.HTTP_200_OK
-            assert res.json()["pdf_url"] == fake_url
+            assert res.headers["content-type"] == "application/pdf"
+            assert "attachment" in res.headers["content-disposition"]
+            assert res.content == fake_pdf
 
 
 def test_build_trends_secondary_latest_with_trailing_none() -> None:

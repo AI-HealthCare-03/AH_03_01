@@ -3,8 +3,11 @@
 흐름: MonthlyReportService.get_or_build 가 만든 구조화 dict
   → build_report_html() (순수 함수, 단위 테스트 대상)
   → Playwright(chromium) set_content → page.pdf (bytes)
-  → FileUploadService 디스크 저장 + FileUpload(REPORT_PDF) row
-  → access_url(/media/...) 반환.
+  → 인증된 라우트가 응답 본문으로 즉시 다운로드(attachment) 시켜 줌.
+
+PHI(혈압·혈당·위험도) 가 담긴 PDF 는 디스크에 영속하지 않는다 — 무인증·무만료
+정적(/media) 서빙으로 노출되는 것을 막기 위해, 매 요청마다 메모리상에서만 렌더하고
+인증된 사용자에게 바로 흘려보낸다.
 
 외부 CDN/네트워크 의존 없음: 차트/게이지는 모두 인라인 SVG 로 서버 생성하며
 chromium 은 set_content 로 주입된 HTML 만 오프라인 렌더한다.
@@ -13,14 +16,10 @@ chromium 은 set_content 로 주입된 HTML 만 오프라인 렌더한다.
 from __future__ import annotations
 
 import html
-import io
 import math
+import re
 from datetime import datetime
 from typing import Any
-
-from app.models.files import FileType
-from app.models.users import User
-from app.services.files import FileUploadService
 
 # trend metric(get_or_build _build_trends 의 metric) → (한글 라벨, 단위). 없으면 원본 key 노출.
 _METRIC_LABELS: dict[str, tuple[str, str]] = {
@@ -359,24 +358,22 @@ async def render_pdf_bytes(html_str: str) -> bytes:
 
 
 class ReportPdfService:
-    """리포트 dict → PDF 생성 → 파일 저장 → access_url."""
+    """리포트 dict → PDF bytes(+다운로드 파일명). 디스크/미디어 영속 없음."""
 
-    def __init__(self) -> None:
-        self.files = FileUploadService()
+    async def build_bytes(self, report: dict[str, Any]) -> tuple[bytes, str]:
+        """리포트 dict → (PDF bytes, 다운로드 파일명).
 
-    async def build_and_store(self, user: User, report: dict[str, Any]) -> str:
+        PHI 보호: 파일을 디스크에 저장하지 않고 메모리상 바이트만 반환한다.
+        호출하는 라우트가 인증된 사용자에게 attachment 로 즉시 내려보낸다.
+        """
         html_str = build_report_html(report)
         pdf_bytes = await render_pdf_bytes(html_str)
-        year_month = str(report.get("year_month", "report"))
-        original_name = f"care_report_{year_month}.pdf"
-        upload = await self.files.upload(
-            user,
-            upload_file_stream=io.BytesIO(pdf_bytes),
-            original_name=original_name,
-            mime_type="application/pdf",
-            file_type=FileType.REPORT_PDF,
-        )
-        return upload.access_url
+        # year_month 는 사용자 쿼리에서 유래하므로 Content-Disposition 헤더에
+        # 그대로 쓰지 않는다(개행/따옴표 인젝션 차단). 안전 문자만 남긴다.
+        raw = str(report.get("year_month", "report"))
+        safe = re.sub(r"[^0-9A-Za-z_-]", "", raw) or "report"
+        filename = f"care_report_{safe}.pdf"
+        return pdf_bytes, filename
 
 
 __all__ = ["ReportPdfService", "build_report_html", "render_pdf_bytes"]
