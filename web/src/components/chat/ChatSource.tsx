@@ -15,8 +15,6 @@ const SOURCE_LABELS: Record<string, string> = {
   KSH2022: "고혈압 진료지침 제5판",
   KDA2025: "당뇨병 진료지침 2025",
   KSOLA2022: "이상지질혈증 진료지침 2022",
-  GUIDE: "서비스 이용 가이드",
-  CHALLENGE_CATALOG: "챌린지 안내",
 };
 
 const MAX_SOURCES = 3;
@@ -37,11 +35,11 @@ function toDocs(sources: ChatSource[]): SourceDoc[] {
   const docs: SourceDoc[] = [];
   for (const s of sources) {
     const code = s.source ?? undefined;
-    const label = (code && SOURCE_LABELS[code]) || s.title || "출처";
-    const key = code ?? label;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    docs.push({ key, label, url: s.url });
+    const label = code && SOURCE_LABELS[code];
+    if (!label) continue;
+    if (seen.has(code!)) continue;
+    seen.add(code!);
+    docs.push({ key: code!, label, url: s.url });
     if (docs.length >= MAX_SOURCES) break;
   }
   return docs;
