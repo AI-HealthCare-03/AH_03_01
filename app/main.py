@@ -24,14 +24,12 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 # 로컬 프론트엔드(Next.js dev) 와 운영 도메인에서 호출 허용.
+_cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000", config.FRONTEND_BASE_URL]
+if config.EXTRA_CORS_ORIGIN:
+    _cors_origins.append(config.EXTRA_CORS_ORIGIN)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://carelog.ai.kr",
-        config.FRONTEND_BASE_URL,
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
