@@ -435,7 +435,7 @@ class ParticipantService:
         existing = await self.repo.get_by_user(challenge_id, request.invitee_id)
         if existing and existing.status == ParticipantStatus.APPROVED:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 참여 중인 사용자입니다.")
-        return await self.invite_repo.create(
+        invite = await self.invite_repo.create(
             data={
                 "challenge_id": challenge_id,
                 "inviter_id": owner.id,
@@ -444,6 +444,19 @@ class ParticipantService:
                 "expires_at": datetime.now(config.TIMEZONE) + INVITE_TTL,
             }
         )
+        try:
+            from app.models.notifications import NotificationType as NT  # noqa: PLC0415
+            await NotificationRepository().create(
+                recipient_id=request.invitee_id,
+                actor_id=owner.id,
+                notification_type=NT.CHALLENGE_INVITE,
+                target_type="CHALLENGE",
+                target_id=challenge_id,
+                message=f"'{challenge.title[:40]}' 챌린지에 초대되었습니다.",
+            )
+        except Exception:
+            pass
+        return invite
 
     async def list_my_invitations(self, user: User, *, status_filter: str | None) -> list[ChallengeInvite]:
         """내가 받은(invitee) 직접 초대 목록.
