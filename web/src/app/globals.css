@@ -154,11 +154,13 @@ html.dark .hover\:bg-surface:hover { background-color: #2e2e2e !important; }
 html.dark ::-webkit-scrollbar-thumb { background: #444444; }
 
 /* ── 노란 배경(bg-brand, !bg-brand) → 글씨 검은색 ────────
-   같은 요소에 bg-brand + text-brand-black 이 함께 있는 경우 포함 */
+   같은 요소에 bg-brand + text-brand-black 이 함께 있는 경우 포함.
+   예외: .dark-keep-color 를 단 요소(및 그 자손)는 자기 색을 유지 —
+   노란 배경 위 별도 색이 필요한 아이콘·뱃지 등에 이 클래스를 붙이면 됨. */
 html.dark .bg-brand,
 html.dark .\!bg-brand,
-html.dark .bg-brand *,
-html.dark .\!bg-brand *,
+html.dark .bg-brand *:not(.dark-keep-color):not(.dark-keep-color *),
+html.dark .\!bg-brand *:not(.dark-keep-color):not(.dark-keep-color *),
 html.dark .bg-brand.text-brand-black,
 html.dark .\!bg-brand.\!text-brand-black { color: #111111 !important; }
 
