@@ -36,3 +36,14 @@ CREATE TABLE IF NOT EXISTS support_inquiry_answers (
     content TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- 5. community_reports 테이블 생성
+CREATE TABLE IF NOT EXISTS community_reports (
+    id BIGSERIAL PRIMARY KEY,
+    target_type VARCHAR(20) NOT NULL,
+    target_id BIGINT NOT NULL,
+    reason VARCHAR(20) NOT NULL,
+    reporter_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(reporter_id, target_type, target_id)
+);
