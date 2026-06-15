@@ -694,6 +694,8 @@ class MonthlyReportService:
         avg_sleep: float | None = None
         if sleep_vals:
             avg_sleep = round(sum(sleep_vals) / len(sleep_vals), 2)
+        elif recorded_days and profile is not None and profile.sleep_weekday is not None:
+            avg_sleep = round(float(profile.sleep_weekday), 2)
         avg_steps = round(sum(step_vals) / len(step_vals), 1) if step_vals else None
         return {
             "recorded_days": len(recorded_days),
