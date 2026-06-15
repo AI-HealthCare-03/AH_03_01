@@ -288,11 +288,12 @@ function DiseaseRiskSection({ risks }: { risks: ReportDiseaseRisk[] }) {
             <p className="text-xs font-semibold text-text-secondary">
               {DISEASE_LABEL[r.disease_type] ?? r.disease_type}
             </p>
+            {/* 라벨은 모델 클래스(risk_level→grade) 기준 — score 백분위 5단계 라벨
+                (risk_level_label)은 실제 판정과 어긋나 부정확해 위험도 탭과 동일하게 미사용. */}
             {r.has_prediction && r.risk_score != null ? (
               <RiskSemiGauge
                 score={r.risk_score}
                 grade={toRiskGrade(r.risk_level)}
-                riskLevelLabel={r.risk_level_label ?? undefined}
                 size={120}
               />
             ) : (
