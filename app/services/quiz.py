@@ -4,6 +4,7 @@ from datetime import date, datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from tortoise.exceptions import IntegrityError
 from tortoise.transactions import in_transaction
 
 from app.models.community import QuizAttempt
@@ -75,19 +76,22 @@ class HealthQuizService:
 
         is_correct = selected_option == quiz.correct_option
         points_earned = 0
-        async with in_transaction():
-            if is_correct:
-                result = await self.reward_service.grant_quiz_correct(user_id=user_id, quiz_id=quiz_id)
-                points_earned = result.amount
+        try:
+            async with in_transaction():
+                if is_correct:
+                    result = await self.reward_service.grant_quiz_correct(user_id=user_id, quiz_id=quiz_id)
+                    points_earned = result.amount
 
-            await self.repo.create_attempt(
-                user_id=user_id,
-                quiz_id=quiz_id,
-                selected_option=selected_option,
-                is_correct=is_correct,
-                points_earned=points_earned,
-                attempted_date=today,
-            )
+                await self.repo.create_attempt(
+                    user_id=user_id,
+                    quiz_id=quiz_id,
+                    selected_option=selected_option,
+                    is_correct=is_correct,
+                    points_earned=points_earned,
+                    attempted_date=today,
+                )
+        except IntegrityError:
+            raise ValueError("already_answered")
         return {
             "is_correct": is_correct,
             "correct_option": quiz.correct_option,
