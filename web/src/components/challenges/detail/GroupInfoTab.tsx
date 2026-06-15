@@ -91,11 +91,12 @@ export default function GroupInfoTab({
     challenge.status === "RECRUITING" &&
     participants.length < (challenge.max_participants ?? participants.length);
 
-  // 참가 후 시작일이 지났으면 모집 중이라도 인증 가능
+  // APPROVED 멤버에 한해, 시작일 지났으면 모집 중이라도 인증 가능
   const todayStr = new Date().toLocaleDateString("sv");
   const canVerify =
-    challenge.status === "ACTIVE" ||
-    (challenge.status === "RECRUITING" && challenge.start_date <= todayStr);
+    myParticipant?.status === "APPROVED" &&
+    (challenge.status === "ACTIVE" ||
+      (challenge.status === "RECRUITING" && challenge.start_date <= todayStr));
 
   const handleCopyCode = async () => {
     if (!challenge.invite_code) return;

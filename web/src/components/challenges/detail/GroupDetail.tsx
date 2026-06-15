@@ -1,8 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import ChallengeCategoryIcon, { CATEGORY_CONFIG } from "@/components/challenges/common/ChallengeCategoryIcon";
 import ChallengeProgressBar from "@/components/challenges/common/ChallengeProgressBar";
@@ -55,12 +53,6 @@ export default function GroupDetail({
       : 0;
 
   const participants = participantsData?.items ?? [];
-
-  // 참가 후 시작일이 지났으면 모집 중이라도 인증 가능
-  const todayStr = new Date().toLocaleDateString("sv");
-  const canVerify =
-    challenge.status === "ACTIVE" ||
-    (challenge.status === "RECRUITING" && challenge.start_date <= todayStr);
 
   /* 초대 코드 복사 */
   const handleCopyInviteCode = async () => {
