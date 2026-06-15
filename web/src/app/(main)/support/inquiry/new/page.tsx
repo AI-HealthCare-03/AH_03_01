@@ -19,8 +19,9 @@ function NewInquiryForm() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
 
-  const initialCategory =
-    (searchParams.get("category") as InquiryCategory | null) ?? "SERVICE_INQUIRY";
+  const raw = searchParams.get("category");
+  const initialCategory: InquiryCategory =
+    CATEGORIES.some((c) => c.value === raw) ? (raw as InquiryCategory) : "SERVICE_INQUIRY";
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");

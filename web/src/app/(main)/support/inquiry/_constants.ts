@@ -14,6 +14,6 @@ export const STATUS_LABEL: Record<InquiryStatus, string> = {
 };
 
 export const STATUS_STYLE: Record<InquiryStatus, string> = {
-  PENDING: "bg-yellow-100 text-yellow-700",
-  ANSWERED: "bg-green-100 text-green-700",
+  PENDING: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300",
+  ANSWERED: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
 };
