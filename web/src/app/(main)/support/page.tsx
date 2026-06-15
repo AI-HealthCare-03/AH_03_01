@@ -67,13 +67,21 @@ export default function SupportPage() {
   const [faqCategory, setFaqCategory] = useState<FAQCategory | "ALL">("ALL");
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  const { data: faqs = [] } = useQuery({
+  const {
+    data: faqs = [],
+    isLoading: faqsLoading,
+    isError: faqsError,
+  } = useQuery({
     queryKey: ["faqs", faqCategory],
     queryFn: () =>
       getFAQs(faqCategory !== "ALL" ? { category: faqCategory } : undefined),
   });
 
-  const { data: inquiries = [] } = useQuery({
+  const {
+    data: inquiries = [],
+    isLoading: inquiriesLoading,
+    isError: inquiriesError,
+  } = useQuery({
     queryKey: ["inquiries", "recent"],
     queryFn: () => listInquiries({ limit: 3 }),
   });
@@ -144,7 +152,15 @@ export default function SupportPage() {
         </div>
 
         {/* 아코디언 */}
-        {filteredFaqs.length === 0 ? (
+        {faqsLoading ? (
+          <div className="space-y-2">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-12 bg-surface animate-pulse rounded-[12px]" />
+            ))}
+          </div>
+        ) : faqsError ? (
+          <p className="py-10 text-center text-sm text-text-tertiary">FAQ를 불러오지 못했어요. 잠시 후 다시 시도해주세요.</p>
+        ) : filteredFaqs.length === 0 ? (
           <p className="py-10 text-center text-sm text-text-tertiary">
             {search ? "검색 결과가 없어요." : "아직 등록된 FAQ가 없어요."}
           </p>
@@ -189,7 +205,15 @@ export default function SupportPage() {
           </Link>
         </div>
 
-        {inquiries.length === 0 ? (
+        {inquiriesLoading ? (
+          <div className="space-y-2">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-12 bg-surface animate-pulse rounded-[12px]" />
+            ))}
+          </div>
+        ) : inquiriesError ? (
+          <p className="py-8 text-center text-sm text-text-tertiary border border-border rounded-[12px]">문의 내역을 불러오지 못했어요. 잠시 후 다시 시도해주세요.</p>
+        ) : inquiries.length === 0 ? (
           <div className="py-8 text-center border border-border rounded-[12px]">
             <p className="text-sm text-text-tertiary mb-2">아직 문의 내역이 없어요.</p>
             <Link
