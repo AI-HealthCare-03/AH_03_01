@@ -36,7 +36,7 @@ export default function AdminNoticesPage() {
   });
 
   function openCreate() { setForm(EMPTY); setCreating(true); setEditing(null); }
-  function openEdit(n: AdminNoticeItem) { setForm({ title: n.title, content: "" }); setEditing(n); setCreating(false); }
+  function openEdit(n: AdminNoticeItem) { setForm({ title: n.title, content: n.content ?? "" }); setEditing(n); setCreating(false); }
 
   return (
     <div className="space-y-5">

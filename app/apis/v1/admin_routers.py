@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.dependencies.security import get_admin_user
-from app.dtos.support import FAQResponse, InquiryAnswerCreateRequest, InquiryAnswerResponse, InquiryDetailResponse, InquiryListItem
+from app.dtos.support import AdminFAQResponse, FAQResponse, InquiryAnswerCreateRequest, InquiryAnswerResponse, InquiryDetailResponse, InquiryListItem
 from app.models.challenge import Challenge, ChallengeParticipant, ChallengeStatus
 from app.models.community import Comment, Post, PostCategory, Report, ReportTargetType
 from app.models.support import FAQ, FAQCategory, Inquiry, InquiryStatus
@@ -371,38 +371,38 @@ class FAQUpdateRequest(BaseModel):
     order: int | None = None
 
 
-@admin_router.get("/faqs", response_model=list[FAQResponse])
+@admin_router.get("/faqs", response_model=list[AdminFAQResponse])
 async def list_faqs_admin(
     _: Annotated[User, Depends(get_admin_user)],
     show_deleted: bool = Query(False),  # noqa: B008
-) -> list[FAQResponse]:
+) -> list[AdminFAQResponse]:
     qs = FAQ.all()
     if not show_deleted:
         qs = qs.filter(is_deleted=False)
     faqs = await qs.order_by("order", "id")
-    return [FAQResponse.model_validate(f) for f in faqs]
+    return [AdminFAQResponse.model_validate(f) for f in faqs]
 
 
-@admin_router.post("/faqs", response_model=FAQResponse, status_code=status.HTTP_201_CREATED)
+@admin_router.post("/faqs", response_model=AdminFAQResponse, status_code=status.HTTP_201_CREATED)
 async def create_faq(
     body: FAQCreateRequest,
     _: Annotated[User, Depends(get_admin_user)],
-) -> FAQResponse:
+) -> AdminFAQResponse:
     faq = await FAQ.create(
         question=body.question,
         answer=body.answer,
         category=body.category,
         order=body.order,
     )
-    return FAQResponse.model_validate(faq)
+    return AdminFAQResponse.model_validate(faq)
 
 
-@admin_router.patch("/faqs/{faq_id}", response_model=FAQResponse)
+@admin_router.patch("/faqs/{faq_id}", response_model=AdminFAQResponse)
 async def update_faq(
     faq_id: int,
     body: FAQUpdateRequest,
     _: Annotated[User, Depends(get_admin_user)],
-) -> FAQResponse:
+) -> AdminFAQResponse:
     faq = await FAQ.get_or_none(id=faq_id, is_deleted=False)
     if not faq:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="FAQ를 찾을 수 없습니다.")
@@ -410,7 +410,7 @@ async def update_faq(
     if update_data:
         await faq.update_from_dict(update_data)
         await faq.save()
-    return FAQResponse.model_validate(faq)
+    return AdminFAQResponse.model_validate(faq)
 
 
 @admin_router.delete("/faqs/{faq_id}", status_code=status.HTTP_204_NO_CONTENT)

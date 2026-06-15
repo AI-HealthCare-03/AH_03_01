@@ -38,7 +38,7 @@ export default function AdminDashboard() {
 
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
         <StatCard label="전체 회원" value={stats.total_users} />
-        <StatCard label="활성 회원" value={stats.active_users} sub={`${Math.round((stats.active_users / stats.total_users) * 100)}%`} />
+        <StatCard label="활성 회원" value={stats.active_users} sub={`${stats.total_users > 0 ? Math.round((stats.active_users / stats.total_users) * 100) : 0}%`} />
         <StatCard label="전체 챌린지" value={stats.total_challenges} />
         <StatCard label="진행 중 챌린지" value={stats.active_challenges} />
         <StatCard label="전체 게시글" value={stats.total_posts} />

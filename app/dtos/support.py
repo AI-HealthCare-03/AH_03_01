@@ -13,6 +13,9 @@ class FAQResponse(BaseSerializerModel):
     answer: str
     category: FAQCategory
     order: int
+
+
+class AdminFAQResponse(FAQResponse):
     is_deleted: bool = False
 
 
