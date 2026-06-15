@@ -172,17 +172,17 @@ export default function DetailTab() {
       ? calcBmi(profile.height_cm, displayWeightKg)
       : null;
 
-  /* v2 필드 매핑 */
+  /* v2 필드 매핑 — 날짜 선택 시 체중/허리둘레만 해당 날짜 기준, 나머지 프로필 항목은 날짜 무관 */
   const chronicLabel =
-    profile?.chronic_diseases && profile.chronic_diseases.length > 0
+    !selectedDate && profile?.chronic_diseases && profile.chronic_diseases.length > 0
       ? profile.chronic_diseases.map((d) => CHRONIC_LABEL[d] ?? d).join(", ")
       : null;
-  const currentSmoker = profile?.current_smoker; /* 1=흡연, 0=비흡연 */
-  const alcoholFreqY = profile?.alcohol_freq_y; /* 1=안마심…6=주4회이상 */
-  const familyDm = profile?.family_dm; /* 1=있음, 0=없음, -1=모름 */
-  const familyHp = profile?.family_hp;
-  const pregnancyStatus = profile?.pregnancy_status;
-  const medications = profile?.medications;
+  const currentSmoker = selectedDate ? null : profile?.current_smoker;
+  const alcoholFreqY = selectedDate ? null : profile?.alcohol_freq_y;
+  const familyDm = selectedDate ? null : profile?.family_dm;
+  const familyHp = selectedDate ? null : profile?.family_hp;
+  const pregnancyStatus = selectedDate ? null : profile?.pregnancy_status;
+  const medications = selectedDate ? null : profile?.medications;
   const medicationLabel =
     medications && medications.length > 0 ? medications.join(", ") : null;
 
