@@ -90,9 +90,7 @@ async def list_users(
     users = await qs.order_by("-created_at").offset(offset).limit(limit)
     result = []
     for u in users:
-        report_count = await Report.filter(
-            target_type=ReportTargetType.POST,
-        ).filter(reporter_id=u.id).count()
+        report_count = await Report.filter(reporter_id=u.id).count()
         result.append(AdminUserItem(
             id=str(u.id),
             email=u.email,
