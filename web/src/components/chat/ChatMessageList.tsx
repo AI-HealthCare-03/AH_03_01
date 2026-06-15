@@ -36,21 +36,20 @@ export default function ChatMessageList({
       className="flex-1 overflow-y-auto px-4 py-4 space-y-3"
       aria-label="대화 내용"
     >
-      {isEmpty ? (
-        /* 빈 상태: 인사 버블 + FAQ 칩 */
-        <div className="space-y-4">
-          <div className="flex justify-start">
-            <div className="max-w-[85%] bg-white border border-border rounded-[16px] rounded-tl-[4px] px-4 py-3 space-y-1">
-              <p className="text-sm font-semibold text-text-primary">
-                안녕하세요! 케어로그 건강 도우미예요 👋
-              </p>
-              <p className="text-sm leading-relaxed text-text-secondary">
-                만성질환 관리, 생활습관, 챌린지에 대해 무엇이든 물어보세요!
-              </p>
-            </div>
-          </div>
-          <FaqChips onSelect={onFaqSelect} />
+      {/* 인사 버블 — 항상 최상단 고정 */}
+      <div className="flex justify-start">
+        <div className="max-w-[85%] bg-white border border-border rounded-[16px] rounded-tl-[4px] px-4 py-3 space-y-1">
+          <p className="text-sm font-semibold text-text-primary">
+            안녕하세요! 케어로그 건강 도우미예요 👋
+          </p>
+          <p className="text-sm leading-relaxed text-text-secondary">
+            만성질환 관리, 생활습관, 챌린지에 대해 무엇이든 물어보세요!
+          </p>
         </div>
+      </div>
+
+      {isEmpty ? (
+        <FaqChips onSelect={onFaqSelect} />
       ) : (
         <>
           {messages.map((msg) => (
