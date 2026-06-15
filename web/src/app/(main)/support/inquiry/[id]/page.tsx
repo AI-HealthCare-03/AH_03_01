@@ -17,6 +17,7 @@ export default function InquiryDetailPage() {
   const [editContent, setEditContent] = useState("");
   const [editError, setEditError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const {
     data: inquiry,
@@ -50,6 +51,9 @@ export default function InquiryDetailPage() {
     onSuccess: () => {
       queryClient.removeQueries({ queryKey: ["inquiries"] });
       router.replace("/support/inquiry");
+    },
+    onError: () => {
+      setDeleteError("삭제에 실패했어요. 잠시 후 다시 시도해주세요.");
     },
   });
 
@@ -135,6 +139,9 @@ export default function InquiryDetailPage() {
           </div>
         )}
       </div>
+      {deleteError && (
+        <p className="text-sm text-status-error text-center">{deleteError}</p>
+      )}
 
       {isEditing ? (
         /* 수정 폼 */
