@@ -47,17 +47,27 @@ export default function ReportSupportModal({ onClose }: ReportSupportModalProps)
       />
 
       {/* 모달 */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-        <div className="bg-white rounded-[16px] w-full max-w-sm p-5 shadow-xl">
-          <h2 className="text-base font-bold text-text-primary mb-1">불편사항 신고</h2>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center px-4"
+        onClick={onClose}
+      >
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="report-modal-title"
+          className="bg-white rounded-[16px] w-full max-w-sm p-5 shadow-xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h2 id="report-modal-title" className="text-base font-bold text-text-primary mb-1">불편사항 신고</h2>
           <p className="text-xs text-text-tertiary mb-4">
             서비스 이용 중 불편한 점을 알려주세요.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-text-primary">내용</label>
+              <label htmlFor="report-content" className="text-sm font-semibold text-text-primary">내용</label>
               <textarea
+                id="report-content"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 maxLength={2000}
