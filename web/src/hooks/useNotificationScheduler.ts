@@ -120,6 +120,10 @@ export function useNotificationScheduler() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    // 로그아웃 상태에서는 알림 폴링을 시작하지 않는다. 인증이 필요한 /notifications 폴이
+    // 401 을 받으면 전역 401 인터셉터가 /login 으로 강제 이동시켜, 가입·비밀번호 재설정 등
+    // 로그아웃 공개 흐름이 30초마다 끊긴다. 로그인하면 isAuthenticated 변화로 다시 셋업된다.
+    if (!isAuthenticated) return;
 
     const timers: ReturnType<typeof setTimeout>[] = [];
 
@@ -270,13 +274,7 @@ export function useNotificationScheduler() {
       window.removeEventListener("notif-reschedule", handleReschedule);
       window.removeEventListener("storage", handleStorage);
     };
-  }, []);
-
-  // isAuthenticated 가 true 로 바뀔 때(로그인 / 페이지 새로고침) 소급 복구 + 재스케줄
-  // (신규 가입자는 notif-last-seen:{userId} 가 없어 replayMissed 가 자동 스킵됨)
-  useEffect(() => {
-    if (!isAuthenticated || !scheduleAllRef.current) return;
-    firstRunRef.current = true;
-    scheduleAllRef.current();
+    // isAuthenticated 가 true 로 바뀌면(로그인) effect 가 다시 실행되며 소급 복구 + 폴링을
+    // 셋업하고, false 로 바뀌면(로그아웃) 위 cleanup 으로 폴링 타이머를 정리한다.
   }, [isAuthenticated]);
 }
