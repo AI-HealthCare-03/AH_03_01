@@ -3,25 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { listInquiries } from "@/lib/api/support";
-import type { InquiryCategory, InquiryStatus } from "@/types/support";
-
-const CATEGORY_LABEL: Record<InquiryCategory, string> = {
-  SERVICE_INQUIRY: "서비스 문의",
-  ACCOUNT_INQUIRY: "계정 문의",
-  ERROR_REPORT: "오류 신고",
-  SANCTIONS_INQUIRY: "제재 문의",
-  ETC: "기타",
-};
-
-const STATUS_LABEL: Record<InquiryStatus, string> = {
-  PENDING: "답변 대기",
-  ANSWERED: "답변 완료",
-};
-
-const STATUS_STYLE: Record<InquiryStatus, string> = {
-  PENDING: "bg-yellow-100 text-yellow-700",
-  ANSWERED: "bg-green-100 text-green-700",
-};
+import { CATEGORY_LABEL, STATUS_LABEL, STATUS_STYLE } from "./_constants";
 
 export default function InquiryListPage() {
   const {

@@ -5,25 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteInquiry, getInquiry, updateInquiry } from "@/lib/api/support";
-import type { InquiryCategory, InquiryStatus } from "@/types/support";
-
-const CATEGORY_LABEL: Record<InquiryCategory, string> = {
-  SERVICE_INQUIRY: "서비스 문의",
-  ACCOUNT_INQUIRY: "계정 문의",
-  ERROR_REPORT: "오류 신고",
-  SANCTIONS_INQUIRY: "제재 문의",
-  ETC: "기타",
-};
-
-const STATUS_LABEL: Record<InquiryStatus, string> = {
-  PENDING: "답변 대기",
-  ANSWERED: "답변 완료",
-};
-
-const STATUS_STYLE: Record<InquiryStatus, string> = {
-  PENDING: "bg-yellow-100 text-yellow-700",
-  ANSWERED: "bg-green-100 text-green-700",
-};
+import { CATEGORY_LABEL, STATUS_LABEL, STATUS_STYLE } from "../_constants";
 
 export default function InquiryDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -33,6 +15,7 @@ export default function InquiryDetailPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
+  const [editError, setEditError] = useState("");
 
   const {
     data: inquiry,
@@ -53,14 +36,18 @@ export default function InquiryDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inquiry", id] });
       queryClient.invalidateQueries({ queryKey: ["inquiries"] });
+      setEditError("");
       setIsEditing(false);
+    },
+    onError: () => {
+      setEditError("저장에 실패했어요. 잠시 후 다시 시도해주세요.");
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteInquiry(Number(id)),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["inquiries"] });
+      queryClient.removeQueries({ queryKey: ["inquiries"] });
       router.replace("/support/inquiry");
     },
   });
@@ -69,12 +56,8 @@ export default function InquiryDetailPage() {
     if (!inquiry) return;
     setEditTitle(inquiry.title);
     setEditContent(inquiry.content);
+    setEditError("");
     setIsEditing(true);
-  }
-
-  function handleDelete() {
-    if (!confirm("문의를 삭제하시겠어요?")) return;
-    deleteMutation.mutate();
   }
 
   if (isLoading) {
@@ -106,10 +89,10 @@ export default function InquiryDetailPage() {
       <div className="flex items-center justify-between">
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={() => (isEditing ? setIsEditing(false) : router.back())}
           className="text-sm text-text-secondary hover:text-text-primary transition-colors"
         >
-          ← 목록
+          {isEditing ? "← 취소" : "← 목록"}
         </button>
         {canEdit && !isEditing && (
           <div className="flex gap-3">
@@ -122,11 +105,11 @@ export default function InquiryDetailPage() {
             </button>
             <button
               type="button"
-              onClick={handleDelete}
+              onClick={() => deleteMutation.mutate()}
               disabled={deleteMutation.isPending}
               className="text-sm text-status-error hover:opacity-70 transition-opacity disabled:opacity-40"
             >
-              삭제
+              {deleteMutation.isPending ? "삭제 중…" : "삭제"}
             </button>
           </div>
         )}
@@ -154,7 +137,11 @@ export default function InquiryDetailPage() {
               rows={8}
               className="w-full px-3 py-2.5 border border-border rounded-[10px] text-sm outline-none focus:border-brand-black resize-none"
             />
+            <p className="text-xs text-text-tertiary text-right">{editContent.length}/2000</p>
           </div>
+          {editError && (
+            <p className="text-sm text-status-error text-center">{editError}</p>
+          )}
           <div className="flex gap-3">
             <button
               type="button"

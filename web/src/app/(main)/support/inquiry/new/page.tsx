@@ -31,7 +31,7 @@ function NewInquiryForm() {
     mutationFn: () =>
       createInquiry({ title: title.trim(), content: content.trim(), category }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["inquiries"] });
+      queryClient.removeQueries({ queryKey: ["inquiries"] });
       router.replace("/support/inquiry");
     },
     onError: () => {
