@@ -208,7 +208,7 @@ export default function LoginPage() {
         </div>
 
         {/* ── 하단 4가지 기능 얕은 바 ── */}
-        <div className="bg-gray-50 border border-gray-100 rounded-2xl px-6 py-5">
+        <div className="auth-bottom-bar bg-gray-50 border border-gray-100 rounded-2xl px-6 py-5">
           <div className="grid grid-cols-4 gap-3 mb-3">
             {BOTTOM_FEATURES.map(({ icon, label, bg }) => (
               <div key={label} className="flex flex-col items-center gap-2">
