@@ -12,7 +12,7 @@ export default function InquiryListPage() {
     isError,
   } = useQuery({
     queryKey: ["inquiries"],
-    queryFn: () => listInquiries({ limit: 50 }),
+    queryFn: () => listInquiries({ limit: 100 }),
     staleTime: 0,
   });
 

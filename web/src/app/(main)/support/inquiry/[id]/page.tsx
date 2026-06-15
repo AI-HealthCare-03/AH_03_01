@@ -16,6 +16,7 @@ export default function InquiryDetailPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [editError, setEditError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const {
     data: inquiry,
@@ -57,6 +58,7 @@ export default function InquiryDetailPage() {
     setEditTitle(inquiry.title);
     setEditContent(inquiry.content);
     setEditError("");
+    setConfirmDelete(false);
     setIsEditing(true);
   }
 
@@ -103,14 +105,33 @@ export default function InquiryDetailPage() {
             >
               수정
             </button>
-            <button
-              type="button"
-              onClick={() => deleteMutation.mutate()}
-              disabled={deleteMutation.isPending}
-              className="text-sm text-status-error hover:opacity-70 transition-opacity disabled:opacity-40"
-            >
-              {deleteMutation.isPending ? "삭제 중…" : "삭제"}
-            </button>
+            {confirmDelete ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="text-xs text-text-secondary hover:text-text-primary transition-colors"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={() => deleteMutation.mutate()}
+                  disabled={deleteMutation.isPending}
+                  className="text-xs text-status-error font-semibold hover:opacity-70 transition-opacity disabled:opacity-40"
+                >
+                  {deleteMutation.isPending ? "삭제 중…" : "삭제 확인"}
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="text-sm text-status-error hover:opacity-70 transition-opacity"
+              >
+                삭제
+              </button>
+            )}
           </div>
         )}
       </div>
