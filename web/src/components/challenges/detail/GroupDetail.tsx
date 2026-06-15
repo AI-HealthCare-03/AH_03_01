@@ -1,8 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import ChallengeCategoryIcon, { CATEGORY_CONFIG } from "@/components/challenges/common/ChallengeCategoryIcon";
 import ChallengeProgressBar from "@/components/challenges/common/ChallengeProgressBar";
@@ -158,6 +156,7 @@ export default function GroupDetail({
               currentUserId={currentUserId}
               onLeave={onLeave}
               onCancel={onCancel}
+              onShield={onShield}
             />
           )}
           {activeTab === "chat" && (
@@ -171,38 +170,7 @@ export default function GroupDetail({
           )}
         </div>
 
-        {/* 데스크탑 우측: 오늘 인증하기 사이드박스 */}
-        {challenge.status === "ACTIVE" && (
-          <aside className="hidden md:block w-56 shrink-0">
-            <div className="bg-white border border-border rounded-[16px] p-5 sticky top-32 space-y-3">
-              <p className="text-sm font-bold text-text-primary">오늘의 인증</p>
-              <Link href={`/challenges/${challenge.id}/verify`}>
-                <Button variant="primary" size="md" fullWidth>
-                  오늘 인증하기
-                </Button>
-              </Link>
-              <button
-                type="button"
-                onClick={onShield}
-                className="w-full text-xs text-text-tertiary hover:text-text-secondary underline"
-              >
-                🛡️ 방지권 사용
-              </button>
-            </div>
-          </aside>
-        )}
       </div>
-
-      {/* 모바일 하단 고정 CTA */}
-      {challenge.status === "ACTIVE" && (
-        <div className="md:hidden fixed bottom-16 left-0 right-0 bg-white border-t border-border px-5 py-3 z-20">
-          <Link href={`/challenges/${challenge.id}/verify`}>
-            <Button variant="primary" size="lg" fullWidth>
-              오늘 인증하기
-            </Button>
-          </Link>
-        </div>
-      )}
     </div>
   );
 }
