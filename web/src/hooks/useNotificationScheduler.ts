@@ -225,9 +225,13 @@ export function useNotificationScheduler() {
           localStorage.setItem(notifKickPollKey(), now);
 
           for (const n of notifs) {
-            if (n.notification_type !== "CHALLENGE_KICK") continue;
-            pushNotification({ category: "챌린지", title: "⛔ 챌린지 탈퇴", body: n.message });
-            await sendBrowserNotification("⛔ 챌린지 탈퇴", n.message);
+            if (n.notification_type === "CHALLENGE_KICK") {
+              pushNotification({ category: "챌린지", title: "⛔ 챌린지 탈퇴", body: n.message });
+              await sendBrowserNotification("⛔ 챌린지 탈퇴", n.message);
+            } else if (n.notification_type === "CHALLENGE_INVITE") {
+              pushNotification({ category: "챌린지", title: "📩 챌린지 초대", body: n.message });
+              await sendBrowserNotification("📩 챌린지 초대", n.message);
+            }
           }
         } catch { /* 무시 */ }
       };
