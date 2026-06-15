@@ -22,6 +22,8 @@ from app.core import config
 # PHI 민감 업로드만 서명 게이트를 건다. 나머지(프로필 아바타·커뮤니티 이미지·
 # 게시글 첨부)는 앱 내 공개 콘텐츠라 무서명 서빙(서명 시 회귀만 큼).
 # FileUploadService 저장 경로 = /media/uploads/{file_type.lower()}/...
+# ⚠️ 새 PHI FileType 을 추가하면 이 목록도 반드시 갱신할 것 — 누락하면 해당 타입이
+#    무서명 공개 경로로 서빙된다(서명 게이트 우회).
 _PRIVATE_MEDIA_PREFIXES: tuple[str, ...] = (
     f"{config.MEDIA_URL_PREFIX}/uploads/challenge_verification/",
     f"{config.MEDIA_URL_PREFIX}/uploads/inquiry_attachment/",
@@ -35,7 +37,8 @@ def is_private_media_path(path: str) -> bool:
 
 
 def _secret() -> bytes:
-    return str(config.SECRET_KEY).encode()
+    # JWT 와 분리하고 싶으면 MEDIA_SIGNING_KEY 를 설정. 미설정 시 SECRET_KEY 로 폴백.
+    return str(config.MEDIA_SIGNING_KEY or config.SECRET_KEY).encode()
 
 
 def _expected_sig(path: str, exp: int) -> str:
