@@ -34,6 +34,7 @@ class FAQ(models.Model):
     category = fields.CharEnumField(FAQCategory, max_length=20)
     order = fields.IntField(default=0)
     is_active = fields.BooleanField(default=True)
+    is_deleted = fields.BooleanField(default=False)
     created_at = fields.DatetimeField(auto_now_add=True)
 
     class Meta:

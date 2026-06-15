@@ -99,3 +99,5 @@ class Config(BaseSettings):
     SMTP_TIMEOUT: float = 10.0
     # 인증 링크에 사용할 프론트엔드 베이스 URL (예: http://localhost:3000)
     FRONTEND_BASE_URL: str = "http://localhost:3000"
+    # 추가 CORS 허용 도메인 (운영 도메인 등, 빈 문자열이면 미적용)
+    EXTRA_CORS_ORIGIN: str = ""

@@ -17,6 +17,7 @@ export interface Me {
   avatar_file_id?: number | null;
   avatar_url?: string | null;
   created_at: string;
+  is_admin?: boolean;
 }
 
 /* 펫 (GET /api/v1/pets/me) */

@@ -15,6 +15,10 @@ class FAQResponse(BaseSerializerModel):
     order: int
 
 
+class AdminFAQResponse(FAQResponse):
+    is_deleted: bool = False
+
+
 class InquiryAnswerResponse(BaseSerializerModel):
     id: int
     content: str

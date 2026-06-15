@@ -44,6 +44,7 @@ class UserInfoResponse(BaseSerializerModel):
     avatar_file_id: int | None = None
     avatar_url: str | None = None
     created_at: datetime
+    is_admin: bool = False
 
     @field_serializer("avatar_url")
     def _sign_avatar_url(self, value: str | None) -> str | None:
