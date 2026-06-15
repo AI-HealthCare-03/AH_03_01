@@ -82,7 +82,7 @@ export default function ChatPanel() {
 
     /* 낙관적 사용자 메시지 추가 */
     const optimisticUserMsg: ChatDisplayMessage = {
-      id: crypto.randomUUID(),
+      id: Math.random().toString(36).slice(2),
       role: "USER",
       content: text,
       messageType: "TEXT",
@@ -91,7 +91,7 @@ export default function ChatPanel() {
     addMessage(optimisticUserMsg);
 
     /* 진행 중 BOT placeholder 즉시 추가 */
-    const botId = crypto.randomUUID();
+    const botId = Math.random().toString(36).slice(2);
     const placeholderBotMsg: ChatDisplayMessage = {
       id: botId,
       role: "BOT",
@@ -156,7 +156,7 @@ export default function ChatPanel() {
   /* FAQ 칩 클릭 처리 */
   const handleFaqSelect = (faq: FaqResponse) => {
     const optimisticUserMsg: ChatDisplayMessage = {
-      id: crypto.randomUUID(),
+      id: Math.random().toString(36).slice(2),
       role: "USER",
       content: faq.question,
       messageType: "FAQ",
@@ -179,7 +179,7 @@ export default function ChatPanel() {
             setConversationId(data.conversation_id);
           }
           const botMsg: ChatDisplayMessage = {
-            id: crypto.randomUUID(),
+            id: Math.random().toString(36).slice(2),
             role: "BOT",
             content: data.answer,
             messageType: data.message_type,
