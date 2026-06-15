@@ -82,7 +82,7 @@ _logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────
 # 상수 / 정책
 # ─────────────────────────────────────────────
-MAX_REVISIONS = 1  # 재검색·재생성 합산 상한 (API 계약 eval_revision_count 0~2)
+MAX_REVISIONS = 2  # 재검색·재생성 합산 상한 (API 계약 eval_revision_count 0~2)
 RETRIEVE_TOP_K = 7   # 일반/서비스 기본 (5→7: BM25 동의어 미스 보정용 여유 청크)
 # medical_inquiry 는 생활요법·약물·추적·위험도 4측면이 한 번에 잡혀야 답변 완전성↑.
 # 교차 주제(흡연·합병증·신장 등) 질문은 관련 섹션이 3개 이상이므로 8→12 로 확장.
@@ -409,9 +409,12 @@ _CLASSIFY_PROMPT = """당신은 만성질환(고혈압·당뇨·이상지질혈�
 intent=general 이면 [].
 
 == needs_challenge_catalog ==
-질문이 **챌린지/운동 프로그램/생활습관 챌린지 추천**을 요구하는지.
+질문이 **챌린지/운동 프로그램/생활습관 추천 또는 위험도 기반 식단 추천**을 요구하는지.
 - true: "어떤 챌린지", "챌린지 추천", "운동 프로그램 추천", "식단·챌린지", "생활습관 챌린지" 등
-- false: 챌린지와 무관한 일반 의학 질문 / 서비스 사용법 질문
+- true: 위험도 점수(예: "위험도 45%", "위험도 점수 88%")와 함께 "식단 추천"을 묻는 질문
+  예: "당뇨 위험도 점수가 88%이고 공복혈당 98, HbA1c 8.3%입니다. 어떤 식단이 좋을까요?" → true
+  예: "심혈관 위험도 점수가 78%, LDL 80인데 어떤 식단이 좋을까요?" → true
+- false: 위험도 점수 없이 일반 의학 질문 / 서비스 사용법 질문
 true 면 retrieve 가 의료 진료지침과 함께 CHALLENGE_CATALOG 도 함께 검색해 답변 근거로 사용.
 
 == diseases (list) ==
@@ -504,6 +507,7 @@ def _heuristic_prefilter(question: str) -> dict[str, Any] | None:
 
     # A. 명확한 서비스 기능 질문 → LLM 없이 service_guide 즉시 반환
     # 의료 키워드가 없을 때만 (예: "당뇨 환자 비밀번호" 같은 엣지케이스 방지)
+    # is_greeting=False: 인사 응답이 아니라 retrieve/generate 로 실제 답변 생성.
     if _SERVICE_PREFILTER_PATTERN.search(stripped):
         has_medical = any(kw.lower() in stripped.lower() for kw in _MEDICAL_TOPIC_KEYWORDS)
         if not has_medical:
@@ -516,6 +520,7 @@ def _heuristic_prefilter(question: str) -> dict[str, Any] | None:
                 "needs_challenge_catalog": False,
                 "missing_fields": [],
                 "action_hint": None,
+                "is_greeting": False,
             }
 
     # B. 명백한 개인정보 질문 → 범위 외 general 즉시 반환
@@ -529,6 +534,7 @@ def _heuristic_prefilter(question: str) -> dict[str, Any] | None:
             "needs_challenge_catalog": False,
             "missing_fields": [],
             "action_hint": None,
+            "is_greeting": True,
         }
 
     # C. 인사·감사·작별 (기존 로직 유지)
@@ -552,6 +558,7 @@ def _heuristic_prefilter(question: str) -> dict[str, Any] | None:
         "needs_challenge_catalog": False,
         "missing_fields": [],
         "action_hint": None,
+        "is_greeting": True,
     }
 
 
@@ -561,7 +568,7 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:  # noqa: C901
     prefilter = _heuristic_prefilter(state["original_question"])
     if prefilter is not None:
         _logger.info("classify_intent prefilter hit (skip LLM, skip retrieve/generate)")
-        return {**prefilter, "is_greeting": True}
+        return prefilter
 
     try:
         client = _get_client()
@@ -969,6 +976,10 @@ async def retrieve_node(state: ChatState) -> dict[str, Any]:
                 if chunk_id not in seen_ids:
                     seen_ids.add(chunk_id)
                     deduped_chunks.append(chunk)
+            _logger.info(
+                "retrieve top docs: %s",
+                [(c.metadata.get("section_id", "?"), len(c.chunk_text or "")) for c in deduped_chunks[:5]],
+            )
             return {"retrieved_docs": deduped_chunks, "retrieval_query": query}
 
     except Exception as e:  # noqa: BLE001
@@ -1090,6 +1101,7 @@ async def generate_node(state: ChatState) -> dict[str, Any]:
         return {"draft_answer": ""}
     system = _SERVICE_SYSTEM if intent == "service_guide" else _MEDICAL_SYSTEM
     context = _format_context(docs)
+    _logger.info("generate context len=%d docs=%d first_section=%s", len(context), len(docs), docs[0].metadata.get("section_id", "?") if docs else "none")
     health_block = _format_health_snapshot(state.get("health_data"))
 
     feedback = state.get("eval_feedback", "")
@@ -1119,6 +1131,7 @@ async def generate_node(state: ChatState) -> dict[str, Any]:
         _logger.warning("generate 실패: %s", _safe_err_repr(e))
         return {"draft_answer": "", "error": _safe_err_repr(e)}
 
+    _logger.info("generate draft (rev=%d): %s", int(state.get("eval_revision_count", 0)), draft[:300])
     return {"draft_answer": draft}
 
 
@@ -1138,6 +1151,14 @@ async def evaluate_node(state: ChatState) -> dict[str, Any]:
         revision_count=int(state.get("eval_revision_count", 0)),
     )
     out = await run_evaluator(inp)
+    if out.eval_result != "pass":
+        _logger.info(
+            "evaluate fail [%s/%s] rev=%d | %s",
+            out.eval_result,
+            out.eval_stage,
+            out.eval_revision_count,
+            out.eval_feedback,
+        )
     return {
         "eval_result": out.eval_result,
         "eval_stage": out.eval_stage,
