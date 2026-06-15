@@ -108,7 +108,7 @@ function GroupChallengeModal({
           </Button>
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 pt-3">
           <div className="flex-1 h-px bg-border" />
           <span className="text-xs text-text-tertiary">또는 그룹 참여</span>
           <div className="flex-1 h-px bg-border" />
