@@ -422,6 +422,20 @@ async def leave_challenge(
     return Response(content=None, status_code=status.HTTP_204_NO_CONTENT)
 
 
+@challenges_router.delete(
+    "/{challenge_id}/participants/{target_user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def kick_participant(
+    challenge_id: int,
+    target_user_id: UUID,
+    user: Annotated[User, Depends(get_request_user)],
+    service: Annotated[ParticipantService, Depends(ParticipantService)],
+) -> Response:
+    await service.kick_participant(user, challenge_id, target_user_id)
+    return Response(content=None, status_code=status.HTTP_204_NO_CONTENT)
+
+
 @challenges_router.patch(
     "/{challenge_id}/participants/{target_user_id}",
     status_code=status.HTTP_200_OK,

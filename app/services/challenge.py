@@ -4,6 +4,7 @@ import math
 import secrets
 from datetime import date, datetime, timedelta
 from typing import Any
+from uuid import UUID
 
 from fastapi import HTTPException, status
 from tortoise.transactions import in_transaction
@@ -286,8 +287,11 @@ class ParticipantService:
         if challenge is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="챌린지를 찾을 수 없습니다.")
         existing = await self.repo.get_by_user(challenge_id, user.id)
-        if existing and existing.status in {ParticipantStatus.APPROVED, ParticipantStatus.PENDING}:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 참여한 챌린지입니다.")
+        if existing:
+            if existing.status == ParticipantStatus.KICKED:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="강퇴된 챌린지에는 다시 참여할 수 없습니다.")
+            if existing.status in {ParticipantStatus.APPROVED, ParticipantStatus.PENDING}:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 참여한 챌린지입니다.")
         async with in_transaction():
             # select_for_update: 동시 참가 요청의 정원 초과 방지 (TOCTOU 차단)
             challenge_locked = await Challenge.filter(id=challenge_id).select_for_update().first()
@@ -318,8 +322,11 @@ class ParticipantService:
         if challenge.visibility != ChallengeVisibility.PUBLIC:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="비공개 챌린지는 초대 코드가 필요합니다.")
         existing = await self.repo.get_by_user(challenge_id, user.id)
-        if existing and existing.status in {ParticipantStatus.APPROVED, ParticipantStatus.PENDING}:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 참여한 챌린지입니다.")
+        if existing:
+            if existing.status == ParticipantStatus.KICKED:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="강퇴된 챌린지에는 다시 참여할 수 없습니다.")
+            if existing.status in {ParticipantStatus.APPROVED, ParticipantStatus.PENDING}:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 참여한 챌린지입니다.")
         async with in_transaction():
             # select_for_update: 동시 참가 요청의 정원 초과 방지 (TOCTOU 차단)
             challenge_locked = await Challenge.filter(id=challenge_id).select_for_update().first()
@@ -349,6 +356,26 @@ class ParticipantService:
         if participant.role == ParticipantRole.OWNER:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="방장은 챌린지를 삭제해야 합니다.")
         await self.repo.update_status(participant, ParticipantStatus.LEFT, leaving=True)
+
+    async def kick_participant(self, owner: User, challenge_id: int, target_user_id: UUID) -> ChallengeParticipant:
+        """방장이 멤버를 강제 탈퇴시킴."""
+        challenge = await self.challenge_repo.get(challenge_id)
+        if challenge is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="챌린지를 찾을 수 없습니다.")
+        if challenge.creator_id != owner.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="방장만 탈퇴시킬 수 있습니다.")
+        if target_user_id == owner.id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="자기 자신을 탈퇴시킬 수 없습니다.")
+        participant = await self.repo.get_by_user(challenge_id, target_user_id)
+        if participant is None or participant.status != ParticipantStatus.APPROVED:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="참여 중인 멤버가 아닙니다.")
+        async with in_transaction():
+            result = await self.repo.update_status(participant, ParticipantStatus.KICKED)
+            # 강퇴로 빈자리 생기면 ACTIVE → RECRUITING 재오픈
+            active_count = await self.repo.count_active(challenge_id)
+            if challenge.status == ChallengeStatus.ACTIVE and active_count < (challenge.max_participants or 0):
+                await self.challenge_repo.update_instance(challenge, {"status": ChallengeStatus.RECRUITING})
+        return result
 
     async def respond_to_pending(
         self,
