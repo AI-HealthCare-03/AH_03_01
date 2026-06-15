@@ -269,6 +269,8 @@ function HeaderStatsRow({ stats }: { stats: ReportHeaderStats }) {
 
 /* ── 3. 위험도 예측 결과 섹션 ─── */
 
+const DISEASE_ORDER = ["DIABETES", "HYPERTENSION", "CARDIOVASCULAR"];
+
 function DiseaseRiskSection({ risks }: { risks: ReportDiseaseRisk[] }) {
   if (risks.length === 0) {
     return (
@@ -280,10 +282,14 @@ function DiseaseRiskSection({ risks }: { risks: ReportDiseaseRisk[] }) {
     );
   }
 
+  const sorted = [...risks].sort(
+    (a, b) => DISEASE_ORDER.indexOf(a.disease_type) - DISEASE_ORDER.indexOf(b.disease_type),
+  );
+
   return (
     <SectionCard title="위험도 예측 결과">
       <div className="flex justify-around flex-wrap gap-4">
-        {risks.map((r) => (
+        {sorted.map((r) => (
           <div key={r.disease_type} className="flex flex-col items-center gap-2">
             <p className="text-xs font-semibold text-text-secondary">
               {DISEASE_LABEL[r.disease_type] ?? r.disease_type}
@@ -311,8 +317,8 @@ function DiseaseRiskSection({ risks }: { risks: ReportDiseaseRisk[] }) {
 /* ── 4. 판단 근거 TOP 5 ─── */
 
 const DISEASE_TABS = [
-  { key: "HYPERTENSION", label: "고혈압" },
   { key: "DIABETES", label: "당뇨" },
+  { key: "HYPERTENSION", label: "고혈압" },
   { key: "CARDIOVASCULAR", label: "이상지질혈증" },
 ] as const;
 

@@ -25,8 +25,8 @@ const DISEASE_LABELS: Record<DiseaseType, string> = {
 };
 
 const DISEASE_TABS: { id: DiseaseType; label: string }[] = [
-  { id: "HYPERTENSION", label: "고혈압" },
   { id: "DIABETES", label: "당뇨" },
+  { id: "HYPERTENSION", label: "고혈압" },
   { id: "CARDIOVASCULAR", label: "이상지질혈증" },
 ];
 
