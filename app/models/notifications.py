@@ -11,6 +11,7 @@ class NotificationType(StrEnum):
     COMMENT = "COMMENT"
     REPLY = "REPLY"
     LIKE = "LIKE"
+    CHALLENGE_KICK = "CHALLENGE_KICK"
 
 
 class Notification(models.Model):
