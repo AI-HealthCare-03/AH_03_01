@@ -687,23 +687,25 @@ export default function ReportTab() {
   const handlePdfDownload = async () => {
     if (isPdfLoading) return;
     setIsPdfLoading(true);
+    let objectUrl: string | undefined;
     try {
       const { blob, filename } = await requestMonthlyReportPdf(
         mode === "monthly"
           ? { period: "monthly", month: monthStr }
           : { period: "custom", dateFrom: rangeFrom, dateTo: rangeTo },
       );
-      const objectUrl = URL.createObjectURL(blob);
+      objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;
       link.download = filename;
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(objectUrl);
     } catch {
       showToast("PDF 생성에 실패했어요. 잠시 후 다시 시도해 주세요.", "error");
     } finally {
+      // click/remove 에서 예외가 나도 objectUrl 누수가 없도록 finally 에서 해제.
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
       setIsPdfLoading(false);
     }
   };
