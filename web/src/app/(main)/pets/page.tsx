@@ -376,8 +376,9 @@ export default function PetsPage() {
         {/* ── 오버레이 UI ── */}
         {/* 좌상단: 이름/레벨 */}
         <div className="absolute top-3 left-3 md:top-5 md:left-5 z-10 rounded-[14px] bg-white/85 backdrop-blur px-3 py-2 shadow-sm">
-          <h1 className="text-base font-black text-text-primary leading-tight">{pet.name}</h1>
-          <p className="text-[11px] text-text-tertiary">
+          {/* 펫 화면은 항상 밝은 배경 위 — 고정 어두운 색 */}
+          <h1 className="text-base font-black leading-tight" style={{ color: "#111111" }}>{pet.name}</h1>
+          <p className="text-[11px]" style={{ color: "#777777" }}>
             Lv.{pet.level} · {pet.current_xp.toLocaleString()} EXP
           </p>
           {sick && (
@@ -427,7 +428,8 @@ function IconLink({ href, src, label }: { href: string; src: string; label: stri
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt="" className="w-7 h-7 object-contain" draggable={false} />
-      <span className="text-[9px] font-semibold text-text-secondary leading-none mt-0.5">{label}</span>
+      {/* 펫 화면은 항상 밝은 배경 위 — 고정 어두운 색 */}
+      <span className="text-[9px] font-semibold leading-none mt-0.5" style={{ color: "#555555" }}>{label}</span>
     </Link>
   );
 }
@@ -495,11 +497,13 @@ function Stat({ label, value }: { label: string; value: number }) {
   const safe = Math.max(0, Math.min(100, value));
   return (
     <div className="bg-white/85 backdrop-blur rounded-[12px] px-2.5 py-1.5 shadow-sm">
-      <p className="text-[10px] text-text-tertiary mb-1">{label}</p>
-      <div className="h-1.5 bg-surface rounded-full overflow-hidden mb-0.5">
+      {/* 펫 화면은 항상 밝은 게임 배경 위 — 다크모드 text-* 오버라이드에 의해
+          글자가 밝아지는 것을 막기 위해 고정 어두운 색을 인라인으로 지정 */}
+      <p className="text-[10px] mb-1" style={{ color: "#555555" }}>{label}</p>
+      <div className="h-1.5 rounded-full overflow-hidden mb-0.5" style={{ backgroundColor: "#e8e8e8" }}>
         <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${safe}%` }} />
       </div>
-      <p className="text-[10px] text-right text-text-secondary">{safe}</p>
+      <p className="text-[10px] text-right" style={{ color: "#777777" }}>{safe}</p>
     </div>
   );
 }

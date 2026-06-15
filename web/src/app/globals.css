@@ -154,11 +154,13 @@ html.dark .hover\:bg-surface:hover { background-color: #2e2e2e !important; }
 html.dark ::-webkit-scrollbar-thumb { background: #444444; }
 
 /* ── 노란 배경(bg-brand, !bg-brand) → 글씨 검은색 ────────
-   같은 요소에 bg-brand + text-brand-black 이 함께 있는 경우 포함 */
+   같은 요소에 bg-brand + text-brand-black 이 함께 있는 경우 포함.
+   예외: .dark-keep-color 를 단 요소(및 그 자손)는 자기 색을 유지 —
+   노란 배경 위 별도 색이 필요한 아이콘·뱃지 등에 이 클래스를 붙이면 됨. */
 html.dark .bg-brand,
 html.dark .\!bg-brand,
-html.dark .bg-brand *,
-html.dark .\!bg-brand *,
+html.dark .bg-brand *:not(.dark-keep-color):not(.dark-keep-color *),
+html.dark .\!bg-brand *:not(.dark-keep-color):not(.dark-keep-color *),
 html.dark .bg-brand.text-brand-black,
 html.dark .\!bg-brand.\!text-brand-black { color: #111111 !important; }
 
@@ -176,3 +178,50 @@ html.dark .opacity-75           { opacity: 1 !important; }
    button + .bg-brand + a 조합으로 specificity를 최대화 */
 html.dark button.bg-brand a,
 html.dark button.\!bg-brand a { color: #111111 !important; }
+
+/* ── 상태 배지 배경색 다크 오버라이드 ──────────────────────
+   status-*-bg 는 연한 파랑/초록/빨강 — 다크에서 배경을 어두운 색으로,
+   글자는 선명한 색으로 교체해 가독성 확보. 라이트모드 영향 없음. */
+html.dark .bg-status-info-bg    { background-color: #0d2a4a !important; }
+html.dark .text-status-info     { color: #64b5f6 !important; }
+html.dark .bg-status-success-bg { background-color: #0d2a14 !important; }
+html.dark .text-status-success  { color: #81c784 !important; }
+html.dark .bg-status-danger-bg  { background-color: #3a0d0d !important; }
+html.dark .text-status-danger   { color: #ef9a9a !important; }
+
+/* ── bg-brand-light(크림색) 다크 오버라이드 ────────────────
+   라이트: #fffbe6 크림 배경. 다크 오버라이드가 없으면 크림 그대로에
+   text-brand-black이 #f0f0f0으로 뒤집혀 안 보임.
+   → 다크에서는 어두운 amber 배경 + 어두운 글자로 고정. */
+html.dark .bg-brand-light {
+  background-color: #2a2510 !important;
+}
+html.dark .bg-brand-light .text-brand-black,
+html.dark .bg-brand-light p,
+html.dark .bg-brand-light li,
+html.dark .bg-brand-light span {
+  color: #e8d87a !important;
+}
+
+/* ── 퀴즈 페이지 gray-* 토큰 다크 보완 ─────────────────────
+   QuizCard/CommunityQuizPage 가 text-gray-* 와 bg-gray-* 을
+   직접 사용 — html.dark 오버라이드가 없어 라이트 색 그대로 표시됨. */
+html.dark .bg-gray-100 {
+  background-color: #2e2e2e !important;
+}
+html.dark .text-gray-500 { color: #a0a0a0 !important; }
+html.dark .text-gray-600 { color: #b0b0b0 !important; }
+html.dark .text-gray-700 { color: #d0d0d0 !important; }
+html.dark .text-gray-800 { color: #e0e0e0 !important; }
+html.dark .text-gray-900 { color: #f0f0f0 !important; }
+html.dark .text-gray-400 { color: #707070 !important; }
+/* 퀴즈 옵션 버튼: bg-white는 이미 #242424 로 오버라이드됨.
+   border-gray-200 → 다크 테두리 통일 */
+html.dark .border-gray-200 { border-color: #3a3a3a !important; }
+html.dark .border-gray-400 { border-color: #606060 !important; }
+
+/* ── 최종 가드: 노란 배경(bg-brand) 내부 텍스트는 위 gray-* 오버라이드보다
+   우선해 검은색 유지 (예: 퀴즈 통계카드 숫자 text-gray-900 on bg-brand).
+   동일 specificity 충돌을 source-order 로 이기도록 파일 맨 끝에 재선언. */
+html.dark .bg-brand *,
+html.dark .\!bg-brand * { color: #111111 !important; }
