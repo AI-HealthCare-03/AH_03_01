@@ -103,7 +103,7 @@ splitter = RecursiveCharacterTextSplitter(
 # `## KDA2025_SEC_0001 — 당뇨병`, `## DYS_FIG_001 — ...`, `## GUIDE_SEC_001 — ...`,
 # 그리고 `## KSLA2022_SEC_0020_A — ...` (숫자 뒤 _접미사) 형태까지 모두 매칭.
 SEC_HEADER = re.compile(
-    r"^## ([A-Z][A-Z0-9_]+(?:_SEC_\d+(?:_[A-Z0-9]+)?|_FIG_\d+|FIG_\d+)) — (.+)$",
+    r"^## ([A-Z][A-Z0-9_]+(?:_SEC_\d+[A-Z]*(?:_[A-Z0-9]+)?|_FIG_\d+|FIG_\d+)) — (.+)$",
     re.MULTILINE,
 )
 
@@ -210,7 +210,7 @@ def parse_file(filepath: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:  
         block = body[start:end]
 
         sec_meta: dict[str, str] = {}
-        meta_match = re.search(r"### Section Metadata\s*\n(.*?)(?=### |\Z)", block, re.DOTALL)
+        meta_match = re.search(r"### Section Metadata\s*\n(.*?)(?=^### |\Z)", block, re.DOTALL | re.MULTILINE)
         if meta_match:
             sec_meta = parse_section_metadata(meta_match.group(1))
 

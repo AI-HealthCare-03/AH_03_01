@@ -82,11 +82,11 @@ _logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────
 # 상수 / 정책
 # ─────────────────────────────────────────────
-MAX_REVISIONS = 1  # 재검색·재생성 합산 상한 (API 계약 eval_revision_count 0~2)
-RETRIEVE_TOP_K = 5  # 일반/서비스 기본
+MAX_REVISIONS = 2  # 재검색·재생성 합산 상한 (API 계약 eval_revision_count 0~2)
+RETRIEVE_TOP_K = 7   # 일반/서비스 기본 (5→7: BM25 동의어 미스 보정용 여유 청크)
 # medical_inquiry 는 생활요법·약물·추적·위험도 4측면이 한 번에 잡혀야 답변 완전성↑.
-# top_k 를 5→8 로 확장 (broader context). RRF 후보 풀도 자동으로 늘어남.
-RETRIEVE_TOP_K_MEDICAL = 8
+# 교차 주제(흡연·합병증·신장 등) 질문은 관련 섹션이 3개 이상이므로 8→12 로 확장.
+RETRIEVE_TOP_K_MEDICAL = 12
 # MIN_ANSWER_LEN 등 evaluator Rule 상수는 app/graphs/_shared/medical_evaluator.py 로 이동.
 
 MEDICAL_DISCLAIMER = "본 답변은 의학적 진단을 대체하지 않습니다."
@@ -441,11 +441,66 @@ _CLASSIFY_PROMPT = """당신은 만성질환(고혈압·당뇨·이상지질혈�
 - "general": 위 둘에 명확히 안 맞거나 인사·잡담
 - 둘 다 관련된 혼합형(예: "내 상태에 맞는 식단·챌린지")은 medical_inquiry 우선.
 
+== topics (list) ==
+질문이 해당하는 의료 주제 카테고리. intent=medical_inquiry 일 때 retrieve 필터로 사용.
+- "diagnosis"   : 진단 기준·선별검사·분류·수치 해석
+- "medication"  : 약물치료·처방·부작용·약물 상호작용·보관·용법·용량
+- "lifestyle"   : 복합 생활습관 (자기관리·수면·스트레스·환자중심치료 등 단일 서브토픽으로 분류 불가한 경우)
+- "exercise"    : 운동요법 (유산소·근력·신체활동 권고)
+- "diet"        : 식사요법·영양 (저염·저지방·저당·식이패턴 포함)
+- "weight"      : 체중/비만 관리
+- "smoking"     : 금연
+- "alcohol"     : 절주
+- "complication": 합병증·동반질환·장기 손상
+- "risk"        : 위험도 평가·위험인자·심혈관 위험
+- "monitoring"  : 혈압/혈당 측정·추적관리·목표 수치·모니터링
+- "service"     : 서비스 이용안내·기능설명 (intent=service_guide 일 때)
+- "challenge"   : 챌린지 참여·인증·추천 (needs_challenge_catalog=true 일 때)
+예시:
+- "당뇨 식단 어떻게 해야 해?" → ["diet"]
+- "스타틴 자몽이랑 먹어도 돼?" → ["medication"]
+- "인슐린 펜 보관 방법" → ["medication"]
+- "당뇨 합병증 예방" → ["complication", "exercise", "diet"]
+- "혈압 목표 수치" → ["monitoring", "diagnosis"]
+- "챌린지 추천해줘" → ["challenge", "service"]
+- "비밀번호 변경" → ["service"]
+- "금연하면 혈압에 좋나요?" → ["smoking", "risk"]
+- "고혈압 운동 추천" → ["exercise"]
+- "비만인데 혈당 관리" → ["weight", "diet"]
+intent=general 이면 [].
+
+== needs_challenge_catalog ==
+질문이 **챌린지/운동 프로그램/생활습관 추천 또는 위험도 기반 식단 추천**을 요구하는지.
+- true: "어떤 챌린지", "챌린지 추천", "운동 프로그램 추천", "식단·챌린지", "생활습관 챌린지" 등
+- true: 위험도 점수(예: "위험도 45%", "위험도 점수 88%")와 함께 "식단 추천"을 묻는 질문
+  예: "당뇨 위험도 점수가 88%이고 공복혈당 98, HbA1c 8.3%입니다. 어떤 식단이 좋을까요?" → true
+  예: "심혈관 위험도 점수가 78%, LDL 80인데 어떤 식단이 좋을까요?" → true
+- false: 위험도 점수 없이 일반 의학 질문 / 서비스 사용법 질문
+true 면 retrieve 가 의료 진료지침과 함께 CHALLENGE_CATALOG 도 함께 검색해 답변 근거로 사용.
+
+== diseases (list) ==
+질문이 관련된 질환들을 list 로 (1개 또는 여러 개). 빈 list 면 질환 비특화 / 서비스 질문.
+- "diabetes": 당뇨·혈당·HbA1c·당화혈색소·인슐린·당뇨병 합병증
+- "hypertension": 고혈압·혈압 (수축기/이완기)·DASH 식단
+- "dyslipidemia": 이상지질혈증·콜레스테롤·LDL·HDL·중성지방·스타틴·동맥경화
+예시:
+- "당뇨병 진단 기준" → ["diabetes"]
+- "당뇨병 환자의 이상지질혈증 관리" → ["diabetes", "dyslipidemia"] (multi-disease 라우팅)
+- "운동 권고" → [] (질환 비특화)
+- "챌린지 인증 방법" → [] (서비스 질문)
+- "인슐린 펜 보관 방법" → ["diabetes"] (의약품 보관·관리는 medical_inquiry)
+- "고혈압인데 어떤 병원 가야 하나요" → ["hypertension"] (진료 안내도 medical_inquiry)
+
 == intent 혼동 방지 ==
 다음은 반드시 medical_inquiry (service_guide 아님):
 - 약품명·의약품이 포함된 보관/용법/복용 질문: "인슐린", "스타틴", "와파린", "메트포르민" 등
 - 병원·진료·처방 안내 질문: "어느 병원", "진료과", "처방"
 - 증상·진단·합병증 질문 (service_guide 로 분류 절대 금지)
+- **위험도 점수/수치가 포함돼도 식단·운동·생활습관·약물 정보를 묻는 질문은 medical_inquiry**
+  예: "당뇨 위험도 점수가 45%이고 공복혈당 85, HbA1c 7.8%입니다. 어떤 식단이 좋을까요?" → medical_inquiry, diseases=["diabetes"], topics=["diet"]
+  예: "위험도 88%, 혈압 148/94mmHg입니다. 식단 추천 부탁드립니다." → medical_inquiry, diseases=["hypertension"], topics=["diet"]
+  예: "심혈관 위험도 점수가 78%, LDL 80, HDL 52 mg/dL인데 어떤 식단이 좋을까요?" → medical_inquiry, diseases=["dyslipidemia"], topics=["diet"]
+  예: "여성인데 심혈관 위험도 34%, LDL 110이면 식단 추천해줘." → medical_inquiry, diseases=["dyslipidemia"], topics=["diet"]
 
 질문: {question}
 """
@@ -465,6 +520,7 @@ def _heuristic_prefilter(question: str) -> dict[str, Any] | None:
 
     # A. 명확한 서비스 기능 질문 → LLM 없이 service_guide 즉시 반환
     # 의료 키워드가 없을 때만 (예: "당뇨 환자 비밀번호" 같은 엣지케이스 방지)
+    # is_greeting=False: 인사 응답이 아니라 retrieve/generate 로 실제 답변 생성.
     if _SERVICE_PREFILTER_PATTERN.search(stripped):
         has_medical = any(kw.lower() in stripped.lower() for kw in _MEDICAL_TOPIC_KEYWORDS)
         if not has_medical:
@@ -477,14 +533,10 @@ def _heuristic_prefilter(question: str) -> dict[str, Any] | None:
                 "needs_challenge_catalog": False,
                 "missing_fields": [],
                 "action_hint": None,
+                "is_greeting": False,
             }
 
-    # B. 명백한 개인정보 질문은 classify_intent 에서 직접 처리 (is_greeting=False 필요)
-    # → _heuristic_prefilter 에서 None 을 반환해 LLM 위임처럼 동작하지만,
-    #   classify_intent 에서 별도 분기로 service_guide 즉시 반환.
-    # (이 함수에서는 None 반환 — classify_intent 에서 잡음)
-
-    # C. 인사·감사·작별 (기존 로직 유지)
+    # B. 인사·감사·작별 (기존 로직 유지) — 개인정보 질문은 classify_intent 상단에서 단일 처리
     if len(stripped) > _PREFILTER_MAX_LEN:
         return None
     lowered = stripped.lower()
@@ -505,6 +557,7 @@ def _heuristic_prefilter(question: str) -> dict[str, Any] | None:
         "needs_challenge_catalog": False,
         "missing_fields": [],
         "action_hint": None,
+        "is_greeting": True,
     }
 
 
@@ -529,7 +582,7 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:  # noqa: C901
     prefilter = _heuristic_prefilter(state["original_question"])
     if prefilter is not None:
         _logger.info("classify_intent prefilter hit (skip LLM, skip retrieve/generate)")
-        return {**prefilter, "is_greeting": True}
+        return prefilter
 
     try:
         client = _get_client()
@@ -892,6 +945,10 @@ async def retrieve_node(state: ChatState) -> dict[str, Any]:
                 if chunk_id not in seen_ids:
                     seen_ids.add(chunk_id)
                     deduped_chunks.append(chunk)
+            _logger.info(
+                "retrieve top docs: %s",
+                [(c.metadata.get("section_id", "?"), len(c.chunk_text or "")) for c in deduped_chunks[:5]],
+            )
             return {"retrieved_docs": deduped_chunks, "retrieval_query": query}
 
     except Exception as e:  # noqa: BLE001
@@ -1014,6 +1071,7 @@ async def generate_node(state: ChatState) -> dict[str, Any]:
         return {"draft_answer": ""}
     system = _SERVICE_SYSTEM if intent == "service_guide" else _MEDICAL_SYSTEM
     context = _format_context(docs)
+    _logger.info("generate context len=%d docs=%d first_section=%s", len(context), len(docs), docs[0].metadata.get("section_id", "?") if docs else "none")
     health_block = _format_health_snapshot(state.get("health_data"))
 
     feedback = state.get("eval_feedback", "")
@@ -1046,6 +1104,7 @@ async def generate_node(state: ChatState) -> dict[str, Any]:
         _logger.warning("generate 실패: %s", _safe_err_repr(e))
         return {"draft_answer": "", "error": _safe_err_repr(e)}
 
+    _logger.debug("generate draft (rev=%d): %s", int(state.get("eval_revision_count", 0)), draft[:300])
     return {"draft_answer": draft}
 
 

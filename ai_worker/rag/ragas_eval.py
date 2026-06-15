@@ -59,7 +59,8 @@ from ragas.metrics import (  # noqa: E402
 # ─────────────────────────────────────────────
 BASE = Path(__file__).parent
 EVAL_DATASET_PATH = BASE / "rag_eval_qa_dataset_v6.jsonl"
-EVAL_SAMPLE_SIZE = 50
+EVAL_SAMPLE_SIZE = 50  # legacy — stratified 샘플링으로 대체됨, 현재 미사용
+EVAL_SAMPLE_PER_CATEGORY = 10  # category당 최대 샘플 수; 이하면 전수 포함
 
 # 평가에서 제외할 카테고리 (v3의 eval_type="out_of_scope" 대체)
 _EXCLUDE_CATEGORIES: set[str] = {"out_of_scope"}
@@ -129,17 +130,25 @@ async def _collect_single(
     idx: int,
     total: int,
 ) -> tuple[str, list[str], list[str]]:
-    """단일 질문에 대해 ChatRAGGraph를 실행하고 (answer, ctx_texts, ctx_ids) 반환."""
+    """단일 질문에 대해 ChatRAGGraph를 실행하고 (answer, ctx_texts, ctx_ids) 반환.
+
+    실제 서비스의 run_chat_rag() 와 동일한 파이프라인을 거친다:
+      classify_intent → retrieve(PGVector+BM25) → generate(LLM) → evaluate → final_ok/fallback
+    단, eval_mode=True 로 fetch_health_data(DB 개인 건강 데이터 조회) 노드를 건너뜀.
+
+    인라인 수치 질문(예: "수축기 혈압 145 mmHg이고 LDL 140 mg/dL인데 어떤 챌린지가 맞아?")은
+    classify_intent 의 N3 가드가 needs_health_data=False 로 자동 처리하므로 별도 모킹 불필요.
+    LLM 은 question 문자열 내 수치를 컨텍스트로 직접 사용한다.
+    """
     print(f"\n  [{idx}/{total}] {question}")
     try:
-        from app.graphs.chat_rag_graph import ChatRAGGraph, _state_to_result
+        from app.graphs.chat_rag_graph import ChatRAGGraph, _build_initial_state, _state_to_result
 
         graph = ChatRAGGraph()
+        # run_chat_rag() 와 동일한 초기 state + eval_mode=True:
+        # _build_initial_state 가 바뀌어도 평가 파이프라인이 자동으로 동기화된다.
         initial = {
-            "user_id": None,
-            "thread_id": f"ragas-eval-{idx}",
-            "original_question": question,
-            "eval_revision_count": 0,
+            **_build_initial_state(question, user_id=None, thread_id=f"ragas-eval-{idx}"),
             "eval_mode": True,
         }
         final_state = await graph.ainvoke(initial)
@@ -163,6 +172,8 @@ async def _collect_all(eval_dataset: list[dict]) -> dict:
 
     from app.core.db.databases import TORTOISE_ORM
 
+    # Tortoise ORM 초기화 — RAG 검색(PGVector dense SQL + BM25 RAGDocument 로드) 전용.
+    # 실제 유저 건강 데이터(fetch_health_data 노드)는 eval_mode=True 로 완전히 건너뜀.
     await Tortoise.init(config=TORTOISE_ORM)
 
     questions: list[str] = []
@@ -216,11 +227,37 @@ def collect_answers(eval_dataset: list[dict], seed: int | None = None) -> dict:
 
     from collections import Counter
 
-    cat_counts = Counter(item.get("category") for item in sampled)
+    # RAGAS 평가용 필터링 — out_of_scope 제외
+    CORE_EVAL_EXCLUDE = {"out_of_scope"}
+    filtered = [
+        item
+        for item in eval_dataset
+        if item.get("category") not in CORE_EVAL_EXCLUDE and item.get("eval_type") not in ("out_of_scope",)
+    ]
+
+    # category별 stratified 샘플링: EVAL_SAMPLE_PER_CATEGORY 이하면 전수, 초과면 N개만
+    from collections import defaultdict
+
+    by_category: dict[str, list[dict]] = defaultdict(list)
+    for item in filtered:
+        by_category[item.get("category", "unknown")].append(item)
+
+    if seed is not None:
+        random.seed(seed)
+
+    sampled = []
+    for cat, items in sorted(by_category.items()):
+        if len(items) <= EVAL_SAMPLE_PER_CATEGORY:
+            sampled.extend(items)
+        else:
+            sampled.extend(random.sample(items, EVAL_SAMPLE_PER_CATEGORY))
+
+    category_summary = {cat: min(len(items), EVAL_SAMPLE_PER_CATEGORY) for cat, items in sorted(by_category.items())}
     print(
-        f"  층화 샘플링: {len(eval_dataset)}개 → 필터링 {len(filtered)}개 → {len(sampled)}개 선택 (seed={seed if seed is not None else '랜덤'})"
+        f"  샘플링: {len(eval_dataset)}개 중 필터링 후 {len(filtered)}개 → {len(sampled)}개 선택 "
+        f"(stratified N={EVAL_SAMPLE_PER_CATEGORY}, seed={seed if seed else '랜덤'})"
     )
-    print(f"  카테고리별: {dict(cat_counts)}")
+    print(f"  category별: {category_summary}")
     return asyncio.run(_collect_all(sampled))
 
 
@@ -351,7 +388,7 @@ def run_ragas_evaluation(data: dict) -> tuple[dict, list[float], list[float | No
 # ─────────────────────────────────────────────
 # 결과 출력
 # ─────────────────────────────────────────────
-def print_results(ragas_result, ko_ar_scores: list[float], ref_hit_scores: list[float | None], data: dict):
+def print_results(ragas_result, ko_ar_scores: list[float], ref_hit_scores: list[float | None], data: dict, output_filename: str = "ragas_result.json"):
     import numpy as np
 
     print("\n" + "=" * 60)
@@ -409,8 +446,7 @@ def print_results(ragas_result, ko_ar_scores: list[float], ref_hit_scores: list[
         print(f"  ⚠️  Faithfulness 목표 미달 ({faith_score:.4f}, {gap:.4f} 부족)")
     print("=" * 60)
 
-    # per-item 상세 결과 저장
-    output_path = BASE / "output" / "ragas_result.json"
+    output_path = BASE / "output" / output_filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_data = {
         "summary": {k: float(v) for k, v in scores.items()},
@@ -439,8 +475,27 @@ def print_results(ragas_result, ko_ar_scores: list[float], ref_hit_scores: list[
 # 실행
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
-    # seed=42 고정 — 매번 같은 층화 샘플로 평가해 개선 효과를 정확히 측정
+    import argparse
+
+    parser = argparse.ArgumentParser(description="RAGAS 평가 실행")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="샘플링 시드 (기본값: 42). 다른 값으로 다른 질문셋 평가 가능.",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="결과 저장 파일명 (output/ 하위). 기본값: ragas_result_seed{seed}.json",
+    )
+    args = parser.parse_args()
+
+    seed = args.seed
+    output_filename = args.output or f"ragas_result_seed{seed}.json"
+
     dataset = load_eval_dataset(EVAL_DATASET_PATH)
-    data = collect_answers(dataset, seed=42)
+    data = collect_answers(dataset, seed=seed)
     result, ko_ar, ref_hits = run_ragas_evaluation(data)
-    print_results(result, ko_ar, ref_hits, data)
+    print_results(result, ko_ar, ref_hits, data, output_filename=output_filename)

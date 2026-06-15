@@ -112,7 +112,7 @@ _KDA2025: dict[str, list[str]] = {
     # V. 자기관리
     "KDA2025_SEC_0009": ["lifestyle"],  # 3-5-1. 당뇨병 자기관리
     "KDA2025_SEC_0080": ["lifestyle"],  # V. 포괄적인 자기관리
-    "KDA2025_SEC_0081": ["lifestyle"],  # 이득(편익) — 자기관리
+    "KDA2025_SEC_0081": ["lifestyle", "smoking"],  # 이득(편익) — 자기관리 (금연 언급)
     "KDA2025_SEC_0082": ["lifestyle"],  # 자기관리교육 효과 근거
     "KDA2025_SEC_0083": ["lifestyle"],  # 권고4. 다학제 자기관리교육
     "KDA2025_SEC_0084": ["lifestyle"],  # 참고문헌 — 자기관리
@@ -182,7 +182,7 @@ _KDA2025: dict[str, list[str]] = {
     "KDA2025_SEC_0141": ["medication"],  # 그림 6-2.3 메트포민·조영제 주의
     "KDA2025_SEC_0142": ["medication"],  # 참고문헌 — 2형당뇨병 약물
     # 7. 심혈관 위험관리
-    "KDA2025_SEC_0143": ["risk", "complication"],  # 심혈관질환 위험관리 챕터
+    "KDA2025_SEC_0143": ["risk", "complication", "smoking"],  # 심혈관질환 위험관리 챕터 (흡연 위험인자 명시)
     "KDA2025_SEC_0013": ["medication", "complication"],  # 3-7. 고혈압관리
     "KDA2025_SEC_0144": ["medication", "complication"],  # 7-1. 고혈압관리 권고 목록
     "KDA2025_SEC_0145": ["medication", "monitoring"],  # 7-1. 혈압 측정·목표·생활습관교정
@@ -196,14 +196,16 @@ _KDA2025: dict[str, list[str]] = {
     "KDA2025_SEC_0152": ["medication", "complication"],  # 7-2. 고중성지방혈증
     "KDA2025_SEC_0153": ["medication", "complication"],  # 7-3. 항혈소판제
     # 8. 합병증 관리
-    "KDA2025_SEC_0154": ["complication"],  # 당뇨병합병증관리 챕터
+    "KDA2025_SEC_0154": ["complication", "smoking"],  # 당뇨병합병증관리 챕터 (흡연 위험인자)
     "KDA2025_SEC_0155": ["complication"],  # 8-1. 당뇨병신장질환 권고 목록
     "KDA2025_SEC_0156": ["complication", "monitoring"],  # 8-1. 신장질환 진단·혈당·혈압·단백질
     "KDA2025_SEC_0157": ["complication", "medication"],  # 8-1. ACE억제제/ARB/SGLT2/finerenone
     "KDA2025_SEC_0158": ["complication"],  # 8-1. 그림·참고문헌
     "KDA2025_SEC_0159": ["complication"],  # 8-2. 당뇨병신경병증·발관리
+    "KDA2025_SEC_0189": ["smoking", "complication"],  # 당뇨병 환자 흡연과 합병증 위험 (신규)
     "KDA2025_SEC_0160": ["complication"],  # 8-3. 당뇨병망막병증
     "KDA2025_SEC_0161": ["complication", "medication"],  # 8-4. 당뇨병케토산증·고삼투질상태
+
     # 9. 동반 대사질환
     "KDA2025_SEC_0162": ["complication", "weight"],  # 동반 대사질환관리 챕터
     "KDA2025_SEC_0015": ["weight"],  # 3-9. 비만 관리
@@ -232,6 +234,15 @@ _KDA2025: dict[str, list[str]] = {
     "KDA2025_SEC_0179": ["diagnosis"],  # 진료지침 연혁 챕터
     "KDA2025_SEC_0180": ["diagnosis"],  # 진료지침 연혁 본문
     "KDA2025_SEC_0181": ["diagnosis"],  # 역대 위원 명단
+    # 환자 교육 자료 (인슐린 관리)
+    "KDA2025_SEC_0182": ["medication", "lifestyle"],  # 펜형 인슐린 주사 방법
+    "KDA2025_SEC_0183": ["medication", "lifestyle"],  # 인슐린 보관 방법 및 온도 관리
+    # 계절별 당뇨식단 (대한당뇨병학회 환자 교육 자료)
+    "KDA2025_SEC_0184": ["diet", "lifestyle"],  # 계절별 당뇨식단 개요
+    "KDA2025_SEC_0185": ["diet", "lifestyle"],  # 봄 당뇨식단 5종
+    "KDA2025_SEC_0186": ["diet", "lifestyle"],  # 여름 당뇨식단 5종
+    "KDA2025_SEC_0187": ["diet", "lifestyle"],  # 가을 당뇨식단 5종
+    "KDA2025_SEC_0188": ["diet", "lifestyle"],  # 겨울 당뇨식단 5종
 }
 
 # ══════════════════════════════════════════════════════════════
@@ -372,6 +383,9 @@ _KSH2026: dict[str, list[str]] = {
     "KSH2026_SEC_0130": ["medication", "lifestyle"],  # 14.3. 치료 지속성 향상
     "KSH2026_SEC_0131": ["lifestyle"],  # 14.4. 다학제 관리
     "KSH2026_SEC_0132": ["lifestyle"],  # 14.5. 환자 중심 관리 한계
+    "KSH2026_SEC_0134": ["diet", "lifestyle"],  # DASH 식단 개요 및 핵심 원칙
+    "KSH2026_SEC_0135": ["diet", "lifestyle"],  # DASH 식단 식품군별 권장 섭취 횟수
+
     # 그림
     "KSH2026_FIG_001": ["diagnosis"],
     "KSH2026_FIG_002": ["risk"],
@@ -397,7 +411,7 @@ _KSH2026: dict[str, list[str]] = {
 
 # ══════════════════════════════════════════════════════════════
 # KSLA2022 — 이상지질혈증 진료지침 (source_id: KSLA2022)
-# 주의: DB 저장 section_id 는 "KSLA2022_SEC_" (O 없음). 이전 "KSOLA2022_SEC_" 키는 미매핑.
+# DB 저장 section_id: "KSLA2022_SEC_" (O 없음). "KSOLA2022_SEC_" 구키는 제거됨.
 # ══════════════════════════════════════════════════════════════
 _KSLA2022: dict[str, list[str]] = {
     # ── 서문 ──────────────────────────────────────────────────
@@ -410,10 +424,10 @@ _KSLA2022: dict[str, list[str]] = {
     "KSLA2022_SEC_0006": ["risk"],  # 위험요인과 위험도 평가 — 개요
     "KSLA2022_SEC_0007": ["risk"],  # 위험도 평가 — 표 1-1 기여위험도
     "KSLA2022_SEC_0008": ["risk"],  # 위험도 평가 — 표 1-2 비교위험도
-    "KSLA2022_SEC_0009": ["screening", "diagnosis"],  # 혈중 지질 농도 분포 (1)
-    "KSLA2022_SEC_0010": ["screening", "diagnosis"],  # 혈중 지질 농도 분포 (2) 유병률
+    "KSLA2022_SEC_0009": ["diagnosis"],  # 혈중 지질 농도 분포 (1)
+    "KSLA2022_SEC_0010": ["diagnosis"],  # 혈중 지질 농도 분포 (2) 유병률
     # ── Chapter 2. 진단·치료 기준 ─────────────────────────────
-    "KSLA2022_SEC_0011": ["diagnosis", "screening"],  # 진단 방법 및 분류 기준 (1) 선별검사
+    "KSLA2022_SEC_0011": ["diagnosis"],  # 진단 방법 및 분류 기준 (1) 선별검사
     "KSLA2022_SEC_0012": ["diagnosis"],  # 진단 방법 및 분류 기준 (2) 기준표
     "KSLA2022_SEC_0013": ["risk", "medication"],  # 치료 기준 — LDL 목표치 전체 권고안
     "KSLA2022_SEC_0014": ["risk", "medication"],  # 치료 기준 — 고중성지방혈증·고LDL
@@ -476,17 +490,19 @@ _KSLA2022: dict[str, list[str]] = {
     "KSLA2022_SEC_0068": ["complication", "medication", "lifestyle"],  # 당뇨병 — 치료 (생활습관·스타틴)
     "KSLA2022_SEC_0069": ["complication", "medication"],  # 당뇨병 — 스타틴 병용요법
     "KSLA2022_SEC_0070": ["risk", "medication"],  # 노인의 이상지질혈증
-    "KSLA2022_SEC_0071": ["pediatric", "screening"],  # 소아청소년 — 권고안·역학
-    "KSLA2022_SEC_0072": ["pediatric", "diagnosis", "screening"],  # 소아청소년 — 진단
-    "KSLA2022_SEC_0073": ["pediatric", "diet", "lifestyle"],  # 소아청소년 — 식사요법·생활습관
-    "KSLA2022_SEC_0074": ["pediatric", "medication"],  # 소아청소년 — 약물치료·FH
+    "KSLA2022_SEC_0071": ["diagnosis"],  # 소아청소년 — 권고안·역학
+    "KSLA2022_SEC_0072": ["diagnosis"],  # 소아청소년 — 진단
+    "KSLA2022_SEC_0073": ["diet", "lifestyle"],  # 소아청소년 — 식사요법·생활습관
+    "KSLA2022_SEC_0074": ["medication"],  # 소아청소년 — 약물치료·FH
     "KSLA2022_SEC_0075": ["diagnosis"],  # 가족성 고콜레스테롤혈증 (FH) — 진단기준
     "KSLA2022_SEC_0076": ["medication"],  # 가족성 고콜레스테롤혈증 (FH) — 치료
     "KSLA2022_SEC_0077": ["complication", "risk"],  # 임신 중 이상지질혈증 — 권고안·지질대사
     "KSLA2022_SEC_0078": ["complication"],  # 임신 중 — 지질의 태반통과
     "KSLA2022_SEC_0079": ["complication"],  # 임신 중 — 합병증
     "KSLA2022_SEC_0080": ["complication", "medication", "lifestyle"],  # 임신 중 — 치료
-    # ── figures (기존 유지) ───────────────────────────────────
+    "KSLA2022_SEC_0081": ["diet", "lifestyle"],  # 이상지질혈증 식사요법 실천 지침 (AMC)
+    "KSLA2022_SEC_0082": ["diet", "lifestyle"],  # 고지혈증 영양관리 6대 원칙 (서울영양사회)
+    # ── figures ───────────────────────────────────────────────
     "DYS_FIG_001": ["diagnosis"],
     "DYS_FIG_002": ["medication", "risk"],
     "DYS_FIG_003": ["medication", "risk"],
