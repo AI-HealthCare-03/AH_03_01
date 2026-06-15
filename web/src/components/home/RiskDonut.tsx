@@ -133,9 +133,9 @@ export default function RiskDonut({
         {label}
       </p>
 
-      {/* 위험인자 수 */}
+      {/* 예측 기여 요인 수 */}
       <p className="text-xs text-text-tertiary">
-        위험인자 {riskFactorCount}개
+        예측 기여 요인 {riskFactorCount}개
       </p>
     </div>
   );
