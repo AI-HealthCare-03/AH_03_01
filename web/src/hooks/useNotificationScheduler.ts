@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { MEDICATION_STORAGE_KEY, type Medication } from "@/components/health/MedicationManager";
 import { pushNotification } from "@/components/layout/NotificationDropdown";
-import { notifLastSeenKey, notifSettingsKey, notifSocialPollKey } from "@/lib/notifKeys";
+import { notifKickPollKey, notifLastSeenKey, notifSettingsKey, notifSocialPollKey } from "@/lib/notifKeys";
 import { listNotifications } from "@/lib/api/notifications";
 import { useAuthStore } from "@/stores/auth";
 
@@ -115,6 +115,7 @@ export function useNotificationScheduler() {
   const firstRunRef = useRef(true);
   const scheduleAllRef = useRef<(() => void) | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const kickPollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   useEffect(() => {
@@ -176,45 +177,61 @@ export function useNotificationScheduler() {
         } catch { /* 무시 */ }
       }
 
-      // ── 소셜 알림 + 시스템 알림 폴링 ──
-      // 강제 탈퇴(CHALLENGE_KICK) 같은 중요 알림은 설정과 무관하게 항상 수신
+      // ── 소셜 알림 폴링 (챌린지 소통 / 커뮤니티) ──
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
       }
-      const poll = async () => {
+      if (settings.challengeInteraction || settings.community) {
+        const poll = async () => {
+          try {
+            const lastPoll = localStorage.getItem(notifSocialPollKey())
+              ?? new Date(Date.now() - 60_000).toISOString();
+            const now = new Date().toISOString();
+            const notifs = await listNotifications(lastPoll);
+            localStorage.setItem(notifSocialPollKey(), now);
+
+            for (const n of notifs) {
+              const isChallenge = n.target_type === "VERIFICATION";
+              const isCommunity = n.target_type === "POST" || n.target_type === "COMMENT";
+              if (isChallenge && !settings.challengeInteraction) continue;
+              if (isCommunity && !settings.community) continue;
+
+              const category = isCommunity ? "커뮤니티" : "챌린지";
+              const title = n.notification_type === "LIKE"
+                ? "❤️ 좋아요"
+                : n.notification_type === "REPLY"
+                ? "💬 새 답글"
+                : "💬 새 댓글";
+              pushNotification({ category, title, body: n.message });
+              await sendBrowserNotification(title, n.message);
+            }
+          } catch { /* 무시 */ }
+        };
+        pollIntervalRef.current = setInterval(poll, 30_000);
+      }
+
+      // ── 강퇴 알림 폴링 (설정과 무관하게 항상 수신, 독립 cursor) ──
+      if (kickPollIntervalRef.current) {
+        clearInterval(kickPollIntervalRef.current);
+        kickPollIntervalRef.current = null;
+      }
+      const kickPoll = async () => {
         try {
-          const lastPoll = localStorage.getItem(notifSocialPollKey())
+          const lastPoll = localStorage.getItem(notifKickPollKey())
             ?? new Date(Date.now() - 60_000).toISOString();
           const now = new Date().toISOString();
           const notifs = await listNotifications(lastPoll);
-          localStorage.setItem(notifSocialPollKey(), now);
+          localStorage.setItem(notifKickPollKey(), now);
 
           for (const n of notifs) {
-            const isKick = n.notification_type === "CHALLENGE_KICK";
-            const isChallenge = n.target_type === "VERIFICATION";
-            const isCommunity = n.target_type === "POST" || n.target_type === "COMMENT";
-
-            // 강제 탈퇴는 항상 노출, 나머지는 설정값 따름
-            if (!isKick) {
-              if (isChallenge && !settings.challengeInteraction) continue;
-              if (isCommunity && !settings.community) continue;
-            }
-
-            const category = isCommunity ? "커뮤니티" : "챌린지";
-            const title = isKick
-              ? "⛔ 챌린지 탈퇴"
-              : n.notification_type === "LIKE"
-              ? "❤️ 좋아요"
-              : n.notification_type === "REPLY"
-              ? "💬 새 답글"
-              : "💬 새 댓글";
-            pushNotification({ category, title, body: n.message });
-            await sendBrowserNotification(title, n.message);
+            if (n.notification_type !== "CHALLENGE_KICK") continue;
+            pushNotification({ category: "챌린지", title: "⛔ 챌린지 탈퇴", body: n.message });
+            await sendBrowserNotification("⛔ 챌린지 탈퇴", n.message);
           }
         } catch { /* 무시 */ }
       };
-      pollIntervalRef.current = setInterval(poll, 30_000);
+      kickPollIntervalRef.current = setInterval(kickPoll, 30_000);
 
       // ── 챌린지 리마인드 ──────────────────────────
       if (settings.challengeRemind) {
@@ -249,6 +266,7 @@ export function useNotificationScheduler() {
       localStorage.setItem(notifLastSeenKey(), Date.now().toString());
       timers.forEach(clearTimeout);
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (kickPollIntervalRef.current) clearInterval(kickPollIntervalRef.current);
       window.removeEventListener("notif-reschedule", handleReschedule);
       window.removeEventListener("storage", handleStorage);
     };
