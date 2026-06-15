@@ -3,20 +3,29 @@
 import ChallengeCategoryIcon, {
   CATEGORY_CONFIG,
 } from "@/components/challenges/common/ChallengeCategoryIcon";
-import type { ChallengeCategory } from "@/types/challenge";
+import type { ChallengeCategory, ChallengeScope } from "@/types/challenge";
 
 /* =========================================
    Step 2: 카테고리 선택 (8개 4×2 그리드)
    ========================================= */
 
-const CATEGORIES = Object.keys(CATEGORY_CONFIG) as ChallengeCategory[];
+const ALL_CATEGORIES = Object.keys(CATEGORY_CONFIG) as ChallengeCategory[];
+
+/* 그룹 챌린지에서는 질환 관리(개인 전용) 제외 */
+const GROUP_EXCLUDED: ChallengeCategory[] = ["DISEASE_CARE"];
 
 interface WizardStep2Props {
+  scope: ChallengeScope;
   value: ChallengeCategory | null;
   onChange: (cat: ChallengeCategory) => void;
 }
 
-export default function WizardStep2({ value, onChange }: WizardStep2Props) {
+export default function WizardStep2({ scope, value, onChange }: WizardStep2Props) {
+  const categories =
+    scope === "GROUP"
+      ? ALL_CATEGORIES.filter((c) => !GROUP_EXCLUDED.includes(c))
+      : ALL_CATEGORIES;
+
   return (
     <div>
       <h2 className="text-lg font-bold text-text-primary mb-1">주제 선택</h2>
@@ -25,7 +34,7 @@ export default function WizardStep2({ value, onChange }: WizardStep2Props) {
       </p>
 
       <div className="grid grid-cols-4 gap-3">
-        {CATEGORIES.map((cat) => {
+        {categories.map((cat) => {
           const isSelected = value === cat;
           return (
             <button

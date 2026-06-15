@@ -5,6 +5,7 @@ import Button from "@/components/ui/Button";
 import type { WizardFormStep6 } from "@/types/health";
 
 interface StepDietProps {
+  defaultValues?: Partial<WizardFormStep6>;
   onSubmit: (data: WizardFormStep6) => void;
   onSkip: () => void;
   isLoading?: boolean;
@@ -80,11 +81,11 @@ function SelectDropdown({
   );
 }
 
-export default function StepDiet({ onSubmit, onSkip, isLoading }: StepDietProps) {
-  const [vegFreq, setVegFreq] = useState<number | null>(null);
-  const [fruitFreq, setFruitFreq] = useState<number | null>(null);
-  const [outMealFreq, setOutMealFreq] = useState<number | null>(null);
-  const [breakfastFreq, setBreakfastFreq] = useState<number | null>(null);
+export default function StepDiet({ defaultValues, onSubmit, onSkip, isLoading }: StepDietProps) {
+  const [vegFreq, setVegFreq] = useState<number | null>(defaultValues?.veg_freq_1 ?? null);
+  const [fruitFreq, setFruitFreq] = useState<number | null>(defaultValues?.fruit_freq ?? null);
+  const [outMealFreq, setOutMealFreq] = useState<number | null>(defaultValues?.out_meal_freq ?? null);
+  const [breakfastFreq, setBreakfastFreq] = useState<number | null>(defaultValues?.breakfast_freq ?? null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

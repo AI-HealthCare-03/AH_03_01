@@ -20,26 +20,32 @@ import type { Challenge } from "@/types/challenge";
 interface NonMemberDetailProps {
   challenge: Challenge;
   inviteCode?: string;
+  requiresCode?: boolean;
   onJoined: () => void;
 }
 
 export default function NonMemberDetail({
   challenge,
-  inviteCode,
+  inviteCode: initialInviteCode,
+  requiresCode = false,
   onJoined,
 }: NonMemberDetailProps) {
   const { showToast } = useToast();
   const joinMutation = useJoinChallenge();
   const [showRewardGuide, setShowRewardGuide] = useState(false);
+  const [codeInput, setCodeInput] = useState(initialInviteCode ?? "");
+
+  const inviteCode = requiresCode ? codeInput || undefined : (initialInviteCode ?? undefined);
 
   const catConfig = CATEGORY_CONFIG[challenge.category] ?? CATEGORY_CONFIG.EXERCISE;
 
   const handleJoin = () => {
+    if (requiresCode && !codeInput) return;
     joinMutation.mutate(
       { challengeId: challenge.id, inviteCode },
       {
         onSuccess: () => {
-          showToast("참가 신청이 완료되었어요!", "success");
+          showToast("챌린지에 참가했어요!", "success");
           onJoined();
         },
         onError: (err) => {
@@ -77,12 +83,26 @@ export default function NonMemberDetail({
           </p>
         )}
 
-        {/* 초대 코드 안내 */}
-        {inviteCode && (
+        {/* 비공개 챌린지 — 초대 코드 입력 */}
+        {requiresCode && (
+          <div className="mt-3 space-y-1">
+            <p className="text-xs text-text-tertiary">초대 코드를 입력해야 참가할 수 있어요</p>
+            <input
+              type="text"
+              value={codeInput}
+              onChange={(e) => setCodeInput(e.target.value.trim())}
+              placeholder="초대 코드 입력"
+              className="w-full border border-border rounded-[10px] px-3 py-2 text-sm font-mono text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-brand-black"
+            />
+          </div>
+        )}
+
+        {/* 공개 챌린지 — 초대 코드 표시 (URL 파라미터로 전달된 경우) */}
+        {!requiresCode && initialInviteCode && (
           <div className="mt-3 bg-surface rounded-[10px] px-4 py-2 flex items-center gap-2">
             <span className="text-xs text-text-tertiary">초대 코드</span>
             <code className="text-sm font-mono font-bold text-brand-black">
-              {inviteCode}
+              {initialInviteCode}
             </code>
           </div>
         )}
@@ -158,13 +178,10 @@ export default function NonMemberDetail({
         fullWidth
         onClick={handleJoin}
         loading={joinMutation.isPending}
+        disabled={requiresCode && !codeInput}
       >
-        챌린지 참가 신청
+        챌린지 참가하기
       </Button>
-
-      <p className="text-xs text-text-tertiary text-center">
-        참가 신청 후 방장 승인 시 챌린지에 참여됩니다
-      </p>
 
       {/* 보상 안내 모달 */}
       <ChallengeRewardGuideModal

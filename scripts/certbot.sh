@@ -29,12 +29,12 @@ echo ""
 sed -i '' "s/server_name .*/server_name ${domain};/g" infra/nginx/prod_http.conf
 
 # ---------- 수정된 prod_http.conf 파일을 EC2 인스턴스 내로 복사 ----------
-scp -i ~/.ssh/${ssh_key_file} infra/nginx/prod_http.conf ubuntu@${ec2_ip}:~/project/nginx/default.conf
+scp -i ~/.ssh/${ssh_key_file} infra/nginx/prod_http.conf ec2-user@${ec2_ip}:~/project/nginx/default.conf
 
 # ---------- EC2 접속 후 도메인 인증 및 SSL 발급 ----------
 echo "${COLOR_BLUE}EC2 인스턴스에 SSH 접속을 시도합니다.${COLOR_NC}"
 chmod 400 ~/.ssh/${ssh_key_file}
-ssh -i ~/.ssh/${ssh_key_file} ubuntu@${ec2_ip} \
+ssh -i ~/.ssh/${ssh_key_file} ec2-user@${ec2_ip} \
   "CERT_EMAIL=${email} \
    CERT_DOMAIN=${domain} \
    bash -s" << 'EOF'
@@ -68,10 +68,10 @@ if [[ "$apply_https" == "y" || "$apply_https" == "yes" ]]; then
   sed -i '' "s|/etc/letsencrypt/live/[^/]*|/etc/letsencrypt/live/${domain}|g" infra/nginx/prod_https.conf
 
   # ---------- 수정된 prod_http.conf 파일을 EC2 인스턴스 내로 복사 ----------
-  scp -i ~/.ssh/${ssh_key_file} infra/nginx/prod_https.conf ubuntu@${ec2_ip}:~/project/nginx/default.conf
+  scp -i ~/.ssh/${ssh_key_file} infra/nginx/prod_https.conf ec2-user@${ec2_ip}:~/project/nginx/default.conf
 
   # ---------- EC2 접속 후 SSL 인증서를 적용하여 Nginx를 실행 및 certbot 재발급 서비스 실행 ----------
-  ssh -i ~/.ssh/${ssh_key_file} ubuntu@${ec2_ip} \
+  ssh -i ~/.ssh/${ssh_key_file} ec2-user@${ec2_ip} \
   "CERT_EMAIL=${email} CERT_DOMAIN=${domain} bash -s" << 'EOF'
       set -e
       cd project

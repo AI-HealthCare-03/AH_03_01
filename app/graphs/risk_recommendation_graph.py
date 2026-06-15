@@ -34,11 +34,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import json
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -46,9 +47,11 @@ from typing import Any, Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from openai import AsyncOpenAI
+from tortoise.exceptions import DBConnectionError, OperationalError
 from tortoise.transactions import in_transaction
 
 from app.core import config
+from app.core.queue import enqueue_risk_inference
 from app.graphs._shared.medical_evaluator import (
     EvalInput,
     EvalResultLiteral,
@@ -65,6 +68,7 @@ from app.models.health import (
     RecordType,
     RiskLevel,
     UserHealthInfo,
+    score_to_risk_level_label,
 )
 from app.models.ml_inference import (
     MLInferenceKind,
@@ -78,6 +82,7 @@ from app.services.ml.risk_predictor import (
     PredictionInput,
     PredictionOutput,
     RiskPredictor,
+    RuleBasedRiskCalculator,
 )
 
 _logger = logging.getLogger(__name__)
@@ -152,6 +157,8 @@ class RiskState(TypedDict, total=False):
     eligible_templates: list[EligibleTemplate]
     safety_notes: str
     recommended_challenges: list[dict[str, Any]]  # [{template_id, priority, reason}, ...]
+    recommended_tips: list[str]  # 생활습관 권고 (LLM 구조화 출력)
+    recommended_diet: list[str]  # 끼니별 식단 제안 (LLM 구조화 출력)
 
     # final
     final_answer: str
@@ -172,16 +179,32 @@ class PredictionSummary:
 
 
 @dataclass(slots=True)
+class RecommendedChallenge:
+    """프론트 카드용 구조화 추천 챌린지 — LLM 선정(template_id/priority/reason) + 카탈로그 메타(title/category/difficulty) 조인."""
+
+    template_id: int
+    title: str
+    category: str
+    difficulty: str
+    reason: str
+    priority: str | None = None  # "TOP"/"RECOMMENDED"/"OPTIONAL" (LLM 미지정 시 None)
+
+
+@dataclass(slots=True)
 class RiskRecommendationResult:
     answer: str  # 권고·챌린지 추천 본문 (LLM 생성)
     predictions: list[PredictionSummary] = field(default_factory=list)
     sources: list[RetrievedChunk] = field(default_factory=list)
+    tips: list[str] = field(default_factory=list)  # 생활습관 권고 (구조화 칩)
+    diet: list[str] = field(default_factory=list)  # 끼니별 식단 제안 (구조화 칩)
+    recommended_challenges: list[RecommendedChallenge] = field(default_factory=list)  # 프론트 카드용 구조화 추천
     has_required_data: bool = True
     missing_fields: list[str] = field(default_factory=list)
     is_fallback: bool = False
     eval_revision_count: int | None = None
     disclaimer: str = MEDICAL_DISCLAIMER
     model_version: str = MODEL_VERSION
+    feature_snapshot: dict[str, Any] = field(default_factory=dict)  # 캐시 비교 기준 입력 snapshot
 
 
 # ─────────────────────────────────────────────
@@ -394,7 +417,10 @@ async def preprocess(state: RiskState) -> dict[str, Any]:
 
 
 # ─────────────────────────────────────────────
-# 노드 3: ml_inference (P1 동기 — RiskPredictor 룰 stub + ml_inference_requests row)
+# 노드 3: ml_inference
+#   - sync 모드(RISK_INFERENCE_ASYNC=False, 기본): 노드 안에서 RiskPredictor 직접 호출(P1).
+#   - async 모드(True): ml_inference_requests row(PENDING) + Redis 큐 push → risk-worker 가
+#     처리 → 노드는 결과 row 를 폴링. 타임아웃/실패 시 인라인 룰 폴백.
 # ─────────────────────────────────────────────
 _predictor = RiskPredictor()
 
@@ -431,12 +457,29 @@ def _build_prediction_input(disease_type: DiseaseType, snapshot: dict[str, Any])
     )
 
 
-async def ml_inference(state: RiskState) -> dict[str, Any]:
-    """3개 질환 (당뇨/고혈압/심혈관) 위험도 산출.
+_RISK_DISEASES = (DiseaseType.DIABETES, DiseaseType.HYPERTENSION, DiseaseType.CARDIOVASCULAR)
 
-    각 질환마다 ml_inference_requests row 1개 생성 + RiskPredictor 동기 호출 +
-    결과 row 채움. P1 패턴 — 미래 ML 학습 완료 시 dispatch 부분만 Redis 큐로 교체.
-    """
+
+def _output_to_result(output: PredictionOutput) -> dict[str, Any]:
+    return {
+        "disease_type": output.disease_type.value,
+        "risk_score": float(output.risk_score),
+        "risk_level": output.risk_level.value,
+        "risk_level_label": score_to_risk_level_label(output.risk_score),
+        "contributing_factors": [f.to_dict() for f in output.contributing_factors],
+        "model_version": output.model_version,
+    }
+
+
+async def ml_inference(state: RiskState) -> dict[str, Any]:
+    """3개 질환(당뇨/고혈압/심혈관) 위험도 산출. dispatch 모드는 RISK_INFERENCE_ASYNC 로 분기."""
+    if config.RISK_INFERENCE_ASYNC:
+        return await _ml_inference_async(state)
+    return await _ml_inference_sync(state)
+
+
+async def _ml_inference_sync(state: RiskState) -> dict[str, Any]:
+    """P1 동기: 노드 안에서 RiskPredictor 직접 호출 + ml_inference_requests row 채움."""
     user_id = state.get("user_id")
     thread_id = state.get("thread_id")
     snapshot = state.get("feature_snapshot") or {}
@@ -444,7 +487,7 @@ async def ml_inference(state: RiskState) -> dict[str, Any]:
     request_ids: list[int] = []
     predictions: list[dict[str, Any]] = []
 
-    for dt in (DiseaseType.DIABETES, DiseaseType.HYPERTENSION, DiseaseType.CARDIOVASCULAR):
+    for dt in _RISK_DISEASES:
         t_start = time.perf_counter()
         payload = _build_prediction_input(dt, snapshot)
         request = await MLInferenceRequest.create(
@@ -459,13 +502,7 @@ async def ml_inference(state: RiskState) -> dict[str, Any]:
         try:
             output: PredictionOutput = await _predictor.predict(payload)
             duration_ms = int((time.perf_counter() - t_start) * 1000)
-            result_dict = {
-                "disease_type": output.disease_type.value,
-                "risk_score": float(output.risk_score),
-                "risk_level": output.risk_level.value,
-                "contributing_factors": [f.to_dict() for f in output.contributing_factors],
-                "model_version": output.model_version,
-            }
+            result_dict = _output_to_result(output)
             request.status = MLInferenceStatus.SUCCESS
             request.prediction_result = result_dict
             request.duration_ms = duration_ms
@@ -474,12 +511,80 @@ async def ml_inference(state: RiskState) -> dict[str, Any]:
             request_ids.append(request.id)
             predictions.append(result_dict)
         except Exception as e:  # noqa: BLE001
-            _logger.warning("ml_inference (%s) 실패: %s", dt.value, _safe_err_repr(e))
+            _logger.warning("ml_inference (%s) 실패: %s", dt.value, type(e).__name__)
+            _logger.debug("ml_inference (%s) 실패 상세: %s", dt.value, _safe_err_repr(e))
             request.status = MLInferenceStatus.FAILED
             request.error_message = _safe_err_repr(e)
             request.completed_at = datetime.now(tz=UTC)
             await request.save()
             # 부분 실패 — 해당 질환만 skip, 다른 질환 계속
+
+    return {"ml_request_ids": request_ids, "predictions": predictions}
+
+
+async def _await_inference_result(request_id: int, deadline: float) -> dict[str, Any] | None:
+    """워커가 채운 결과 row 를 폴링. SUCCESS면 prediction_result, FAILED/타임아웃이면 None."""
+    loop = asyncio.get_running_loop()
+    while loop.time() < deadline:
+        row = await MLInferenceRequest.filter(id=request_id).first()
+        if row is not None:
+            if row.status == MLInferenceStatus.SUCCESS and row.prediction_result:
+                return row.prediction_result
+            if row.status == MLInferenceStatus.FAILED:
+                return None
+        await asyncio.sleep(config.RISK_INFERENCE_POLL_INTERVAL)
+    return None
+
+
+async def _ml_inference_async(state: RiskState) -> dict[str, Any]:
+    """비동기: PENDING row + Redis 큐 push → risk-worker 처리 → 결과 폴링.
+
+    타임아웃/실패/큐 장애 시 인라인 룰 폴백(RuleBasedRiskCalculator)으로 graceful degrade.
+    """
+    user_id = state.get("user_id")
+    thread_id = state.get("thread_id")
+    snapshot = state.get("feature_snapshot") or {}
+
+    request_ids: list[int] = []
+    predictions: list[dict[str, Any]] = []
+
+    # 1) 질환별 PENDING row 생성 + 큐 push
+    dispatched: list[tuple[int, DiseaseType, PredictionInput]] = []
+    for dt in _RISK_DISEASES:
+        payload = _build_prediction_input(dt, snapshot)
+        request = await MLInferenceRequest.create(
+            user_id=user_id,
+            thread_id=thread_id,
+            kind=MLInferenceKind.RISK_PREDICTION,
+            status=MLInferenceStatus.PENDING,
+            input_features=payload.snapshot(),
+        )
+        try:
+            await enqueue_risk_inference(
+                {
+                    "request_id": request.id,
+                    "user_id": str(user_id) if user_id else None,
+                    "thread_id": thread_id,
+                    "kind": MLInferenceKind.RISK_PREDICTION.value,
+                    "input_features": payload.snapshot(),
+                }
+            )
+        except Exception as e:  # noqa: BLE001
+            _logger.warning(
+                "risk enqueue 실패(%s, req=%s) — 폴링 타임아웃 후 룰 폴백: %s", dt.value, request.id, _safe_err_repr(e)
+            )
+        dispatched.append((request.id, dt, payload))
+
+    # 2) 결과 폴링 (질환 3종 공유 deadline — 워커가 직렬 처리해도 총 대기 ≤ 타임아웃)
+    deadline = asyncio.get_running_loop().time() + config.RISK_INFERENCE_POLL_TIMEOUT
+    for request_id, dt, payload in dispatched:
+        result_dict = await _await_inference_result(request_id, deadline)
+        if result_dict is None:
+            _logger.warning("risk async 결과 미수신(%s, req=%s) — 인라인 룰 폴백", dt.value, request_id)
+            result_dict = _output_to_result(RuleBasedRiskCalculator().calculate(payload))
+        else:
+            request_ids.append(request_id)
+        predictions.append(result_dict)
 
     return {"ml_request_ids": request_ids, "predictions": predictions}
 
@@ -696,27 +801,52 @@ def _format_eligible_templates_block(eligible: list[EligibleTemplate]) -> str:
     lines = ["[추천 가능 챌린지 템플릿 — 이 목록에 있는 template_id 만 추천 가능]"]
     for t in eligible:
         sub = f" / {t.sub_category}" if t.sub_category else ""
-        lines.append(f"- id={t.template_id}  {t.title}  ({t.category}{sub}, {t.difficulty}, 우선도 힌트: {t.priority_hint})")
+        lines.append(
+            f"- id={t.template_id}  {t.title}  ({t.category}{sub}, {t.difficulty}, 우선도 힌트: {t.priority_hint})"
+        )
     return "\n".join(lines) + "\n\n"
 
 
-def _parse_recommendation_json(draft: str) -> tuple[str, list[dict[str, Any]]]:
-    """draft 에서 <!--RECS:[...]–-> 블록을 추출하고 clean 본문과 파싱된 목록을 반환."""
+def _extract_json_block(draft: str, tag: str) -> tuple[str, list[Any]]:
+    """draft 에서 `<!--{tag}:[...]-->` 블록 1개를 추출 → (block 제거된 본문, 파싱 리스트).
+
+    파싱 실패/미존재 시 ([원본 그대로], []) 를 반환해 본문은 보존한다.
+    """
     import re
 
-    pattern = r"<!--RECS:(\[.*?\])-->"
-    m = re.search(pattern, draft, re.DOTALL)
+    pattern = rf"<!--{tag}:(\[[\s\S]*?\])-->"
+    m = re.search(pattern, draft)
     if not m:
         return draft, []
-    json_str = m.group(1)
-    clean = draft[: m.start()].rstrip() + draft[m.end():]
+    clean = draft[: m.start()].rstrip() + draft[m.end() :]
     try:
-        items = json.loads(json_str)
+        items = json.loads(m.group(1))
         if not isinstance(items, list):
             items = []
     except Exception:  # noqa: BLE001
         items = []
     return clean.strip(), items
+
+
+def _parse_recommendation_json(draft: str) -> tuple[str, list[dict[str, Any]]]:
+    """draft 에서 <!--RECS:[...]–-> 블록을 추출하고 clean 본문과 파싱된 목록을 반환."""
+    clean, items = _extract_json_block(draft, "RECS")
+    recs = [i for i in items if isinstance(i, dict)]
+    return clean, recs
+
+
+def _parse_tips_diet(draft: str) -> tuple[str, list[str], list[str]]:
+    """draft 에서 <!--TIPS:[...]--> / <!--DIET:[...]--> 블록을 추출.
+
+    반환: (두 블록이 제거된 본문, tips 문자열 리스트, diet 문자열 리스트).
+    """
+    # 순서 무관 — _extract_json_block 은 re.search 로 태그명 기준 매칭하므로 LLM 출력 순서에 영향받지 않음.
+    clean, raw_tips = _extract_json_block(draft, "TIPS")
+    clean, raw_diet = _extract_json_block(clean, "DIET")
+    # 응답·캐시 비대화 방지: 항목 수(최대 5개)·길이(200자) 상한 (악의/오작동 LLM 출력 가드).
+    tips = [str(t).strip()[:200] for t in raw_tips if str(t).strip()][:5]
+    diet = [str(d).strip()[:200] for d in raw_diet if str(d).strip()][:5]
+    return clean, tips, diet
 
 
 async def generate_recommendation(state: RiskState) -> dict[str, Any]:
@@ -737,11 +867,23 @@ async def generate_recommendation(state: RiskState) -> dict[str, Any]:
     templates_block = _format_eligible_templates_block(eligible)
 
     allowed_ids = {t.template_id for t in eligible}
-    json_instruction = (
-        "\n\n답변 본문 작성 후, 아래 형식으로 추천 챌린지 JSON 블록을 **반드시** 본문 끝에 붙이세요 "
-        "(템플릿 목록의 id 만 사용, 최대 3개):\n"
-        '<!--RECS:[{"template_id": <id>, "priority": "TOP"|"RECOMMENDED"|"OPTIONAL", "reason": "한국어 한 줄 이유"}]-->'
-    ) if allowed_ids else ""
+    recs_instruction = (
+        (
+            "\n\n답변 본문 작성 후, 아래 형식으로 추천 챌린지 JSON 블록을 **반드시** 본문 끝에 붙이세요 "
+            "(템플릿 목록의 id 만 사용, 최대 3개):\n"
+            '<!--RECS:[{"template_id": <id>, "priority": "TOP"|"RECOMMENDED"|"OPTIONAL", "reason": "한국어 한 줄 이유"}]-->'
+        )
+        if allowed_ids
+        else ""
+    )
+    # 권고 칩(TIPS) + 끼니별 식단 칩(DIET) 구조화 블록도 함께 요청 (본문은 그대로 유지).
+    structured_instruction = (
+        "\n\n또한 본문에 작성한 핵심 생활습관 권고를 아래 형식으로 짧은 한국어 문장 리스트(3~5개)로 요약해 붙이세요:\n"
+        '<!--TIPS:["권고 한 줄", "..."]-->\n'
+        "끼니별 식단 제안(아침/점심/저녁 각 한 줄, 카탈로그·지침 근거)도 아래 형식으로 붙이세요:\n"
+        '<!--DIET:["아침: ...", "점심: ...", "저녁: ..."]-->'
+    )
+    json_instruction = recs_instruction + structured_instruction
 
     user_prompt = (
         f"{_format_predictions_block(predictions)}"
@@ -774,8 +916,15 @@ async def generate_recommendation(state: RiskState) -> dict[str, Any]:
     allowed_ids = {t.template_id for t in eligible}
     clean_draft, raw_recs = _parse_recommendation_json(draft)
     validated_recs = [r for r in raw_recs if isinstance(r.get("template_id"), int) and r["template_id"] in allowed_ids]
+    # 권고/식단 구조화 블록 추출 (본문에서 제거 — answer 는 평가기 통과본 유지)
+    clean_draft, tips, diet = _parse_tips_diet(clean_draft)
 
-    return {"draft_answer": clean_draft, "recommended_challenges": validated_recs}
+    return {
+        "draft_answer": clean_draft,
+        "recommended_challenges": validated_recs,
+        "recommended_tips": tips,
+        "recommended_diet": diet,
+    }
 
 
 # ─────────────────────────────────────────────
@@ -836,10 +985,19 @@ async def final_ok(state: RiskState) -> dict[str, Any]:
             await save_recommendations(user_id, disease_risk_id, recommended)
         except Exception as e:  # noqa: BLE001
             _logger.warning("챌린지 추천 저장 실패: %s", _safe_err_repr(e))
+            return {
+                "final_answer": state.get("draft_answer", ""),
+                "sources": state.get("retrieved_docs", []),
+                "recommended_tips": state.get("recommended_tips", []),
+                "recommended_diet": state.get("recommended_diet", []),
+                "is_fallback": True,
+            }
 
     return {
         "final_answer": state.get("draft_answer", ""),
         "sources": state.get("retrieved_docs", []),
+        "recommended_tips": state.get("recommended_tips", []),
+        "recommended_diet": state.get("recommended_diet", []),
         "is_fallback": False,
     }
 
@@ -911,6 +1069,28 @@ def RiskRecommendationGraph() -> Any:  # noqa: N802 — API 계약 명칭 보존
 # ─────────────────────────────────────────────
 # 공개 진입점
 # ─────────────────────────────────────────────
+async def compute_feature_snapshot(user_id: Any) -> dict[str, Any] | None:
+    """그래프를 실행하지 않고 캐시 비교 기준 입력 snapshot 만 산출.
+
+    `validate_input`(DB fetch) + `preprocess` 두 노드만 재사용하므로 LLM·ML 호출이 없다.
+    필수 데이터(height/weight)가 없으면 None 을 반환 — 캐시 게이트는 이 경우 그래프 호출로
+    위임해 정상 missing-info 응답 경로를 타게 한다.
+
+    그래프 본 실행이 사용하는 snapshot 과 동일 코드 경로라 캐시 키 drift 가 없다.
+    """
+    fetch_state: RiskState = {"user_id": user_id}
+    fetched = await validate_input(fetch_state)
+    if not fetched.get("has_required_data", False):
+        return None
+    pre_state: RiskState = {
+        "profile": fetched.get("profile"),
+        "recent_records": fetched.get("recent_records") or {},
+    }
+    pre = await preprocess(pre_state)
+    snapshot = pre.get("feature_snapshot")
+    return dict(snapshot) if isinstance(snapshot, dict) else None
+
+
 async def run_risk_recommendation(
     user_id: Any,
     thread_id: str | None = None,
@@ -929,6 +1109,10 @@ async def run_risk_recommendation(
     }
     try:
         final_state: RiskState = await graph.ainvoke(initial)
+    except (DBConnectionError, OperationalError):
+        # DB 연결/조회 장애는 fallback 메시지로 가리지 않고 그대로 전파해
+        # 서비스 레이어가 503(일시 오류)로 명확히 안내하게 한다.
+        raise
     except Exception as e:  # noqa: BLE001
         _logger.error("RiskRecommendationGraph 실행 실패: %s", _safe_err_repr(e))
         return RiskRecommendationResult(
@@ -936,6 +1120,42 @@ async def run_risk_recommendation(
             is_fallback=True,
         )
 
+    return _state_to_result(final_state)
+
+
+def _join_recommended_challenges(final_state: RiskState) -> list[RecommendedChallenge]:
+    """state.recommended_challenges(template_id/priority/reason) 를 eligible_templates(메타) 와
+    template_id 로 조인해 프론트 카드용 구조화 목록 생성.
+
+    LLM 미선정이거나 eligible 카탈로그에 없는 id 는 제외 → 비면 빈 리스트.
+    """
+    recommended = final_state.get("recommended_challenges") or []
+    eligible = final_state.get("eligible_templates") or []
+    meta_by_id: dict[int, EligibleTemplate] = {t.template_id: t for t in eligible}
+
+    items: list[RecommendedChallenge] = []
+    for r in recommended:
+        tid = r.get("template_id")
+        if not isinstance(tid, int):
+            continue
+        meta = meta_by_id.get(tid)
+        if meta is None:  # 카탈로그에 없는 id (whitelist 외) → 카드 메타 채울 수 없으므로 스킵
+            continue
+        items.append(
+            RecommendedChallenge(
+                template_id=tid,
+                title=meta.title,
+                category=meta.category,
+                difficulty=meta.difficulty,
+                reason=str(r.get("reason") or ""),
+                priority=str(r["priority"]) if r.get("priority") else None,
+            )
+        )
+    return items
+
+
+def _state_to_result(final_state: RiskState) -> RiskRecommendationResult:
+    """그래프 누적 최종 state → RiskRecommendationResult 매핑 (sync/stream 공용)."""
     if not final_state.get("has_required_data", True):
         return RiskRecommendationResult(
             answer=MISSING_INFO_MESSAGE,
@@ -958,9 +1178,81 @@ async def run_risk_recommendation(
             for p in (final_state.get("predictions") or [])
         ],
         sources=list(final_state.get("sources") or []),
+        tips=list(final_state.get("recommended_tips") or []),
+        diet=list(final_state.get("recommended_diet") or []),
+        recommended_challenges=_join_recommended_challenges(final_state),
         is_fallback=bool(final_state.get("is_fallback", False)),
         eval_revision_count=int(final_state.get("eval_revision_count", 0)),
+        feature_snapshot=dict(final_state.get("feature_snapshot") or {}),
     )
+
+
+# 스트리밍(SSE) 단계 라벨 — astream_events on_chain_start 진입 시 사용자 노출 노드만.
+# (preprocess/build_query/persist_disease_risk/final_* 등 내부·종료 노드는 스킵.)
+STAGE_LABELS: dict[str, str] = {
+    "validate_input": "건강 정보를 확인하고 있어요...",
+    "ml_inference": "위험도를 예측하고 있어요...",
+    "retrieve": "관련 자료를 검색하고 있어요...",
+    "generate_recommendation": "맞춤 권고를 작성하고 있어요...",
+    "evaluate": "답변을 검토하고 있어요...",
+}
+
+
+async def run_risk_recommendation_stream(
+    user_id: Any,
+    thread_id: str | None = None,
+) -> AsyncIterator[tuple[str, Any]]:
+    """RiskRecommendationGraph 스트리밍 실행 — 단계 이벤트 yield 후 최종 결과 yield.
+
+    run_chat_rag_stream 과 동일 패턴: `astream_events(version="v2")` 의 on_chain_start(루트 제외 +
+    STAGE_LABELS 멤버)에서 ("stage", node) 발행, 루트 on_chain_end 의 누적 state 로 ("result", X) 발행.
+
+    Yields:
+        ("stage", node_name: str)            — 그래프 노드 진입 시점
+        ("result", RiskRecommendationResult) — 마지막 1회
+
+    DB 연결/조회 장애는 그대로 전파(서비스 스트림이 error 이벤트로 변환). 그 외 예외는 fallback 결과로 흡수.
+    """
+    graph = RiskRecommendationGraph()
+    initial: RiskState = {
+        "user_id": user_id,
+        "thread_id": thread_id or f"risk-{user_id}-{int(time.time())}",
+        "eval_revision_count": 0,
+    }
+
+    root_run_id: Any = None
+    final_state: RiskState | None = None
+
+    try:
+        async for ev in graph.astream_events(initial, version="v2"):
+            event_type = ev["event"]
+            # 루트 그래프 실행 식별 — parent_ids 가 빈 리스트인 on_chain_start 가 최상위.
+            if event_type == "on_chain_start" and ev.get("parent_ids") == []:
+                root_run_id = ev["run_id"]
+                continue
+            # 노드 진입 → stage 발행 (STAGE_LABELS 에 있는 노드만).
+            if event_type == "on_chain_start" and ev["name"] in STAGE_LABELS:
+                yield ("stage", ev["name"])
+                continue
+            # 루트 그래프 종료 → 누적 최종 state 확보.
+            if event_type == "on_chain_end" and ev["run_id"] == root_run_id:
+                output = ev["data"].get("output")
+                if isinstance(output, dict):
+                    final_state = output  # type: ignore[assignment]
+    except (DBConnectionError, OperationalError):
+        # DB 장애는 전파 — 서비스가 error 이벤트로 안내.
+        raise
+    except Exception as e:  # noqa: BLE001 — 그래프 자체 예외는 안전 fallback
+        _logger.error("RiskRecommendationGraph 스트리밍 실행 실패: %s", _safe_err_repr(e))
+        yield ("result", RiskRecommendationResult(answer=FALLBACK_MESSAGE, is_fallback=True))
+        return
+
+    if final_state is None:
+        _logger.error("RiskRecommendationGraph 스트리밍: 최종 state 미확보, fallback")
+        yield ("result", RiskRecommendationResult(answer=FALLBACK_MESSAGE, is_fallback=True))
+        return
+
+    yield ("result", _state_to_result(final_state))
 
 
 # ChatRAGGraph 의 __init__ 과 함께 export
@@ -970,10 +1262,14 @@ __all__ = [
     "MISSING_INFO_MESSAGE",
     "PredictionSummary",
     "RISK_HIGH_THRESHOLD",
+    "RecommendedChallenge",
     "RiskRecommendationGraph",
     "RiskRecommendationResult",
     "RiskState",
+    "STAGE_LABELS",
+    "compute_feature_snapshot",
     "run_risk_recommendation",
+    "run_risk_recommendation_stream",
 ]
 
 

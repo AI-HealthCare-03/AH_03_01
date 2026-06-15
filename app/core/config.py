@@ -49,6 +49,12 @@ class Config(BaseSettings):
     # 미디어/파일 업로드
     MEDIA_ROOT: str = "/app/media"
     MEDIA_URL_PREFIX: str = "/media"
+    # signed-URL 만료(초). 읽을 때마다 새 서명을 발급하므로, 응답을 받은 뒤
+    # 이 시간 안에 표시하면 된다(이미지 캐시 만료 방지 위해 넉넉히 1일).
+    MEDIA_URL_TTL: int = 24 * 60 * 60
+    # 미디어 signed-URL 서명 키. 미설정("")이면 SECRET_KEY 로 폴백한다.
+    # JWT 와 분리하고 싶거나 독립적으로 키를 rotation 하려면 이 값을 설정한다.
+    MEDIA_SIGNING_KEY: str = ""
     UPLOAD_MAX_BYTES: int = 50 * 1024 * 1024  # 50MB
     ALLOWED_IMAGE_MIME: tuple[str, ...] = ("image/jpeg", "image/png", "image/webp")
 
@@ -57,6 +63,17 @@ class Config(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     IMAGE_VERIFY_QUEUE: str = "queue:image-verification"
+    # 위험도 예측 ML 추론 큐 (risk-worker BRPOP consumer)
+    RISK_INFERENCE_QUEUE: str = "queue:ml-inference"
+    # ml_inference 노드 dispatch 모드: True=Redis 큐+워커 비동기, False=P1 동기(인라인 RiskPredictor)
+    RISK_INFERENCE_ASYNC: bool = False
+    # async 모드에서 노드가 결과 row 를 폴링하는 간격/최대 대기(초). 타임아웃 시 인라인 룰 폴백.
+    RISK_INFERENCE_POLL_INTERVAL: float = 0.2
+    RISK_INFERENCE_POLL_TIMEOUT: float = 15.0
+    # True 면 ML 모델 로드/추론 실패 시 룰로 조용히 폴백하지 않고 MLUnavailableError 를 던진다.
+    # (prod 에서 켜면 예측 결과가 항상 진짜 ML 임을 보장 — 모델 장애가 룰로 가려지지 않음.)
+    # 로컬/테스트 기본 False(룰 폴백으로 graceful degrade 유지).
+    RISK_REQUIRE_ML: bool = False
 
     # AI 모델
     SIGLIP_MODEL_NAME: str = "google/siglip2-base-patch16-224"

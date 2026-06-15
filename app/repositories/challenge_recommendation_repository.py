@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from app.models.challenge import ChallengeRecommendation, RecommendationPriority
+
+_PHI_PATTERN = re.compile(r"\d+\.?\d*\s*(?:mg(?:/dL)?|mmHg|kg|cm|%|kcal)", re.IGNORECASE)
 
 _logger = logging.getLogger(__name__)
 
@@ -24,12 +27,12 @@ async def save_recommendations(
     saved_ids: list[int] = []
     for item in recommended:
         template_id = item.get("template_id")
-        if not template_id:
+        if not isinstance(template_id, int) or template_id <= 0:
             continue
         priority_val = str(item.get("priority", RecommendationPriority.RECOMMENDED))
         if priority_val not in _VALID_PRIORITIES:
             priority_val = RecommendationPriority.RECOMMENDED
-        reason = str(item.get("reason", ""))[:500] if item.get("reason") else None
+        reason = _PHI_PATTERN.sub("[값]", str(item.get("reason", "")))[:500] if item.get("reason") else None
         try:
             row = await ChallengeRecommendation.create(
                 user_id=user_id,

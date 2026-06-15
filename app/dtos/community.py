@@ -4,16 +4,18 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.dtos.base import BaseSerializerModel
-from app.models.community import PostCategory, QuizCategory, QuizOption, ReportReason, ReportTargetType
+from app.models.community import InfoCategory, PostCategory, QuizCategory, QuizOption, ReportReason, ReportTargetType
 
 
 class PostListItem(BaseSerializerModel):
     id: int
     title: str
     category: PostCategory
+    info_category: InfoCategory | None = None
     is_pinned: bool
     view_count: int
     comment_count: int
+    like_count: int = 0
     author_id: UUID
     author_nickname: str | None
     created_at: datetime
@@ -22,6 +24,7 @@ class PostListItem(BaseSerializerModel):
 class PostDetailResponse(PostListItem):
     content: str
     updated_at: datetime
+    is_liked: bool = False
 
 
 class PostListResponse(BaseModel):
@@ -35,12 +38,14 @@ class PostCreateRequest(BaseModel):
     title: str
     content: str
     category: PostCategory
+    info_category: InfoCategory | None = None
 
 
 class PostUpdateRequest(BaseModel):
     title: str | None = None
     content: str | None = None
     category: PostCategory | None = None
+    info_category: InfoCategory | None = None
 
 
 class CommentResponse(BaseSerializerModel):
@@ -51,6 +56,8 @@ class CommentResponse(BaseSerializerModel):
     parent_id: int | None
     created_at: datetime
     updated_at: datetime
+    like_count: int = 0
+    is_liked: bool = False
     replies: list["CommentResponse"] = []
 
 
@@ -66,6 +73,11 @@ class CommentUpdateRequest(BaseModel):
     content: str
 
 
+class LikeResponse(BaseModel):
+    like_count: int
+    is_liked: bool
+
+
 class ReportCreateRequest(BaseModel):
     target_type: ReportTargetType
     target_id: int
@@ -73,6 +85,7 @@ class ReportCreateRequest(BaseModel):
 
 
 # ── Quiz DTOs ──────────────────────────────────────────────────────────────────
+
 
 class QuizResponse(BaseSerializerModel):
     id: int
@@ -82,7 +95,7 @@ class QuizResponse(BaseSerializerModel):
     option_c: str
     option_d: str
     category: QuizCategory
-    quiz_date: date
+    quiz_date: date | None
 
 
 class QuizAnswerRequest(BaseModel):
@@ -98,7 +111,7 @@ class QuizAnswerResponse(BaseSerializerModel):
 
 class QuizAttemptHistoryItem(BaseSerializerModel):
     quiz_id: int
-    quiz_date: date
+    quiz_date: date | None
     question: str
     category: QuizCategory
     selected_option: QuizOption

@@ -48,11 +48,10 @@ export const RESTORE_DATA_ITEMS = [
   { key: "community" as const, label: "커뮤니티 활동 내역" },
 ] as const;
 
-/* 파괴적 모달 삭제 항목 */
-export const DESTRUCT_ITEMS = [
-  { label: "건강 데이터", value: "142건" },
-  { label: "챌린지 참여", value: "42개" },
-  { label: "보유 포인트", value: "2,840 P" },
-  { label: "캐릭터", value: "함께" },
-  { label: "커뮤니티 활동", value: "글 12 · 댓글 47" },
+/* 파괴적 모달 삭제 항목 레이블 (수치 없음 — 실데이터 API 미제공) */
+export const DESTRUCT_ITEM_LABELS = [
+  "건강 기록 (혈압·혈당·복약)",
+  "챌린지 참여 내역 및 진행 현황",
+  "보유 포인트 및 캐릭터",
+  "커뮤니티 작성 글 및 댓글",
 ] as const;

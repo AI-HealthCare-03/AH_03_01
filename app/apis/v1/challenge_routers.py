@@ -42,6 +42,7 @@ from app.models.challenge import (
     ChallengeScope,
     ChallengeStatus,
     ChallengeVerification,
+    ChallengeVisibility,
     ReactionType,
     VerificationMethod,
     VerificationStatus,
@@ -59,6 +60,14 @@ from app.services.challenge import (
     VerificationService,
     total_pages,
 )
+
+
+def _effective_status(ch_status: ChallengeStatus, end_date: date) -> ChallengeStatus:
+    """크론잡 실행 전이라도 end_date가 지난 챌린지는 COMPLETED로 반환한다."""
+    if ch_status in (ChallengeStatus.ACTIVE, ChallengeStatus.RECRUITING) and end_date < date.today():
+        return ChallengeStatus.COMPLETED
+    return ch_status
+
 
 challenge_categories_router = APIRouter(prefix="/challenge-categories", tags=["challenge-categories"])
 challenges_router = APIRouter(prefix="/challenges", tags=["challenges"])
@@ -134,10 +143,12 @@ async def list_challenges(
     scope: Annotated[ChallengeScope | None, Query()] = None,
     challenge_status: Annotated[ChallengeStatus | None, Query(alias="status")] = None,
     category: Annotated[ChallengeCategory | None, Query()] = None,
+    visibility: Annotated[ChallengeVisibility | None, Query()] = None,
     keyword: Annotated[str | None, Query()] = None,
     date_from: Annotated[date | None, Query(alias="from")] = None,
     date_to: Annotated[date | None, Query(alias="to")] = None,
     mine: Annotated[bool, Query()] = False,
+    left_only: Annotated[bool, Query(alias="leftOnly")] = False,
     sort_by: Annotated[str | None, Query(alias="sortBy")] = None,  # start_date | end_date
     page: Annotated[int, Query(ge=1)] = 1,
     size: Annotated[int, Query(ge=1, le=100)] = 20,
@@ -147,6 +158,7 @@ async def list_challenges(
         scope=scope.value if scope else None,
         challenge_status=challenge_status.value if challenge_status else None,
         category=category.value if category else None,
+        visibility=visibility.value if visibility else None,
         keyword=keyword,
         date_from=date_from,
         date_to=date_to,
@@ -154,6 +166,7 @@ async def list_challenges(
         page=page,
         size=size,
         mine_only=mine,
+        left_only=left_only,
     )
 
     # 사용자별 달성 현황 일괄 조회
@@ -162,6 +175,7 @@ async def list_challenges(
     challenge_ids = [ch.id for ch in items]
     approved_counts: dict[int, int] = {}
     missed_counts: dict[int, int] = {}
+    participant_statuses: dict[int, str] = {}
     if challenge_ids:
         verif_rows = await ChallengeVerification.filter(
             challenge_id__in=challenge_ids,
@@ -177,9 +191,10 @@ async def list_challenges(
         part_rows = await ChallengeParticipant.filter(
             challenge_id__in=challenge_ids,
             user_id=user.id,
-        ).values("challenge_id", "missed_count")
+        ).values("challenge_id", "missed_count", "status")
         for row in part_rows:
             missed_counts[row["challenge_id"]] = row["missed_count"] or 0
+            participant_statuses[row["challenge_id"]] = row["status"]
 
     def _total_days(ch) -> int:
         return max(1, (ch.end_date - ch.start_date).days + 1)
@@ -194,13 +209,16 @@ async def list_challenges(
                 id=ch.id,
                 title=ch.title,
                 scope=ch.scope,
-                status=ch.status,
+                status=_effective_status(ch.status, ch.end_date),
                 category=ch.category,
+                visibility=ch.visibility,
+                max_participants=ch.max_participants,
                 start_date=ch.start_date,
                 end_date=ch.end_date,
                 my_progress=approved_counts.get(ch.id, 0),
                 total_days=_total_days(ch),
                 missed_count=missed_counts.get(ch.id, 0),
+                my_participant_status=participant_statuses.get(ch.id),
             )
             for ch in items
         ],
@@ -214,10 +232,21 @@ async def get_challenge(
     user: Annotated[User, Depends(get_request_user)],
     service: Annotated[ChallengeService, Depends(ChallengeService)],
 ) -> Response:
-    challenge = await service.get_owned_or_participating(user, challenge_id)
+    from app.models.challenge import ChallengeParticipant, ParticipantStatus  # noqa: PLC0415
+
+    challenge = await service.get_public(challenge_id)
+    is_creator = challenge.creator_id == user.id
+    participation = await ChallengeParticipant.filter(
+        challenge_id=challenge_id, user_id=user.id,
+    ).first()
+    is_member = is_creator or (
+        participation is not None and participation.status == ParticipantStatus.APPROVED
+    )
     payload = ChallengeResponse.model_validate(challenge).model_dump()
+    payload["is_member"] = is_member
+    payload["status"] = _effective_status(challenge.status, challenge.end_date).value
     # 그룹 챌린지의 경우 참여자/방장에게 invite_code 노출 (코드 복사 기능)
-    if challenge.scope.value == "GROUP":
+    if challenge.scope.value == "GROUP" and is_member:
         invite_code = await service.get_active_invite_code(challenge.id)
         if invite_code:
             payload["invite_code"] = invite_code
@@ -353,9 +382,10 @@ async def participant_action(
         body = {}
     if action == "join":
         code = invite_code_q or (body.get("invite_code") if isinstance(body, dict) else None)
-        if not code:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invite_code 가 필요합니다.")
-        participant = await service.join_by_code(user, challenge_id, code)
+        if code:
+            participant = await service.join_by_code(user, challenge_id, code)
+        else:
+            participant = await service.join_public(user, challenge_id)
         return Response(
             ParticipantResponse.model_validate(participant).model_dump(mode="json"),
             status_code=status.HTTP_201_CREATED,

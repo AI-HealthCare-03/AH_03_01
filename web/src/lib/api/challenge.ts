@@ -25,14 +25,17 @@ import type { ChallengeStatus, ChallengeScope } from "@/types/challenge";
 /* ─── 챌린지 목록 ─── */
 export async function fetchChallenges(params: {
   mine?: boolean;
+  leftOnly?: boolean;
   status?: ChallengeStatus;
   scope?: ChallengeScope;
+  category?: string;
+  visibility?: string;
   inviteCode?: string;
   size?: number;
   page?: number;
-  from?: string;      // YYYY-MM-DD 시작일 필터
-  to?: string;        // YYYY-MM-DD 종료일 필터
-  sortBy?: "start_date" | "end_date";  // 시작날짜순 | 마감임박순
+  from?: string;
+  to?: string;
+  sortBy?: "start_date" | "end_date";
 }): Promise<ChallengeListResponse> {
   const { data } = await apiClient.get<ChallengeListResponse>(
     "/api/v1/challenges",

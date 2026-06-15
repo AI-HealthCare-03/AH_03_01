@@ -6,6 +6,7 @@ import type { WizardFormStep7 } from "@/types/health";
 
 interface StepExtrasProps {
   gender: "MALE" | "FEMALE" | undefined;
+  defaultValues?: Partial<WizardFormStep7>;
   onSubmit: (data: WizardFormStep7) => void;
   isLoading?: boolean;
 }
@@ -115,23 +116,27 @@ function TriChoice({
   );
 }
 
-export default function StepExtras({ gender, onSubmit, isLoading }: StepExtrasProps) {
+export default function StepExtras({ gender, defaultValues, onSubmit, isLoading }: StepExtrasProps) {
   const isFemale = gender === "FEMALE";
 
   /* 여성 전용 */
-  const [menopause, setMenopause] = useState<number | null>(null);
-  const [ocpTaking, setOcpTaking] = useState<boolean | null>(null);
-  const [ocpMonths, setOcpMonths] = useState("");
+  const [menopause, setMenopause] = useState<number | null>(defaultValues?.is_menopause ?? null);
+  const [ocpTaking, setOcpTaking] = useState<boolean | null>(defaultValues?.ocp_taking ?? null);
+  const [ocpMonths, setOcpMonths] = useState(defaultValues?.ocp_total_months ?? "");
 
-  /* 빈혈: 예=1 / 아니오=0 / null=모름(미전송) */
-  const [anemia, setAnemia] = useState<number | null>(null);
+  /* 빈혈: 예=1 / 아니오=0 / -1=모름 / null=미선택 */
+  const [anemia, setAnemia] = useState<number | null>(defaultValues?.anemia ?? null);
 
   /* 만성질환 */
-  const [chronicDiseases, setChronicDiseases] = useState<string[]>(["NONE"]);
+  const [chronicDiseases, setChronicDiseases] = useState<string[]>(
+    defaultValues?.chronic_diseases ?? ["NONE"]
+  );
 
   /* 임신 상태 */
   const [pregnancyStatus, setPregnancyStatus] =
-    useState<"NOT_APPLICABLE" | "PREGNANT" | "POSTPARTUM">("NOT_APPLICABLE");
+    useState<"NOT_APPLICABLE" | "PREGNANT" | "POSTPARTUM">(
+      defaultValues?.pregnancy_status ?? "NOT_APPLICABLE"
+    );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,7 +145,7 @@ export default function StepExtras({ gender, onSubmit, isLoading }: StepExtrasPr
       is_menopause: gender === "FEMALE" ? menopause : gender === "MALE" ? -1 : null,
       ocp_taking: isFemale ? ocpTaking : null,
       ocp_total_months: isFemale && ocpTaking ? ocpMonths : "",
-      /* 모름=null → 미전송 처리는 page.tsx 에서 */
+      /* 1=예 / 0=아니오 / -1=모름 / null=미선택(미전송) */
       anemia: anemia,
       chronic_diseases: chronicDiseases,
       pregnancy_status: pregnancyStatus,
@@ -226,10 +231,10 @@ export default function StepExtras({ gender, onSubmit, isLoading }: StepExtrasPr
               <button
                 key={v}
                 type="button"
-                onClick={() => setAnemia(v === -1 ? null : v)}
+                onClick={() => setAnemia(v)}
                 className={[
                   "flex-1 py-2 text-sm rounded-[10px] border transition-colors min-h-[44px]",
-                  (v === -1 ? anemia === null : anemia === v)
+                  anemia === v
                     ? "bg-brand-black text-white border-brand-black"
                     : "bg-white text-text-secondary border-border hover:border-text-primary",
                 ].join(" ")}
@@ -238,9 +243,6 @@ export default function StepExtras({ gender, onSubmit, isLoading }: StepExtrasPr
               </button>
             ))}
           </div>
-          <p className="text-xs text-text-tertiary mt-1">
-            모름 선택 시 해당 항목은 저장하지 않습니다.
-          </p>
         </div>
 
         <ChronicDiseaseField value={chronicDiseases} onChange={setChronicDiseases} />
@@ -270,12 +272,8 @@ export default function StepExtras({ gender, onSubmit, isLoading }: StepExtrasPr
         )}
       </div>
 
-      <div className="rounded-[12px] bg-[#fffbe6] border border-[#f9e000] p-3 text-xs text-[#856404]">
-        저장 후 자동으로 위험도를 계산합니다. 계산에 실패해도 기록은 저장됩니다.
-      </div>
-
       <Button type="submit" fullWidth loading={isLoading}>
-        저장 &amp; 위험도 계산
+        저장 완료
       </Button>
     </form>
   );

@@ -42,6 +42,7 @@ app = [
     "orjson>=3.11.5",
     "passlib[bcrypt]>=1.7.4",
     "pgvector>=0.3.6",
+    "playwright>=1.49.0",               # 월간 리포트 서버사이드 PDF 렌더 (chromium set_content → page.pdf)
     "pyjwt>=2.10.1",
     "python-frontmatter>=1.1.0",        # RAG: 문서 frontmatter 파싱 (인덱싱)
     "rank-bm25>=0.2.2",                 # RAG: BM25 검색 (Step A 하이브리드 검색)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import WizardShell from "@/components/health/new/WizardShell";
@@ -13,11 +13,10 @@ import StepDiet from "@/components/health/new/StepDiet";
 import StepExtras from "@/components/health/new/StepExtras";
 import { useCreateProfile } from "@/hooks/queries/useCreateProfile";
 import { useCreateHealthRecord } from "@/hooks/queries/useCreateHealthRecord";
-import { useCreatePrediction } from "@/hooks/queries/useCreatePrediction";
 import { useMe } from "@/hooks/queries/useMe";
 import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
-import { pushNotification } from "@/components/layout/NotificationDropdown";
+import { fetchHealthProfileDetail } from "@/lib/api/health";
 import type {
   WizardFormStep1,
   WizardFormStep2,
@@ -27,6 +26,7 @@ import type {
   WizardFormStep6,
   WizardFormStep7,
   HealthProfileUpsertRequest,
+  HealthProfileDetail,
 } from "@/types/health";
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7;
@@ -54,6 +54,16 @@ function toInt(s: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+/* 기존 프로필 → 흡연 UI 선택값으로 역변환 */
+function smokingChoiceFromProfile(
+  p: HealthProfileDetail
+): WizardFormStep4["smoking_choice"] | undefined {
+  if (p.current_smoker === undefined) return undefined;
+  if (p.current_smoker === 1) return "CURRENT";
+  if (p.smoking_risk !== undefined && p.smoking_risk !== null && p.smoking_risk > 0) return "QUIT";
+  return "NEVER";
+}
+
 export default function HealthRecordsNewPage() {
   const router = useRouter();
   const { showToast } = useToast();
@@ -64,13 +74,116 @@ export default function HealthRecordsNewPage() {
 
   const createProfile = useCreateProfile();
   const createRecord = useCreateHealthRecord();
-  const createPrediction = useCreatePrediction();
 
   const isLoading =
-    createProfile.isPending || createRecord.isPending || createPrediction.isPending;
+    createProfile.isPending || createRecord.isPending;
 
   /* 스텝 간 누적 페이로드 — 각 스텝이 완료될 때마다 병합 */
   const [accumulated, setAccumulated] = useState<HealthProfileUpsertRequest>({});
+
+  /* 기존 프로필 로드 — 수정 모드 판별 */
+  const [existingProfile, setExistingProfile] = useState<HealthProfileDetail | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  /* 이미 방문한(또는 prefill된) 단계 번호 집합 — 수정 모드에서만 클릭 이동 허용 */
+  const [visitedSteps, setVisitedSteps] = useState<Set<number>>(new Set([1]));
+  /* 수정 모드 = 기존 프로필 존재 */
+  const isEditMode = profileLoaded && existingProfile !== null;
+
+  useEffect(() => {
+    fetchHealthProfileDetail().then((profile) => {
+      if (profile) {
+        setExistingProfile(profile);
+        /* 수정 모드: 모든 단계를 방문 가능으로 표시 */
+        setVisitedSteps(new Set([1, 2, 3, 4, 5, 6, 7]));
+      }
+      setProfileLoaded(true);
+    });
+  }, []);
+
+  /* prefill 헬퍼 — 기존 프로필에서 각 스텝 defaultValues 생성 */
+  const prefillStep1 = (): Partial<WizardFormStep1> | undefined => {
+    if (!existingProfile) return undefined;
+    const p = existingProfile;
+    return {
+      height_cm: p.height_cm !== undefined ? String(p.height_cm) : "",
+      weight_kg: p.weight_kg !== undefined ? String(p.weight_kg) : "",
+      waist_cm: p.waist_cm !== undefined ? String(p.waist_cm) : "",
+    };
+  };
+
+  const prefillStep2 = (): Partial<WizardFormStep2> | undefined => {
+    if (!existingProfile) return undefined;
+    const p = existingProfile;
+    return {
+      systolic: p.systolic_bp !== undefined ? String(p.systolic_bp) : "",
+      diastolic: p.diastolic_bp !== undefined ? String(p.diastolic_bp) : "",
+      fasting_glucose: p.fasting_blood_sugar !== undefined ? String(p.fasting_blood_sugar) : "",
+      measurement_env: p.bp_measure_env ?? "HOME",
+    };
+  };
+
+  const prefillStep3 = (): Partial<WizardFormStep3> | undefined => {
+    if (!existingProfile) return undefined;
+    const p = existingProfile;
+    return {
+      family_dm: p.family_dm ?? -1,
+      family_hp: p.family_hp ?? -1,
+      family_hl: p.family_hl ?? -1,
+    };
+  };
+
+  const prefillStep4 = (): Partial<WizardFormStep4> | undefined => {
+    if (!existingProfile) return undefined;
+    const p = existingProfile;
+    return {
+      smoking_choice: smokingChoiceFromProfile(p),
+      alcohol_freq_y: p.alcohol_freq_y ?? null,
+      alcohol_cup: p.alcohol_cup ?? null,
+    };
+  };
+
+  const prefillStep5 = (): Partial<WizardFormStep5> | undefined => {
+    if (!existingProfile) return undefined;
+    const p = existingProfile;
+    return {
+      sleep_weekday: p.sleep_weekday !== undefined ? String(p.sleep_weekday) : "",
+      sleep_weekend: p.sleep_weekend !== undefined ? String(p.sleep_weekend) : "",
+      moderate_exercise_hour: p.moderate_exercise_hour !== undefined ? String(p.moderate_exercise_hour) : "",
+      mid_act_day: p.mid_act_day !== undefined ? String(p.mid_act_day) : "",
+      walk_day: p.walk_day !== undefined ? String(p.walk_day) : "",
+      water_count: p.water_count !== undefined ? String(p.water_count) : "",
+    };
+  };
+
+  const prefillStep6 = (): Partial<WizardFormStep6> | undefined => {
+    if (!existingProfile) return undefined;
+    const p = existingProfile;
+    return {
+      veg_freq_1: p.veg_freq_1 ?? null,
+      fruit_freq: p.fruit_freq ?? null,
+      out_meal_freq: p.out_meal_freq ?? null,
+      breakfast_freq: p.breakfast_freq ?? null,
+    };
+  };
+
+  const prefillStep7 = (): Partial<WizardFormStep7> | undefined => {
+    if (!existingProfile) return undefined;
+    const p = existingProfile;
+    return {
+      is_menopause: p.is_menopause ?? null,
+      ocp_taking: p.ocp_total_months !== undefined && p.ocp_total_months > 0 ? true : null,
+      ocp_total_months: p.ocp_total_months !== undefined ? String(p.ocp_total_months) : "",
+      anemia: p.anemia ?? null,
+      chronic_diseases: p.chronic_diseases ?? ["NONE"],
+      pregnancy_status: (p.pregnancy_status as WizardFormStep7["pregnancy_status"]) ?? "NOT_APPLICABLE",
+    };
+  };
+
+  /* 단계 이동 + visitedSteps 기록 */
+  const goToStep = (s: Step) => {
+    setStep(s);
+    setVisitedSteps((prev) => new Set([...prev, s]));
+  };
 
   /* 프로필 upsert helper */
   const upsert = async (patch: HealthProfileUpsertRequest) => {
@@ -116,7 +229,7 @@ export default function HealthRecordsNewPage() {
         );
       }
       await Promise.allSettled(timeRecords);
-      setStep(2);
+      goToStep(2);
     } catch (err) {
       showToast(extractErrorMessage(err), "error");
     }
@@ -164,7 +277,7 @@ export default function HealthRecordsNewPage() {
         );
       }
       await Promise.allSettled(timeRecords);
-      setStep(3);
+      goToStep(3);
     } catch (err) {
       showToast(extractErrorMessage(err), "error");
     }
@@ -179,7 +292,7 @@ export default function HealthRecordsNewPage() {
     };
     try {
       await upsert(patch);
-      setStep(4);
+      goToStep(4);
     } catch (err) {
       showToast(extractErrorMessage(err), "error");
     }
@@ -200,7 +313,7 @@ export default function HealthRecordsNewPage() {
 
     try {
       await upsert(patch);
-      setStep(5);
+      goToStep(5);
     } catch (err) {
       showToast(extractErrorMessage(err), "error");
     }
@@ -224,7 +337,7 @@ export default function HealthRecordsNewPage() {
 
     try {
       await upsert(patch);
-      setStep(6);
+      goToStep(6);
     } catch (err) {
       showToast(extractErrorMessage(err), "error");
     }
@@ -240,7 +353,7 @@ export default function HealthRecordsNewPage() {
 
     try {
       await upsert(patch);
-      setStep(7);
+      goToStep(7);
     } catch (err) {
       showToast(extractErrorMessage(err), "error");
     }
@@ -267,76 +380,16 @@ export default function HealthRecordsNewPage() {
       }
     }
 
-    /* anemia: 모름=null → 키 자체 미포함(undefined) */
+    /* anemia: 1=예 / 0=아니오 / -1=모름. null=미선택(미전송) */
     if (data.anemia !== null && data.anemia !== undefined) {
       patch.anemia = data.anemia;
     }
 
     try {
       await upsert(patch);
+      showToast("건강 정보가 저장되었습니다.", "success");
     } catch (err) {
       showToast(extractErrorMessage(err), "error");
-      /* 프로필 저장 실패해도 예측은 시도 */
-    }
-
-    /* 예측 생성 — 같은 입력으로 3개 질병 모두 호출.
-       하나라도 성공하면 risk 탭에서 결과 표시 가능. 모두 실패해도 이동은 진행. */
-    const PREV_RISK_KEY = "prev-risk-levels";
-    let prevRisk: Record<string, string> = {};
-    try {
-      const raw = localStorage.getItem(PREV_RISK_KEY);
-      if (raw) prevRisk = JSON.parse(raw);
-    } catch { /* 무시 */ }
-
-    const DISEASE_LABEL: Record<string, string> = {
-      HYPERTENSION: "고혈압",
-      DIABETES: "당뇨",
-      CARDIOVASCULAR: "심혈관",
-    };
-    const RISK_LABEL: Record<string, string> = {
-      NORMAL: "정상",
-      CAUTION: "주의",
-      RISK: "위험",
-      HIGH_RISK: "고위험",
-    };
-
-    const predictionResults = await Promise.allSettled([
-      createPrediction.mutateAsync("HYPERTENSION"),
-      createPrediction.mutateAsync("DIABETES"),
-      createPrediction.mutateAsync("CARDIOVASCULAR"),
-    ]);
-
-    const nextRisk: Record<string, string> = { ...prevRisk };
-    predictionResults.forEach((result) => {
-      if (result.status !== "fulfilled") return;
-      const pred = result.value;
-      const diseaseType: string = pred.disease_type ?? "";
-      const newLevel: string = pred.risk_level ?? "";
-      const oldLevel: string = prevRisk[diseaseType] ?? "";
-
-      nextRisk[diseaseType] = newLevel;
-
-      if (newLevel && oldLevel && oldLevel !== newLevel) {
-        const dLabel = DISEASE_LABEL[diseaseType] ?? diseaseType;
-        const from = RISK_LABEL[oldLevel] ?? oldLevel;
-        const to = RISK_LABEL[newLevel] ?? newLevel;
-        pushNotification({
-          category: "위험도",
-          title: `${dLabel} 위험도 변화`,
-          body: `${dLabel} 위험도가 ${from}에서 ${to}로 변경되었어요.`,
-        });
-      }
-    });
-
-    try { localStorage.setItem(PREV_RISK_KEY, JSON.stringify(nextRisk)); } catch { /* 무시 */ }
-
-    const succeeded = predictionResults.filter((r) => r.status === "fulfilled").length;
-    if (succeeded === 3) {
-      showToast("위험도 분석이 완료되었습니다.", "success");
-    } else if (succeeded > 0) {
-      showToast(`위험도 분석 일부 완료 (${succeeded}/3)`, "warning");
-    } else {
-      showToast("위험도 계산에 실패했습니다. 나중에 다시 시도해 주세요.", "warning");
     }
 
     router.push("/health-records?tab=risk");
@@ -359,51 +412,62 @@ export default function HealthRecordsNewPage() {
         </p>
       </div>
 
-      <WizardShell currentStep={step}>
+      <WizardShell
+        currentStep={step}
+        clickableSteps={isEditMode ? visitedSteps : undefined}
+        onStepClick={isEditMode ? (s) => setStep(s as Step) : undefined}
+      >
         {step === 1 && (
           <StepMeasure
+            defaultValues={prefillStep1()}
             onSubmit={handleStep1}
             isLoading={createProfile.isPending || createRecord.isPending}
           />
         )}
         {step === 2 && (
           <StepVitals
+            defaultValues={prefillStep2()}
             onSubmit={handleStep2}
-            onSkip={() => setStep(3)}
+            onSkip={() => goToStep(3)}
             isLoading={createProfile.isPending || createRecord.isPending}
           />
         )}
         {step === 3 && (
           <StepFamily
+            defaultValues={prefillStep3()}
             onSubmit={handleStep3}
-            onSkip={() => setStep(4)}
+            onSkip={() => goToStep(4)}
             isLoading={createProfile.isPending}
           />
         )}
         {step === 4 && (
           <StepSmokingDrinking
+            defaultValues={prefillStep4()}
             onSubmit={handleStep4}
-            onSkip={() => setStep(5)}
+            onSkip={() => goToStep(5)}
             isLoading={createProfile.isPending}
           />
         )}
         {step === 5 && (
           <StepActivity
+            defaultValues={prefillStep5()}
             onSubmit={handleStep5}
-            onSkip={() => setStep(6)}
+            onSkip={() => goToStep(6)}
             isLoading={createProfile.isPending}
           />
         )}
         {step === 6 && (
           <StepDiet
+            defaultValues={prefillStep6()}
             onSubmit={handleStep6}
-            onSkip={() => setStep(7)}
+            onSkip={() => goToStep(7)}
             isLoading={createProfile.isPending}
           />
         )}
         {step === 7 && (
           <StepExtras
             gender={gender}
+            defaultValues={prefillStep7()}
             onSubmit={handleStep7}
             isLoading={isLoading}
           />

@@ -4,6 +4,8 @@
    ========================================= */
 
 import apiClient from "./client";
+import { API_BASE_URL, ROUTES } from "@/constants";
+import { getToken, removeToken } from "@/lib/tokens";
 import type {
   CreateHealthRecordRequest,
   HealthRecordItem,
@@ -14,7 +16,10 @@ import type {
   PredictionDetail,
   PredictionDetailResponse,
   RiskRecommendationResponse,
+  RagRiskRecommendationResponse,
   MonthlyReportResponse,
+  MonthlyReportV2Response,
+  ProfileCompleteness,
 } from "@/types/health";
 import type { DiseaseType } from "@/types/api";
 
@@ -23,6 +28,8 @@ import type { DiseaseType } from "@/types/api";
 export async function fetchHealthRecordList(params: {
   recordType?: string;
   subType?: string;
+  from?: string;
+  to?: string;
   page?: number;
   size?: number;
 }): Promise<HealthRecordItem[]> {
@@ -60,6 +67,20 @@ export async function upsertHealthProfile(
     { params: { recordType: "profile" } }
   );
   return data;
+}
+
+/* ── 프로필 완성도 조회 ─────────────────── */
+
+export async function fetchProfileCompleteness(): Promise<ProfileCompleteness | null> {
+  try {
+    const { data } = await apiClient.get<{ completeness?: ProfileCompleteness }>(
+      "/api/v1/health-records",
+      { params: { recordType: "profile" } }
+    );
+    return data?.completeness ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /* ── 건강 기록 생성 ─────────────────────── */
@@ -149,6 +170,141 @@ export async function fetchRiskRecommendations(
   }
 }
 
+/* ── RAG 위험도 권고 (단일 통합 엔드포인트) ─── */
+
+export async function fetchRagRiskRecommendation(): Promise<RagRiskRecommendationResponse> {
+  const { data } = await apiClient.post<RagRiskRecommendationResponse>(
+    "/api/v1/risk-recommendations"
+  );
+  return data;
+}
+
+/* ── RAG 위험도 권고 SSE 스트리밍 ──────────── */
+
+export interface StreamRiskCallbacks {
+  onMeta?: (payload: { cached: boolean }) => void;
+  onStage?: (payload: { node: string; label: string }) => void;
+  onToken?: (text: string) => void;
+  onDone: (payload: RagRiskRecommendationResponse) => void;
+  onError: (message: string) => void;
+}
+
+/**
+ * POST /api/v1/risk-recommendations/stream 을 SSE 로 소비.
+ * meta → stage* → token* → done (실패 시 error). streamChatMessage 와 동일 패턴.
+ */
+export async function streamRagRiskRecommendation(
+  callbacks: StreamRiskCallbacks,
+  signal?: AbortSignal
+): Promise<void> {
+  const token = getToken();
+  const url = `${API_BASE_URL}/api/v1/risk-recommendations/stream`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      signal,
+    });
+  } catch (err) {
+    callbacks.onError(
+      err instanceof Error ? err.message : "네트워크 오류가 발생했습니다"
+    );
+    return;
+  }
+
+  if (response.status === 401) {
+    removeToken();
+    if (typeof window !== "undefined") {
+      window.location.href = ROUTES.LOGIN;
+    }
+    return;
+  }
+
+  if (!response.ok || !response.body) {
+    let detail = `서버 오류가 발생했습니다 (${response.status})`;
+    try {
+      const errBody = await response.json();
+      if (typeof errBody?.detail === "string") detail = errBody.detail;
+    } catch {
+      /* ignore */
+    }
+    callbacks.onError(detail);
+    return;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const processFrame = (frame: string) => {
+    let eventType = "";
+    let dataStr = "";
+
+    for (const line of frame.split("\n")) {
+      if (line.startsWith("event:")) {
+        eventType = line.slice("event:".length).trim();
+      } else if (line.startsWith("data:")) {
+        dataStr = line.slice("data:".length).trim();
+      }
+    }
+
+    if (!eventType || !dataStr) return;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(dataStr);
+    } catch {
+      return;
+    }
+
+    switch (eventType) {
+      case "meta":
+        callbacks.onMeta?.(parsed as { cached: boolean });
+        break;
+      case "stage":
+        callbacks.onStage?.(parsed as { node: string; label: string });
+        break;
+      case "token":
+        callbacks.onToken?.((parsed as { text: string }).text);
+        break;
+      case "done":
+        callbacks.onDone(parsed as RagRiskRecommendationResponse);
+        break;
+      case "error":
+        callbacks.onError((parsed as { message: string }).message);
+        break;
+    }
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() ?? "";
+
+      for (const frame of frames) {
+        if (frame.trim()) processFrame(frame);
+      }
+    }
+
+    if (buffer.trim()) processFrame(buffer);
+  } catch (err) {
+    if ((err as { name?: string }).name === "AbortError") return;
+    callbacks.onError(
+      err instanceof Error ? err.message : "스트림 수신 중 오류가 발생했습니다"
+    );
+  }
+}
+
 /* ── 월간 리포트 ─────────────────────────── */
 
 export async function fetchMonthlyReport(
@@ -163,4 +319,68 @@ export async function fetchMonthlyReport(
   } catch {
     return null;
   }
+}
+
+/* ── 월간 리포트 v2 (format=json, Phase 2 구조화 응답) ── */
+
+export async function fetchMonthlyReportV2(
+  month: string /* YYYY-MM */
+): Promise<MonthlyReportV2Response | null> {
+  try {
+    const { data } = await apiClient.get<MonthlyReportV2Response>(
+      "/api/v1/health-reports",
+      { params: { period: "monthly", month, format: "json" } }
+    );
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+/** 임의 기간 리포트 (period=custom, 캐싱 없음). date_from/date_to 는 YYYY-MM-DD, 양끝 포함. */
+export async function fetchMonthlyReportV2Range(
+  dateFrom: string /* YYYY-MM-DD */,
+  dateTo: string /* YYYY-MM-DD */
+): Promise<MonthlyReportV2Response | null> {
+  try {
+    const { data } = await apiClient.get<MonthlyReportV2Response>(
+      "/api/v1/health-reports",
+      { params: { period: "custom", date_from: dateFrom, date_to: dateTo, format: "json" } }
+    );
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+/** format=pdf 로 서버 렌더 PDF 를 받아 다운로드용 Blob + 파일명으로 반환. 실패 시 throw.
+ *  PHI 보호: 서버가 파일을 영속하지 않고 인증된 응답 본문으로 바로 내려주므로
+ *  공개 URL 없이 받은 자리에서 다운로드시킨다. */
+export type ReportPdfParams =
+  | { period: "monthly"; month: string /* YYYY-MM */ }
+  | { period: "custom"; dateFrom: string; dateTo: string /* YYYY-MM-DD */ };
+
+export async function requestMonthlyReportPdf(
+  params: ReportPdfParams
+): Promise<{ blob: Blob; filename: string }> {
+  const query =
+    params.period === "monthly"
+      ? { period: "monthly", month: params.month, format: "pdf" }
+      : {
+          period: "custom",
+          date_from: params.dateFrom,
+          date_to: params.dateTo,
+          format: "pdf",
+        };
+  const res = await apiClient.get<Blob>("/api/v1/health-reports", {
+    params: query,
+    responseType: "blob",
+  });
+  const disposition = res.headers["content-disposition"] as string | undefined;
+  const match = disposition?.match(/filename="?([^"]+)"?/);
+  const fallback =
+    params.period === "monthly"
+      ? `care_report_${params.month}.pdf`
+      : `care_report_${params.dateFrom}_${params.dateTo}.pdf`;
+  return { blob: res.data, filename: match?.[1] ?? fallback };
 }

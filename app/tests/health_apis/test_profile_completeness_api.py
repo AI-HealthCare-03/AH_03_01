@@ -1,0 +1,262 @@
+from unittest.mock import patch
+
+from starlette import status
+from tortoise.contrib.test import TestCase
+
+from app.core import config
+from app.tests.health_apis.helpers import make_client, signup_and_login
+
+# 모델입력 필수 필드(MALE 기준 24개) 전부 채운 페이로드.
+_FULL_MALE_PROFILE_PAYLOAD = {
+    "height_cm": 170,
+    "weight_kg": 78,
+    "waist_cm": 92,
+    "systolic_bp": 120,
+    "diastolic_bp": 80,
+    "fasting_blood_sugar": 95,
+    "sleep_weekday": 7,
+    "sleep_weekend": 8,
+    "moderate_exercise_hour": 1,
+    "smoking_risk": 1,
+    "current_smoker": 1,
+    "mid_act_day": 3,
+    "walk_day": 5,
+    "water_count": 6,
+    "family_dm": 1,
+    "family_hp": 1,
+    "family_hl": 0,
+    "alcohol_freq_y": 2,
+    "alcohol_cup": 3,
+    "fruit_freq": 5,
+    "veg_freq_1": 5,
+    "out_meal_freq": 3,
+    "breakfast_freq": 7,
+    "anemia": 0,
+}
+# 여성 한정 필수 2개.
+_FEMALE_ONLY_FIELDS = {
+    "is_menopause": 0,
+    "ocp_total_months": 12,
+}
+
+
+class TestProfileCompletenessApi(TestCase):
+    async def _get_profile(self, client, headers) -> dict:
+        res = await client.get("/api/v1/health-records?recordType=profile", headers=headers)
+        assert res.status_code == status.HTTP_200_OK, res.json()
+        return res.json()
+
+    async def test_completeness_full_male(self):
+        async with make_client() as client:
+            token = await signup_and_login(client, email="comp_full@example.com", phone_number="01033330001")
+            headers = {"Authorization": f"Bearer {token}"}
+            await client.post(
+                "/api/v1/health-records?recordType=profile",
+                headers=headers,
+                json=_FULL_MALE_PROFILE_PAYLOAD,
+            )
+            body = await self._get_profile(client, headers)
+            comp = body["completeness"]
+            assert comp["total"] == 24
+            assert comp["filled"] == 24
+            assert comp["percent"] == 100
+            assert comp["missing_fields"] == []
+            assert comp["complete"] is True
+
+    async def test_completeness_partial_male(self):
+        async with make_client() as client:
+            token = await signup_and_login(client, email="comp_partial@example.com", phone_number="01033330002")
+            headers = {"Authorization": f"Bearer {token}"}
+            # 24개 중 4개만 채움 → 20개 누락.
+            await client.post(
+                "/api/v1/health-records?recordType=profile",
+                headers=headers,
+                json={"height_cm": 170, "weight_kg": 78, "waist_cm": 92, "systolic_bp": 120},
+            )
+            body = await self._get_profile(client, headers)
+            comp = body["completeness"]
+            assert comp["total"] == 24
+            assert comp["filled"] == 4
+            assert comp["percent"] == round(4 / 24 * 100)  # 17
+            assert comp["complete"] is False
+            assert set(comp["missing_fields"]) >= {"diastolic_bp", "fasting_blood_sugar", "anemia"}
+            # 이미 채운 필드는 누락 목록에 없어야 함.
+            assert "height_cm" not in comp["missing_fields"]
+
+    async def test_completeness_empty_profile(self):
+        async with make_client() as client:
+            token = await signup_and_login(client, email="comp_empty@example.com", phone_number="01033330003")
+            headers = {"Authorization": f"Bearer {token}"}
+            # 프로필 미입력 상태 — get_or_init 으로 빈 프로필이 생성되며 전부 미충족.
+            body = await self._get_profile(client, headers)
+            comp = body["completeness"]
+            assert comp["total"] == 24
+            assert comp["filled"] == 0
+            assert comp["percent"] == 0
+            assert comp["complete"] is False
+            assert len(comp["missing_fields"]) == 24
+
+    async def test_completeness_female_includes_extra_fields(self):
+        async with make_client() as client:
+            token = await signup_and_login(
+                client, email="comp_female@example.com", phone_number="01033330004", gender="FEMALE"
+            )
+            headers = {"Authorization": f"Bearer {token}"}
+            # 여성은 is_menopause/ocp_total_months 가 필수 → 24개만 채우면 2개 누락.
+            await client.post(
+                "/api/v1/health-records?recordType=profile",
+                headers=headers,
+                json=_FULL_MALE_PROFILE_PAYLOAD,
+            )
+            body = await self._get_profile(client, headers)
+            comp = body["completeness"]
+            assert comp["total"] == 26
+            assert comp["filled"] == 24
+            assert comp["complete"] is False
+            assert set(comp["missing_fields"]) == {"is_menopause", "ocp_total_months"}
+
+            # 여성 한정 2개까지 채우면 100% 완성.
+            await client.post(
+                "/api/v1/health-records?recordType=profile",
+                headers=headers,
+                json=_FEMALE_ONLY_FIELDS,
+            )
+            body2 = await self._get_profile(client, headers)
+            comp2 = body2["completeness"]
+            assert comp2["total"] == 26
+            assert comp2["filled"] == 26
+            assert comp2["percent"] == 100
+            assert comp2["complete"] is True
+            assert comp2["missing_fields"] == []
+
+    async def test_completeness_record_fallback(self):
+        """혈압·혈당·체중·허리는 profile 이 비어도 최신 일별 레코드가 있으면 채움으로 인정(L-1)."""
+        record_fields = {"weight_kg", "waist_cm", "systolic_bp", "diastolic_bp", "fasting_blood_sugar"}
+        async with make_client() as client:
+            token = await signup_and_login(client, email="comp_recfb@example.com", phone_number="01033330009")
+            headers = {"Authorization": f"Bearer {token}"}
+            # profile: 레코드 폴백 5필드를 뺀 19개만 입력 → 5개 누락 상태.
+            profile_wo_records = {k: v for k, v in _FULL_MALE_PROFILE_PAYLOAD.items() if k not in record_fields}
+            await client.post("/api/v1/health-records?recordType=profile", headers=headers, json=profile_wo_records)
+            body = await self._get_profile(client, headers)
+            assert set(body["completeness"]["missing_fields"]) == record_fields
+            assert body["completeness"]["complete"] is False
+
+            # 일별 레코드로 5필드를 채운다 (profile 은 그대로 비어 있음).
+            measured = "2026-05-10T08:00:00+09:00"
+            for payload in (
+                {"record_type": "WEIGHT", "primary_value": 78, "unit": "kg", "measured_at": measured},
+                {"record_type": "WAIST", "primary_value": 92, "unit": "cm", "measured_at": measured},
+                {
+                    "record_type": "BLOOD_PRESSURE",
+                    "sub_type": "HOSPITAL",
+                    "primary_value": 120,
+                    "secondary_value": 80,
+                    "unit": "mmHg",
+                    "measured_at": measured,
+                },
+                {
+                    "record_type": "BLOOD_GLUCOSE",
+                    "sub_type": "FASTING",
+                    "primary_value": 95,
+                    "unit": "mg/dL",
+                    "measured_at": measured,
+                },
+            ):
+                r = await client.post("/api/v1/health-records", headers=headers, json=payload)
+                assert r.status_code in (200, 201), r.json()
+
+            # 이제 레코드 폴백으로 완성 → 게이트 통과.
+            body2 = await self._get_profile(client, headers)
+            comp2 = body2["completeness"]
+            assert comp2["missing_fields"] == [], comp2
+            assert comp2["complete"] is True
+            res = await client.post("/api/v1/predictions?diseaseType=HYPERTENSION", headers=headers, json={})
+            assert res.status_code == status.HTTP_201_CREATED, res.json()
+
+    async def test_completeness_male_excludes_female_fields(self):
+        async with make_client() as client:
+            token = await signup_and_login(
+                client, email="comp_male_excl@example.com", phone_number="01033330005", gender="MALE"
+            )
+            headers = {"Authorization": f"Bearer {token}"}
+            await client.post(
+                "/api/v1/health-records?recordType=profile",
+                headers=headers,
+                json=_FULL_MALE_PROFILE_PAYLOAD,
+            )
+            body = await self._get_profile(client, headers)
+            comp = body["completeness"]
+            # 남성은 여성 한정 필드가 total/missing 어디에도 들어가지 않음.
+            assert comp["total"] == 24
+            assert "is_menopause" not in comp["missing_fields"]
+            assert "ocp_total_months" not in comp["missing_fields"]
+            assert comp["complete"] is True
+
+
+class TestPredictionGate(TestCase):
+    async def test_prediction_blocked_when_incomplete(self):
+        async with make_client() as client:
+            token = await signup_and_login(client, email="gate_block@example.com", phone_number="01033330006")
+            headers = {"Authorization": f"Bearer {token}"}
+            # 일부만 입력 → 게이트 422.
+            await client.post(
+                "/api/v1/health-records?recordType=profile",
+                headers=headers,
+                json={"height_cm": 170, "weight_kg": 78},
+            )
+            res = await client.post("/api/v1/predictions?diseaseType=HYPERTENSION", headers=headers, json={})
+            assert res.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+            detail = res.json()["detail"]
+            assert detail["message"]
+            assert isinstance(detail["missing_fields"], list)
+            assert len(detail["missing_fields"]) > 0
+            assert "systolic_bp" in detail["missing_fields"]
+
+    async def test_prediction_blocked_when_no_profile(self):
+        async with make_client() as client:
+            token = await signup_and_login(client, email="gate_noprofile@example.com", phone_number="01033330007")
+            headers = {"Authorization": f"Bearer {token}"}
+            res = await client.post("/api/v1/predictions?diseaseType=DIABETES", headers=headers, json={})
+            assert res.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+            detail = res.json()["detail"]
+            assert len(detail["missing_fields"]) == 24
+
+    async def test_prediction_allowed_when_complete(self):
+        async with make_client() as client:
+            token = await signup_and_login(client, email="gate_pass@example.com", phone_number="01033330008")
+            headers = {"Authorization": f"Bearer {token}"}
+            await client.post(
+                "/api/v1/health-records?recordType=profile",
+                headers=headers,
+                json=_FULL_MALE_PROFILE_PAYLOAD,
+            )
+            res = await client.post("/api/v1/predictions?diseaseType=HYPERTENSION", headers=headers, json={})
+            assert res.status_code == status.HTTP_201_CREATED
+            assert res.json()["disease_type"] == "HYPERTENSION"
+
+    async def test_anemia_unknown_accepted_and_counts(self):
+        """빈혈 '모름'(-1)이 저장(422 아님)되고 완성도에 '채워짐'으로 집계되는지."""
+        async with make_client() as client:
+            token = await signup_and_login(client, email="anemia_unknown@example.com", phone_number="01033330010")
+            headers = {"Authorization": f"Bearer {token}"}
+            payload = {**_FULL_MALE_PROFILE_PAYLOAD, "anemia": -1}
+            res = await client.post("/api/v1/health-records?recordType=profile", headers=headers, json=payload)
+            assert res.status_code in (200, 201), res.json()  # -1 거부(422) 아님
+            prof = await client.get("/api/v1/health-records?recordType=profile", headers=headers)
+            comp = prof.json()["completeness"]
+            assert comp["complete"] is True  # 모름(-1)도 채워진 것으로 인정
+            assert "anemia" not in comp["missing_fields"]
+
+    async def test_strict_ml_returns_503_when_model_unavailable(self):
+        """RISK_REQUIRE_ML=True + 모델 미로드(테스트 환경) → 룰 폴백 없이 503(ML_UNAVAILABLE)."""
+        async with make_client() as client:
+            token = await signup_and_login(client, email="strict_ml@example.com", phone_number="01033330011")
+            headers = {"Authorization": f"Bearer {token}"}
+            await client.post(
+                "/api/v1/health-records?recordType=profile", headers=headers, json=_FULL_MALE_PROFILE_PAYLOAD
+            )
+            with patch.object(config, "RISK_REQUIRE_ML", True):
+                res = await client.post("/api/v1/predictions?diseaseType=HYPERTENSION", headers=headers, json={})
+            assert res.status_code == status.HTTP_503_SERVICE_UNAVAILABLE, res.json()
+            assert res.json()["detail"]["code"] == "ML_UNAVAILABLE"

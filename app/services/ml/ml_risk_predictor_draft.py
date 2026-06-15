@@ -627,6 +627,9 @@ def predict_disease(
 
     # ── 1. 전처리 ──────────────────────────────────────────────
     df_input = pd.DataFrame([raw_input])
+    # 단일행 입력의 None/혼합이 object dtype 컬럼을 만들어 preprocess 의 np.log1p 등 ufunc 이
+    # 터지는 것을 막는다(전 입력이 수치형). object→numeric 강제(None→NaN), preprocess 가 결측 보정.
+    df_input = df_input.apply(pd.to_numeric, errors="coerce")
     df_feat = preprocess_module.preprocess(df_input, preprocess_config, kde_reference)
     df_feat["sex"] = sex_code
 
@@ -801,6 +804,8 @@ class MLRiskPredictor:
                 factor=f["feature"],
                 weight=f["shap_contribution"],  # 부호 그대로 저장
                 description=f.get("user_description", f"{f['name_kor']}  {f['direction']}"),
+                name_kor=f.get("name_kor"),
+                direction=f.get("direction"),
             )
             for f in result["top_5_features"]
         ]

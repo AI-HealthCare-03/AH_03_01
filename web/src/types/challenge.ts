@@ -10,8 +10,12 @@ export type { ChallengeCategory };
 /* 챌린지 범위 */
 export type ChallengeScope = "PERSONAL" | "GROUP";
 
+/* 챌린지 공개 설정 */
+export type ChallengeVisibility = "PUBLIC" | "PRIVATE";
+
 /* 챌린지 상태 */
 export type ChallengeStatus =
+  | "RECRUITING"
   | "ACTIVE"
   | "COMPLETED"
   | "CANCELLED"
@@ -57,7 +61,10 @@ export interface Challenge {
   max_participants?: number | null;
   verification_type: VerificationMethod;
   invite_code?: string | null;
+  visibility?: ChallengeVisibility | null;
+  is_member?: boolean;
   created_by: number;
+  creator_id?: string | null;  /* UUID — 상세 API에서 제공 */
   created_at: string;
   /* 신규: cadence + goal_config */
   cadence?: ChallengeCadence | null;
@@ -67,6 +74,7 @@ export interface Challenge {
   my_progress?: number;      /* 내 달성일 수 */
   total_days?: number;       /* 전체 기간 일 수 */
   missed_count?: number;     /* 누락 횟수 */
+  my_participant_status?: ParticipantStatus | null;  /* 내 참여 상태 (mine 쿼리 시) */
 }
 
 /* 챌린지 목록 응답 */
@@ -93,16 +101,18 @@ export interface CreateChallengeRequest {
   /* 신규 옵션 필드 */
   cadence?: ChallengeCadence;
   goal_config?: ChallengeGoalConfig;
+  visibility?: ChallengeVisibility;
 }
 
 /* 챌린지 수정 요청 */
-export type UpdateChallengeRequest = Partial<CreateChallengeRequest>;
+export type UpdateChallengeRequest = Partial<CreateChallengeRequest> & { status?: ChallengeStatus };
 
 /* ─── 참여자 ─── */
 export interface ChallengeParticipant {
   id: number;
   user_id: string; /* UUID */
   challenge_id: number;
+  role?: "OWNER" | "MEMBER";
   status: ParticipantStatus;
   joined_at: string;
   progress_days?: number;
@@ -132,6 +142,7 @@ export interface ChallengeVerification {
   memo?: string | null;
   /* REJECTED 시 SigLIP2 판정 사유(점수/임계값) */
   rejection_reason?: string | null;
+  verified_date?: string | null;  /* YYYY-MM-DD, 백엔드 verified_date */
   verified_at?: string | null;
   created_at: string;
 }
@@ -267,6 +278,7 @@ export interface VerificationFeedResponse {
 /* ─── 위저드 폼 상태 ─── */
 export interface WizardFormState {
   scope: ChallengeScope;
+  visibility: ChallengeVisibility;
   category: ChallengeCategory | null;
   sub_category: ExerciseSubType | null;
   /* Step3 내 세부 모드 분기 */

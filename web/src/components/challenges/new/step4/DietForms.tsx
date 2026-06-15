@@ -6,7 +6,7 @@ import {
   DurationPicker,
   WeeklyDurationNote,
   TitleInput,
-  MaxParticipantsSlider,
+  MaxParticipantsChips,
   RewardPreview,
   Step4Header,
   GROUP_SUM_OPTIONS,
@@ -267,7 +267,7 @@ export function DietGroupForm({
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />

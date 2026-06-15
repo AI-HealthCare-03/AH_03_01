@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useHealthProfile } from "@/hooks/queries/useHealthProfile";
+import { useHealthRecordList } from "@/hooks/queries/useHealthRecordList";
 import StatusBadge from "./StatusBadge";
 import WaistPopover from "./WaistPopover";
 import type { HealthStatus } from "@/lib/health/status";
@@ -27,15 +29,17 @@ function getWaistStatus(
   return waist >= 90 ? "위험" : waist >= 80 ? "주의" : "정상";
 }
 
-/* 알코올 빈도 라벨 (백엔드 AlcoholIntake) */
-const ALCOHOL_LABEL: Record<string, string> = {
-  NONE: "없음",
-  LIGHT: "주 1~2회",
-  MODERATE: "주 3~4회",
-  HEAVY: "매일",
+/* 음주 빈도 라벨 (백엔드 alcohol_freq_y BD1_11 코드) */
+const ALCOHOL_FREQ_LABEL: Record<number, string> = {
+  1: "전혀 안 마심",
+  2: "월 1회 미만",
+  3: "월 1회 정도",
+  4: "월 2~4회",
+  5: "주 2~3회",
+  6: "주 4회 이상",
 };
 
-/* 임신 상태 라벨 (백엔드 PregnancyHistory) */
+/* 임신 상태 라벨 (백엔드 PregnancyStatus) */
 const PREGNANCY_LABEL: Record<string, string> = {
   NONE: "임신/출산 없음",
   PREGNANT: "임신 중",
@@ -54,17 +58,17 @@ const CHRONIC_LABEL: Record<string, string> = {
   NONE: "없음",
 };
 
-/* 흡연 위험도 (백엔드 is_smoker bool) */
-function getSmokingStatus(isSmoker?: boolean): HealthStatus | "N/A" {
-  if (isSmoker === undefined || isSmoker === null) return "N/A";
-  return isSmoker ? "위험" : "정상";
+/* 흡연 위험도 (백엔드 current_smoker: 1=흡연, 0=비흡연) */
+function getSmokingStatus(currentSmoker?: number | null): HealthStatus | "N/A" {
+  if (currentSmoker === undefined || currentSmoker === null) return "N/A";
+  return currentSmoker === 1 ? "위험" : "정상";
 }
 
-/* 알코올 위험도 (백엔드 AlcoholIntake) */
-function getAlcoholStatus(s?: string): HealthStatus | "N/A" {
-  if (!s) return "N/A";
-  if (s === "HEAVY") return "위험";
-  if (s === "MODERATE") return "주의";
+/* 음주 위험도 (백엔드 alcohol_freq_y: 1=안마심 … 6=주4회이상) */
+function getAlcoholStatus(freqCode?: number | null): HealthStatus | "N/A" {
+  if (freqCode === undefined || freqCode === null) return "N/A";
+  if (freqCode >= 6) return "위험";
+  if (freqCode >= 5) return "주의";
   return "정상";
 }
 
@@ -124,10 +128,23 @@ function SideGuide() {
 /* ── 메인 컴포넌트 ─────────────────────────── */
 
 export default function DetailTab() {
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const today = new Date().toISOString().slice(0, 10);
+
   const { data: rawProfile, isLoading } = useHealthProfile() as {
     data: HealthProfileDetail | null | undefined;
     isLoading: boolean;
   };
+
+  /* 날짜 선택 시 해당 날짜의 체중/허리둘레 기록 조회 */
+  const { data: weightRecords } = useHealthRecordList(
+    { recordType: "WEIGHT", from: selectedDate, to: selectedDate },
+    { enabled: !!selectedDate }
+  );
+  const { data: waistRecords } = useHealthRecordList(
+    { recordType: "WAIST", from: selectedDate, to: selectedDate },
+    { enabled: !!selectedDate }
+  );
 
   if (isLoading) {
     return (
@@ -141,25 +158,31 @@ export default function DetailTab() {
 
   const profile = rawProfile as HealthProfileDetail | null;
 
+  /* 날짜 선택 시 해당 날짜 기록만 사용 (없으면 null), 미선택 시 프로필 기본값 사용 */
+  const displayWeightKg: number | null = selectedDate
+    ? (weightRecords && weightRecords.length > 0 ? parseFloat(weightRecords[0].primary_value) : null)
+    : (profile?.weight_kg != null ? Number(profile.weight_kg) : null);
+
+  const displayWaistCm: number | null = selectedDate
+    ? (waistRecords && waistRecords.length > 0 ? parseFloat(waistRecords[0].primary_value) : null)
+    : (profile?.waist_cm != null ? Number(profile.waist_cm) : null);
+
   const bmi =
-    profile?.height_cm && profile?.weight_kg
-      ? calcBmi(profile.height_cm, profile.weight_kg)
+    profile?.height_cm && displayWeightKg
+      ? calcBmi(profile.height_cm, displayWeightKg)
       : null;
 
-  /* 만성질환 표시. 백엔드는 diseases: string[] 사용 (chronic_diseases 아님).
-     백엔드 enum 키가 들어오면 한글 라벨로, 자유 문자열이면 그대로 표시. */
-  const p = profile as unknown as Record<string, unknown>;
-  const diseases = (p?.diseases as string[] | undefined) ?? profile?.chronic_diseases;
+  /* v2 필드 매핑 */
   const chronicLabel =
-    diseases && diseases.length > 0
-      ? diseases.map((d) => CHRONIC_LABEL[d] ?? d).join(", ")
+    profile?.chronic_diseases && profile.chronic_diseases.length > 0
+      ? profile.chronic_diseases.map((d) => CHRONIC_LABEL[d] ?? d).join(", ")
       : null;
-  const isSmoker = p?.is_smoker as boolean | undefined;
-  const alcoholIntake = p?.alcohol_intake as string | undefined;
-  const hasDmFamily = p?.has_diabetes_family_history as boolean | undefined;
-  const hasHtnFamily = p?.has_hypertension_family_history as boolean | undefined;
-  const pregnancyHistory = p?.pregnancy_history as string | undefined;
-  const medications = p?.medications as string[] | undefined;
+  const currentSmoker = profile?.current_smoker; /* 1=흡연, 0=비흡연 */
+  const alcoholFreqY = profile?.alcohol_freq_y; /* 1=안마심…6=주4회이상 */
+  const familyDm = profile?.family_dm; /* 1=있음, 0=없음, -1=모름 */
+  const familyHp = profile?.family_hp;
+  const pregnancyStatus = profile?.pregnancy_status;
+  const medications = profile?.medications;
   const medicationLabel =
     medications && medications.length > 0 ? medications.join(", ") : null;
 
@@ -180,31 +203,65 @@ export default function DetailTab() {
           </div>
         ) : (
           <div className="bg-white rounded-[16px] shadow-[0_1px_4px_rgba(0,0,0,0.08)] overflow-hidden">
-            <div className="px-5 py-4 border-b border-border">
-              <h2 className="font-bold text-text-primary">건강 기본 정보</h2>
-              <p className="text-xs text-text-tertiary mt-0.5">
-                기록일: {(() => {
-                  const d = profile.updated_at ?? profile.recorded_at;
-                  return d ? new Date(d).toLocaleDateString("ko-KR") : "—";
-                })()}
-              </p>
+            <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-3">
+              <div>
+                <h2 className="font-bold text-text-primary">건강 기본 정보</h2>
+                <p className="text-xs text-text-tertiary mt-0.5">
+                  {selectedDate
+                    ? `조회 날짜: ${new Date(selectedDate).toLocaleDateString("ko-KR")}`
+                    : `기록일: ${(() => {
+                        const d = profile.updated_at ?? profile.recorded_at;
+                        return d ? new Date(d).toLocaleDateString("ko-KR") : "—";
+                      })()}`
+                  }
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <label htmlFor="detail-date-picker" className="text-[10px] text-text-tertiary whitespace-nowrap">날짜 선택</label>
+                <input
+                  id="detail-date-picker"
+                  type="date"
+                  value={selectedDate}
+                  max={today}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="text-xs border border-border rounded-lg px-2 py-1.5 cursor-pointer text-text-secondary hover:border-text-primary focus:outline-none focus:border-text-primary transition-colors"
+                />
+                {selectedDate && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDate("")}
+                    className="text-xs text-text-tertiary hover:text-text-primary transition-colors"
+                    aria-label="날짜 초기화"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
             </div>
             <div className="px-5">
               <DetailRow
                 label="신장 / 체중"
                 value={
-                  profile.height_cm && profile.weight_kg
-                    ? `${profile.height_cm}cm / ${profile.weight_kg}kg`
+                  profile.height_cm && displayWeightKg
+                    ? `${profile.height_cm}cm / ${displayWeightKg}kg`
+                    : selectedDate && weightRecords?.length === 0
+                    ? "해당 날짜 기록 없음"
                     : null
                 }
                 status={bmi !== null ? getBmiStatus(bmi) : "N/A"}
               />
               <DetailRow
                 label="허리둘레"
-                value={profile.waist_cm ? `${profile.waist_cm}cm` : null}
+                value={
+                  displayWaistCm
+                    ? `${displayWaistCm}cm`
+                    : selectedDate && waistRecords?.length === 0
+                    ? "해당 날짜 기록 없음"
+                    : null
+                }
                 status={
-                  profile.waist_cm
-                    ? getWaistStatus(profile.waist_cm, undefined)
+                  displayWaistCm
+                    ? getWaistStatus(displayWaistCm, undefined)
                     : "N/A"
                 }
                 helpTip={<WaistPopover />}
@@ -212,50 +269,66 @@ export default function DetailTab() {
               <DetailRow
                 label="흡연"
                 value={
-                  isSmoker === undefined ? null : isSmoker ? "현재 흡연" : "비흡연"
+                  currentSmoker === undefined || currentSmoker === null
+                    ? null
+                    : currentSmoker === 1
+                    ? "현재 흡연"
+                    : "비흡연"
                 }
-                status={getSmokingStatus(isSmoker)}
+                status={getSmokingStatus(currentSmoker)}
               />
               <DetailRow
                 label="알코올"
                 value={
-                  alcoholIntake
-                    ? ALCOHOL_LABEL[alcoholIntake] ?? alcoholIntake
+                  alcoholFreqY != null
+                    ? (ALCOHOL_FREQ_LABEL[alcoholFreqY] ?? String(alcoholFreqY))
                     : null
                 }
-                status={getAlcoholStatus(alcoholIntake)}
+                status={getAlcoholStatus(alcoholFreqY)}
               />
               <DetailRow
                 label="당뇨 가족력"
                 value={
-                  hasDmFamily === undefined
+                  familyDm === undefined || familyDm === null
                     ? null
-                    : hasDmFamily
+                    : familyDm === 1
                     ? "있음"
-                    : "없음"
+                    : familyDm === 0
+                    ? "없음"
+                    : "모름"
                 }
                 status={
-                  hasDmFamily === undefined ? "N/A" : hasDmFamily ? "주의" : "정상"
+                  familyDm === undefined || familyDm === null
+                    ? "N/A"
+                    : familyDm === 1
+                    ? "주의"
+                    : "정상"
                 }
               />
               <DetailRow
                 label="고혈압 가족력"
                 value={
-                  hasHtnFamily === undefined
+                  familyHp === undefined || familyHp === null
                     ? null
-                    : hasHtnFamily
+                    : familyHp === 1
                     ? "있음"
-                    : "없음"
+                    : familyHp === 0
+                    ? "없음"
+                    : "모름"
                 }
                 status={
-                  hasHtnFamily === undefined ? "N/A" : hasHtnFamily ? "주의" : "정상"
+                  familyHp === undefined || familyHp === null
+                    ? "N/A"
+                    : familyHp === 1
+                    ? "주의"
+                    : "정상"
                 }
               />
               <DetailRow
                 label="임신 경험"
                 value={
-                  pregnancyHistory
-                    ? PREGNANCY_LABEL[pregnancyHistory] ?? pregnancyHistory
+                  pregnancyStatus
+                    ? (PREGNANCY_LABEL[pregnancyStatus] ?? pregnancyStatus)
                     : null
                 }
               />

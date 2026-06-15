@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChallengeScope } from "@/types/challenge";
+import type { ChallengeScope, ChallengeVisibility } from "@/types/challenge";
 
 /* =========================================
    Step 1: 참여 방식 선택 (개인 / 그룹)
@@ -9,6 +9,8 @@ import type { ChallengeScope } from "@/types/challenge";
 interface WizardStep1Props {
   value: ChallengeScope | null;
   onChange: (scope: ChallengeScope) => void;
+  visibility: ChallengeVisibility;
+  onVisibilityChange: (v: ChallengeVisibility) => void;
 }
 
 const SCOPE_OPTIONS: {
@@ -31,7 +33,32 @@ const SCOPE_OPTIONS: {
   },
 ];
 
-export default function WizardStep1({ value, onChange }: WizardStep1Props) {
+const VISIBILITY_OPTIONS: {
+  value: ChallengeVisibility;
+  emoji: string;
+  title: string;
+  desc: string;
+}[] = [
+  {
+    value: "PUBLIC",
+    emoji: "🌐",
+    title: "공개",
+    desc: "모집 중인 챌린지 목록에 표시돼요",
+  },
+  {
+    value: "PRIVATE",
+    emoji: "🔒",
+    title: "비공개",
+    desc: "목록에는 표시되지만 참여 시 초대 코드가 필요해요",
+  },
+];
+
+export default function WizardStep1({
+  value,
+  onChange,
+  visibility,
+  onVisibilityChange,
+}: WizardStep1Props) {
   return (
     <div>
       <h2 className="text-lg font-bold text-text-primary mb-1">참여 방식</h2>
@@ -64,6 +91,35 @@ export default function WizardStep1({ value, onChange }: WizardStep1Props) {
           </button>
         ))}
       </div>
+
+      {/* 공개 설정 — 그룹 선택 시에만 표시 */}
+      {value === "GROUP" && (
+        <div className="mt-6">
+          <p className="text-sm font-bold text-text-primary mb-3">공개 설정</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {VISIBILITY_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => onVisibilityChange(opt.value)}
+                className={[
+                  "flex items-center gap-3 p-4 rounded-[12px] border-2 transition-all duration-150 text-left",
+                  visibility === opt.value
+                    ? "border-brand-black bg-white shadow-sm"
+                    : "border-border bg-white hover:border-brand",
+                ].join(" ")}
+                aria-pressed={visibility === opt.value}
+              >
+                <span className="text-xl" aria-hidden="true">{opt.emoji}</span>
+                <div>
+                  <p className="text-sm font-bold text-text-primary">{opt.title}</p>
+                  <p className="text-xs text-text-secondary mt-0.5">{opt.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

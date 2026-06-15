@@ -14,6 +14,7 @@ import { format } from "@/lib/dateUtils";
 import type {
   WizardFormState,
   ChallengeScope,
+  ChallengeVisibility,
   ChallengeCategory,
   ExerciseSubType,
   ChallengeCadence,
@@ -99,7 +100,7 @@ function shouldSkipStep3(
 
 /* ─── Step4 유효성 검사 ─── */
 function isStep4Valid(form: WizardFormState): boolean {
-  if (!form.title.trim()) return false;
+  if (form.title.trim().length < 2) return false;
   const { category, scope, step3Mode, sub_category, goal_config } = form;
 
   /* WATER */
@@ -141,8 +142,51 @@ function isStep4Valid(form: WizardFormState): boolean {
   /* EXERCISE */
   if (category === "EXERCISE") {
     if (!sub_category) return false;
+
     if (scope === "GROUP") {
       if (!goal_config.group_target_count) return false;
+      /* 걷기/러닝: 시간 또는 거리 선택 필요 */
+      if (sub_category === "WALKING") {
+        if (!goal_config.duration_minutes && !goal_config.distance_km && !goal_config.step_count) return false;
+      }
+      if (sub_category === "RUNNING") {
+        if (!goal_config.duration_minutes && !goal_config.distance_km) return false;
+      }
+      /* 자전거/근력: 목표 시간 선택 필요 */
+      if (sub_category === "CYCLING" || sub_category === "STRENGTH") {
+        if (!goal_config.duration_minutes) return false;
+      }
+      /* 기타: 운동 종류 입력 필요 */
+      if (sub_category === "OTHER" && !goal_config.exercise_other_type) return false;
+    } else {
+      /* 개인 */
+      const isWeekly = step3Mode === "WEEKLY_COUNT";
+      if (sub_category === "WALKING") {
+        if (!goal_config.duration_minutes && !goal_config.distance_km && !goal_config.step_count) return false;
+        if (isWeekly && !goal_config.weekly_target_count) return false;
+      }
+      if (sub_category === "RUNNING") {
+        if (!goal_config.duration_minutes && !goal_config.distance_km) return false;
+        if (isWeekly && !goal_config.weekly_target_count) return false;
+      }
+      if (sub_category === "CYCLING") {
+        /* 자전거는 항상 주간 */
+        if (!goal_config.duration_minutes) return false;
+        if (!goal_config.weekly_target_count) return false;
+      }
+      if (sub_category === "STRENGTH") {
+        if (!goal_config.duration_minutes) return false;
+        if (isWeekly && !goal_config.weekly_target_count) return false;
+      }
+      if (sub_category === "SWIMMING") {
+        /* 수영은 항상 주간 */
+        if (!goal_config.weekly_target_count) return false;
+      }
+      if (sub_category === "OTHER") {
+        /* 기타는 항상 주간 */
+        if (!goal_config.exercise_other_type) return false;
+        if (!goal_config.weekly_target_count) return false;
+      }
     }
   }
   return true;
@@ -163,6 +207,7 @@ function isStep3Valid(form: WizardFormState): boolean {
 /* ─── 기본값 ─── */
 const initialForm: WizardFormState = {
   scope: "PERSONAL",
+  visibility: "PUBLIC",
   category: null,
   sub_category: null,
   step3Mode: null,
@@ -227,12 +272,27 @@ export default function NewChallengePage() {
       const skip = shouldSkipStep3(form.scope, cat);
       const vType = inferVerificationType(cat);
       const gType = inferGoalType(cat);
+      const isGroup = form.scope === "GROUP";
 
-      /* DISEASE_CARE는 step3에서 questionnaire_template을 고르므로 초기화 */
-      const newGoalConfig =
-        cat === "DISEASE_CARE"
-          ? { questionnaire_template: undefined }
-          : {};
+      /* 그룹 카테고리별 goal_config 기본값 설정 — 버튼이 처음부터 활성화되도록 */
+      let newGoalConfig: Record<string, unknown> = {};
+      if (cat === "DISEASE_CARE") {
+        newGoalConfig = { questionnaire_template: undefined };
+      } else if (isGroup) {
+        if (cat === "WATER") {
+          newGoalConfig = { amount: { value: 1500, unit: "mL" }, group_target_count: 6 };
+        } else if (cat === "MEDITATION") {
+          newGoalConfig = { duration_minutes: 5, group_target_count: 6 };
+        } else if (cat === "WEIGHT_MANAGEMENT") {
+          newGoalConfig = { kind: "WEIGHT", weight_loss_mode: "MAINTAIN", group_target_members: 3 };
+        } else if (cat === "NO_SMOKING" || cat === "NO_ALCOHOL") {
+          /* GROUP_MEMBERS 기본값 — max_participants(3)와 동기화 */
+          newGoalConfig = { group_target_members: 3 };
+        } else {
+          /* EXERCISE, SLEEP, DIET 그룹 — group_target_count 기본값 */
+          newGoalConfig = { group_target_count: 6 };
+        }
+      }
 
       updateForm({
         category: cat,
@@ -240,7 +300,7 @@ export default function NewChallengePage() {
         step3Mode: null,
         verification_type: vType,
         goal_type: gType,
-        goal_config: newGoalConfig,
+        goal_config: newGoalConfig as WizardFormState["goal_config"],
         title: "",
       });
 
@@ -279,6 +339,12 @@ export default function NewChallengePage() {
       /* DISEASE_CARE: step3Mode = questionnaire_template */
       const isDiseaseTemplate = form.category === "DISEASE_CARE";
 
+      /* SLEEP 그룹 SLEEP_DURATION: 선택 UI 없이 고정값이라 step3Mode 선택 시 sleep_mode 함께 설정 */
+      const isSleepGroupDuration =
+        form.category === "SLEEP" &&
+        form.scope === "GROUP" &&
+        mode === "SLEEP_DURATION";
+
       const newGoalConfig = isDietGroupType
         ? {
             ...form.goal_config,
@@ -291,6 +357,8 @@ export default function NewChallengePage() {
           }
         : isDiseaseTemplate
         ? { ...form.goal_config, questionnaire_template: mode }
+        : isSleepGroupDuration
+        ? { ...form.goal_config, sleep_mode: "SLEEP_DURATION" as const }
         : form.goal_config;
 
       updateForm({
@@ -323,26 +391,25 @@ export default function NewChallengePage() {
       showToast("카테고리를 선택해주세요", "error");
       return;
     }
-    if (!form.title.trim()) {
-      showToast("챌린지 이름을 입력해주세요", "error");
+    if (form.title.trim().length < 2) {
+      showToast("챌린지 이름을 2자 이상 입력해주세요", "error");
       return;
     }
 
     const today = new Date();
-    const isWeekly =
-      form.cadence === "WEEKLY_COUNT" ||
-      form.cadence === "GROUP_SUM" ||
-      form.cadence === "GROUP_MEMBERS";
+    const resolvedCadence = inferCadence(form.scope, form.category, form.step3Mode);
 
-    /* 주간 고정 기간 */
-    const durationDays = isWeekly ? 7 : form.duration_days;
+    /* GROUP_SUM(물/명상/운동/식단/수면 그룹)과 WEEKLY_COUNT(개인 주간)은 7일 고정 */
+    const isWeeklyFixed =
+      resolvedCadence === "WEEKLY_COUNT" ||
+      resolvedCadence === "GROUP_SUM";
+
+    const durationDays = isWeeklyFixed ? 7 : form.duration_days;
     const endDate = new Date(today);
     endDate.setDate(today.getDate() + durationDays - 1);
 
     const startDateStr = format(today, "yyyy-MM-dd");
     const endDateStr = format(endDate, "yyyy-MM-dd");
-
-    const resolvedCadence = inferCadence(form.scope, form.category, form.step3Mode);
 
     /* goal_config 최종 정리 */
     const finalGoalConfig = { ...form.goal_config };
@@ -367,6 +434,7 @@ export default function NewChallengePage() {
         verification_type: form.verification_type,
         cadence: resolvedCadence,
         goal_config: Object.keys(finalGoalConfig).length > 0 ? finalGoalConfig : undefined,
+        visibility: form.scope === "GROUP" ? form.visibility : undefined,
       },
       {
         onSuccess: (data) => {
@@ -435,11 +503,14 @@ export default function NewChallengePage() {
           onChange={(scope: ChallengeScope) => {
             updateForm({ scope, step3Mode: null, goal_config: {} });
           }}
+          visibility={form.visibility}
+          onVisibilityChange={(v: ChallengeVisibility) => updateForm({ visibility: v })}
         />
       )}
 
       {currentStep === 2 && (
         <WizardStep2
+          scope={form.scope}
           value={form.category}
           onChange={handleCategoryChange}
         />

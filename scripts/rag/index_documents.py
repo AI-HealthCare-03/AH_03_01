@@ -42,7 +42,7 @@ from tortoise import Tortoise
 
 from app.core import config
 from app.core.db.databases import TORTOISE_ORM
-from app.models.rag import DocumentType, RAGDocument
+from app.models.rag import DEFAULT_EMBEDDING_DIM, DocumentType, RAGDocument
 from scripts.rag.topic_mapping import _get_topics
 
 # ─────────────────────────────────────────────
@@ -101,7 +101,7 @@ splitter = RecursiveCharacterTextSplitter(
 )
 
 # `## KDA2025_SEC_0001 — 당뇨병`, `## DYS_FIG_001 — ...`, `## GUIDE_SEC_001 — ...`,
-# 그리고 `## KSOLA2022_SEC_0020_A — ...` (숫자 뒤 _접미사) 형태까지 모두 매칭.
+# 그리고 `## KSLA2022_SEC_0020_A — ...` (숫자 뒤 _접미사) 형태까지 모두 매칭.
 SEC_HEADER = re.compile(
     r"^## ([A-Z][A-Z0-9_]+(?:_SEC_\d+[A-Z]*(?:_[A-Z0-9]+)?|_FIG_\d+|FIG_\d+)) — (.+)$",
     re.MULTILINE,
@@ -164,10 +164,7 @@ def build_embedding_text(block: str) -> str:
     if rag_match:
         parts.append("[RAG요약] " + rag_match.group(1).strip())
 
-    kw_match = re.search(
-    r"^#{3,5}.*?(?:검색 키워드|Keywords).*?\n(.*?)(?=^#{3,5}|\Z)",
-    block, re.DOTALL | re.MULTILINE
-    )
+    kw_match = re.search(r"^#{3,5}.*?(?:검색 키워드|Keywords).*?\n(.*?)(?=^#{3,5}|\Z)", block, re.DOTALL | re.MULTILINE)
     if kw_match:
         keywords = [
             line.strip().lstrip("- ").strip()
@@ -191,7 +188,7 @@ def parse_file(filepath: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:  
     body = post.content
     matches = list(SEC_HEADER.finditer(body))
 
-    # M-6 sanity: section_id 가 frontmatter.source_id 의 prefix(예: "KSOLA2022")로 시작하거나
+    # M-6 sanity: section_id 가 frontmatter.source_id 의 prefix(예: "KSLA2022")로 시작하거나
     # 의료 도메인의 알려진 figure 접두사 인지 sample 검증. 정규식 확장으로 의도 외 패턴이
     # 매치되면 즉시 경고 (silent 매치 방지).
     # 알려진 figure 접두사: 각 진료지침이 본문에 다른 자료의 figure 를 인용하는 경우가 있음.
@@ -269,7 +266,10 @@ def embed_batch(client: OpenAI, texts: list[str]) -> list[list[float]]:
     last_err: Exception | None = None
     for attempt in range(EMBEDDING_RETRY):
         try:
-            resp = client.embeddings.create(model=config.OPENAI_EMBEDDING_MODEL, input=texts)
+            # dimensions 고정: 3-large(native 3072)도 vector(1536) 컬럼에 맞춰 1536 산출(:471 가드와 정합).
+            resp = client.embeddings.create(
+                model=config.OPENAI_EMBEDDING_MODEL, input=texts, dimensions=DEFAULT_EMBEDDING_DIM
+            )
             return [item.embedding for item in resp.data]
         except Exception as e:  # noqa: BLE001 — OpenAI SDK 의 다양한 예외 통합 처리
             last_err = e

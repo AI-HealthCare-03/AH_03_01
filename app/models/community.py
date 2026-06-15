@@ -28,11 +28,19 @@ class PostCategory(StrEnum):
     FREE = "FREE"
 
 
+class InfoCategory(StrEnum):
+    HYPERTENSION = "HYPERTENSION"
+    DIABETES = "DIABETES"
+    CARDIOVASCULAR = "CARDIOVASCULAR"
+    LIFESTYLE = "LIFESTYLE"
+
+
 class Post(models.Model):
     id = fields.BigIntField(primary_key=True)
     title = fields.CharField(max_length=200)
     content = fields.TextField()
     category = fields.CharEnumField(PostCategory, max_length=20)
+    info_category = fields.CharEnumField(InfoCategory, max_length=20, null=True)
     is_pinned = fields.BooleanField(default=False)
     view_count = fields.IntField(default=0)
     author: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(
@@ -106,13 +114,13 @@ class HealthQuiz(models.Model):
     correct_option = fields.CharEnumField(QuizOption, max_length=1)
     explanation = fields.TextField()
     category = fields.CharEnumField(QuizCategory, max_length=20, default=QuizCategory.GENERAL)
-    quiz_date = fields.DateField()
+    quiz_date = fields.DateField(null=True)
     is_active = fields.BooleanField(default=True)
     created_at = fields.DatetimeField(auto_now_add=True)
 
     class Meta:
         table = "health_quizzes"
-        ordering = ["quiz_date", "id"]
+        ordering = ["id"]
 
 
 class QuizAttempt(models.Model):
@@ -131,3 +139,49 @@ class QuizAttempt(models.Model):
     class Meta:
         table = "quiz_attempts"
         unique_together = (("user", "quiz"),)
+
+
+class PostLike(models.Model):
+    id = fields.BigIntField(primary_key=True)
+    post: fields.ForeignKeyRelation["Post"] = fields.ForeignKeyField(
+        "models.Post", related_name="likes", on_delete=fields.CASCADE
+    )
+    user: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(
+        "models.User", related_name="post_likes", on_delete=fields.CASCADE
+    )
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "community_post_likes"
+        unique_together = (("post", "user"),)
+
+
+class CommentLike(models.Model):
+    id = fields.BigIntField(primary_key=True)
+    comment: fields.ForeignKeyRelation["Comment"] = fields.ForeignKeyField(
+        "models.Comment", related_name="likes", on_delete=fields.CASCADE
+    )
+    user: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(
+        "models.User", related_name="comment_likes", on_delete=fields.CASCADE
+    )
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "community_comment_likes"
+        unique_together = (("comment", "user"),)
+
+
+class DailyQuizAssignment(models.Model):
+    id = fields.BigIntField(primary_key=True)
+    user: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(
+        "models.User", related_name="daily_quiz_assignments", on_delete=fields.CASCADE
+    )
+    quiz: fields.ForeignKeyRelation["HealthQuiz"] = fields.ForeignKeyField(
+        "models.HealthQuiz", related_name="daily_assignments", on_delete=fields.CASCADE
+    )
+    assigned_date = fields.DateField()
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "daily_quiz_assignments"
+        unique_together = (("user", "quiz", "assigned_date"),)

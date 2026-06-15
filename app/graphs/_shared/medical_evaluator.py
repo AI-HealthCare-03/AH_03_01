@@ -197,8 +197,8 @@ def rule_evaluate(inp: EvalInput) -> tuple[EvalResultLiteral, str]:  # noqa: C90
 
     R1~R5 중 하나라도 fail 이면 즉시 분류 종료, LLM 호출 없음.
     """
-    # R1: 문서 없음
-    if not inp.docs:
+    # R1: 문서 없음 (service_guide 는 컨텍스트 없이 답하는 케이스 허용 — R1 skip)
+    if not inp.docs and inp.intent != "service_guide":
         return (
             "retrieval_problem",
             "[Rule R1] 검색 결과가 비어 있음. 핵심 키워드/동의어로 쿼리 재작성 필요.",

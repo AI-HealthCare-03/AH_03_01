@@ -9,6 +9,7 @@ from app.dtos.community import (
     CommentCreateRequest,
     CommentResponse,
     CommentUpdateRequest,
+    LikeResponse,
     PostCreateRequest,
     PostDetailResponse,
     PostListItem,
@@ -20,10 +21,10 @@ from app.dtos.community import (
     QuizResponse,
     ReportCreateRequest,
 )
-from app.models.community import Comment, Post, PostCategory
+from app.models.community import Comment, InfoCategory, Post, PostCategory
 from app.models.notifications import NotificationType
 from app.models.users import User
-from app.repositories.community_repository import CommentRepository, PostRepository, ReportRepository
+from app.repositories.community_repository import CommentRepository, LikeRepository, PostRepository, ReportRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.services.quiz import HealthQuizService
 
@@ -35,9 +36,11 @@ def _to_item(p: Post) -> PostListItem:
         id=p.id,
         title=p.title,
         category=p.category,
+        info_category=p.info_category,
         is_pinned=p.is_pinned,
         view_count=p.view_count,
         comment_count=getattr(p, "comment_count", 0),
+        like_count=getattr(p, "like_count", 0),
         author_id=p.author_id,
         author_nickname=p.author.nickname,
         created_at=p.created_at,
@@ -67,27 +70,44 @@ async def list_posts(
     page: int = Query(1, ge=1),  # noqa: B008
     size: int = Query(20, ge=1, le=100),  # noqa: B008
     category: PostCategory | None = Query(None),  # noqa: B008
+    info_category: InfoCategory | None = Query(None),  # noqa: B008
     _: User = Depends(get_request_user),  # noqa: B008
 ) -> PostListResponse:
-    posts, total = await PostRepository().list_posts(page, size, category)
+    posts, total = await PostRepository().list_posts(page, size, category, info_category)
     return PostListResponse(items=[_to_item(p) for p in posts], total=total, page=page, size=size)
 
 
+@posts_router.get("/popular", response_model=list[PostListItem])
+async def list_popular_posts(
+    limit: int = Query(3, ge=1, le=10),  # noqa: B008
+    _: User = Depends(get_request_user),  # noqa: B008
+) -> list[PostListItem]:
+    posts = await PostRepository().list_popular_posts(limit)
+    return [_to_item(p) for p in posts]
+
+
 @posts_router.get("/{post_id}", response_model=PostDetailResponse)
-async def get_post(post_id: int, _: User = Depends(get_request_user)) -> PostDetailResponse:  # noqa: B008
+async def get_post(post_id: int, current_user: User = Depends(get_request_user)) -> PostDetailResponse:  # noqa: B008
     repo = PostRepository()
     post = await repo.get_post(post_id)
     if not post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
     await repo.increment_view(post.id, post.view_count)
-    return PostDetailResponse(**_to_item(post).model_dump(), content=post.content, updated_at=post.updated_at)
+    is_liked = await LikeRepository().is_post_liked(post_id, current_user.id)
+    return PostDetailResponse(
+        **_to_item(post).model_dump(), content=post.content, updated_at=post.updated_at, is_liked=is_liked
+    )
 
 
 @posts_router.post("", response_model=PostDetailResponse, status_code=status.HTTP_201_CREATED)
 async def create_post(body: PostCreateRequest, current_user: User = Depends(get_request_user)) -> PostDetailResponse:  # noqa: B008
     repo = PostRepository()
     post = await repo.create_post(
-        author_id=current_user.id, title=body.title, content=body.content, category=body.category
+        author_id=current_user.id,
+        title=body.title,
+        content=body.content,
+        category=body.category,
+        info_category=body.info_category,
     )
     post = await repo.get_post(post.id)
     return PostDetailResponse(**_to_item(post).model_dump(), content=post.content, updated_at=post.updated_at)
@@ -105,7 +125,9 @@ async def update_post(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
     if post.author_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="수정 권한이 없습니다.")
-    post = await repo.update_post(post, title=body.title, content=body.content, category=body.category)
+    post = await repo.update_post(
+        post, title=body.title, content=body.content, category=body.category, info_category=body.info_category
+    )
     return PostDetailResponse(**_to_item(post).model_dump(), content=post.content, updated_at=post.updated_at)
 
 
@@ -120,12 +142,38 @@ async def delete_post(post_id: int, current_user: User = Depends(get_request_use
     await repo.delete_post(post)
 
 
+# ── 게시글 좋아요 ──────────────────────────────────────────────────────────────
+
+
+@posts_router.post("/{post_id}/like", response_model=LikeResponse)
+async def like_post(post_id: int, current_user: User = Depends(get_request_user)) -> LikeResponse:  # noqa: B008
+    if not await PostRepository().get_post(post_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
+    like_repo = LikeRepository()
+    await like_repo.like_post(post_id, current_user.id)
+    return LikeResponse(like_count=await like_repo.get_post_like_count(post_id), is_liked=True)
+
+
+@posts_router.delete("/{post_id}/like", response_model=LikeResponse)
+async def unlike_post(post_id: int, current_user: User = Depends(get_request_user)) -> LikeResponse:  # noqa: B008
+    if not await PostRepository().get_post(post_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
+    like_repo = LikeRepository()
+    await like_repo.unlike_post(post_id, current_user.id)
+    return LikeResponse(like_count=await like_repo.get_post_like_count(post_id), is_liked=False)
+
+
 # ── 댓글 ─────────────────────────────────────────────────────────────────────
 
 comments_router = APIRouter(prefix="/posts/{post_id}/comments", tags=["comments"])
 
 
-def _build_comment(c: Comment, replies: list[Comment] | None = None) -> CommentResponse:
+def _build_comment(
+    c: Comment,
+    replies: list[Comment] | None = None,
+    like_count: int = 0,
+    is_liked: bool = False,
+) -> CommentResponse:
     return CommentResponse(
         id=c.id,
         content=c.content,
@@ -134,18 +182,26 @@ def _build_comment(c: Comment, replies: list[Comment] | None = None) -> CommentR
         parent_id=c.parent_id,
         created_at=c.created_at,
         updated_at=c.updated_at,
+        like_count=like_count,
+        is_liked=is_liked,
         replies=[_build_comment(r) for r in (replies or [])],
     )
 
 
 @comments_router.get("", response_model=list[CommentResponse])
-async def list_comments(post_id: int, _: User = Depends(get_request_user)) -> list[CommentResponse]:  # noqa: B008
+async def list_comments(
+    post_id: int,
+    current_user: User = Depends(get_request_user),  # noqa: B008
+) -> list[CommentResponse]:
     repo = CommentRepository()
+    like_repo = LikeRepository()
     comments = await repo.list_comments(post_id)
     result = []
     for c in comments:
         replies = await repo.list_replies(c.id)
-        result.append(_build_comment(c, replies))
+        like_count = await like_repo.get_comment_like_count(c.id)
+        is_liked = await like_repo.is_comment_liked(c.id, current_user.id)
+        result.append(_build_comment(c, replies, like_count=like_count, is_liked=is_liked))
     return result
 
 
@@ -219,6 +275,37 @@ async def delete_comment(
     await repo.delete_comment(comment)
 
 
+# ── 댓글 좋아요 ────────────────────────────────────────────────────────────────
+
+
+@comments_router.post("/{comment_id}/like", response_model=LikeResponse)
+async def like_comment(
+    post_id: int,
+    comment_id: int,
+    current_user: User = Depends(get_request_user),  # noqa: B008
+) -> LikeResponse:
+    comment = await CommentRepository().get_comment(comment_id)
+    if not comment or comment.post_id != post_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="댓글을 찾을 수 없습니다.")
+    like_repo = LikeRepository()
+    await like_repo.like_comment(comment_id, current_user.id)
+    return LikeResponse(like_count=await like_repo.get_comment_like_count(comment_id), is_liked=True)
+
+
+@comments_router.delete("/{comment_id}/like", response_model=LikeResponse)
+async def unlike_comment(
+    post_id: int,
+    comment_id: int,
+    current_user: User = Depends(get_request_user),  # noqa: B008
+) -> LikeResponse:
+    comment = await CommentRepository().get_comment(comment_id)
+    if not comment or comment.post_id != post_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="댓글을 찾을 수 없습니다.")
+    like_repo = LikeRepository()
+    await like_repo.unlike_comment(comment_id, current_user.id)
+    return LikeResponse(like_count=await like_repo.get_comment_like_count(comment_id), is_liked=False)
+
+
 # ── 신고 ─────────────────────────────────────────────────────────────────────
 
 reports_router = APIRouter(prefix="/reports", tags=["reports"])
@@ -251,6 +338,12 @@ _QUIZ_ERRORS: dict[str, tuple[int, str]] = {
     "daily_limit_exceeded": (status.HTTP_429_TOO_MANY_REQUESTS, "일일 퀴즈 한도(5문제)를 초과했습니다."),
     "quiz_not_found": (status.HTTP_404_NOT_FOUND, "퀴즈를 찾을 수 없습니다."),
 }
+
+
+@quiz_router.get("/available", response_model=list[QuizResponse])
+async def get_available_quizzes(current_user: User = Depends(get_request_user)) -> list[QuizResponse]:  # noqa: B008
+    quizzes = await HealthQuizService().get_available_quizzes(current_user.id)
+    return [QuizResponse.model_validate(q) for q in quizzes]
 
 
 @quiz_router.get("/today")

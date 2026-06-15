@@ -1,34 +1,123 @@
 from __future__ import annotations
 
-from datetime import date
+import random
+from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from tortoise.functions import Count
 
-from app.models.community import Comment, HealthQuiz, Post, PostCategory, QuizAttempt, QuizOption, Report, ReportReason, ReportTargetType
+from app.models.community import (
+    Comment,
+    CommentLike,
+    DailyQuizAssignment,
+    HealthQuiz,
+    InfoCategory,
+    Post,
+    PostCategory,
+    PostLike,
+    QuizAttempt,
+    QuizOption,
+    Report,
+    ReportReason,
+    ReportTargetType,
+)
+
+
+class LikeRepository:
+    async def get_post_like_count(self, post_id: int) -> int:
+        return await PostLike.filter(post_id=post_id).count()
+
+    async def is_post_liked(self, post_id: int, user_id: UUID) -> bool:
+        return await PostLike.filter(post_id=post_id, user_id=user_id).exists()
+
+    async def like_post(self, post_id: int, user_id: UUID) -> None:
+        await PostLike.get_or_create(post_id=post_id, user_id=user_id)
+
+    async def unlike_post(self, post_id: int, user_id: UUID) -> None:
+        await PostLike.filter(post_id=post_id, user_id=user_id).delete()
+
+    async def get_comment_like_count(self, comment_id: int) -> int:
+        return await CommentLike.filter(comment_id=comment_id).count()
+
+    async def is_comment_liked(self, comment_id: int, user_id: UUID) -> bool:
+        return await CommentLike.filter(comment_id=comment_id, user_id=user_id).exists()
+
+    async def like_comment(self, comment_id: int, user_id: UUID) -> None:
+        await CommentLike.get_or_create(comment_id=comment_id, user_id=user_id)
+
+    async def unlike_comment(self, comment_id: int, user_id: UUID) -> None:
+        await CommentLike.filter(comment_id=comment_id, user_id=user_id).delete()
 
 
 class PostRepository:
     async def list_posts(
-        self, page: int = 1, size: int = 20, category: PostCategory | None = None
+        self,
+        page: int = 1,
+        size: int = 20,
+        category: PostCategory | None = None,
+        info_category: InfoCategory | None = None,
     ) -> tuple[list[Post], int]:
-        qs = Post.all().prefetch_related("author").annotate(comment_count=Count("comments"))
+        qs = (
+            Post.all()
+            .prefetch_related("author")
+            .annotate(
+                comment_count=Count("comments", distinct=True),
+                like_count=Count("likes", distinct=True),
+            )
+        )
         if category:
             qs = qs.filter(category=category)
+        if info_category:
+            qs = qs.filter(info_category=info_category)
         total = await qs.count()
         return list(await qs.offset((page - 1) * size).limit(size)), total
 
+    async def list_popular_posts(self, limit: int = 3) -> list[Post]:
+        since = datetime.now(timezone.utc) - timedelta(days=7)
+        return list(
+            await Post.filter(created_at__gte=since)
+            .prefetch_related("author")
+            .annotate(
+                comment_count=Count("comments", distinct=True),
+                like_count=Count("likes", distinct=True),
+            )
+            .order_by("-view_count")
+            .limit(limit)
+        )
+
     async def get_post(self, post_id: int) -> Post | None:
-        return await Post.get_or_none(id=post_id).prefetch_related("author").annotate(comment_count=Count("comments"))
+        return (
+            await Post.get_or_none(id=post_id)
+            .prefetch_related("author")
+            .annotate(comment_count=Count("comments", distinct=True), like_count=Count("likes", distinct=True))
+        )
 
     async def increment_view(self, post_id: int, current: int) -> None:
         await Post.filter(id=post_id).update(view_count=current + 1)
 
-    async def create_post(self, author_id: UUID, title: str, content: str, category: PostCategory) -> Post:
-        return await Post.create(author_id=author_id, title=title, content=content, category=category)
+    async def create_post(
+        self,
+        author_id: UUID,
+        title: str,
+        content: str,
+        category: PostCategory,
+        info_category: InfoCategory | None = None,
+    ) -> Post:
+        return await Post.create(
+            author_id=author_id,
+            title=title,
+            content=content,
+            category=category,
+            info_category=info_category,
+        )
 
     async def update_post(
-        self, post: Post, title: str | None, content: str | None, category: PostCategory | None
+        self,
+        post: Post,
+        title: str | None,
+        content: str | None,
+        category: PostCategory | None,
+        info_category: InfoCategory | None = None,
     ) -> Post:
         if title is not None:
             post.title = title
@@ -36,6 +125,8 @@ class PostRepository:
             post.content = content
         if category is not None:
             post.category = category
+        if info_category is not None:
+            post.info_category = info_category
         await post.save()
         return post
 
@@ -83,9 +174,27 @@ class ReportRepository:
         return report
 
 
+class DailyAssignmentRepository:
+    async def get_today_assignments(self, user_id: UUID, today: date) -> list[DailyQuizAssignment]:
+        return list(await DailyQuizAssignment.filter(user_id=user_id, assigned_date=today).prefetch_related("quiz"))
+
+    async def create_assignments(self, user_id: UUID, quiz_ids: list[int], today: date) -> None:
+        for quiz_id in quiz_ids:
+            await DailyQuizAssignment.get_or_create(user_id=user_id, quiz_id=quiz_id, assigned_date=today)
+
+
 class QuizRepository:
     async def get_quiz_by_date(self, quiz_date: date) -> HealthQuiz | None:
         return await HealthQuiz.get_or_none(quiz_date=quiz_date, is_active=True)
+
+    async def get_quiz_by_id(self, quiz_id: int) -> HealthQuiz | None:
+        return await HealthQuiz.get_or_none(id=quiz_id, is_active=True)
+
+    async def list_unanswered_quizzes(self, user_id: UUID, limit: int) -> list[HealthQuiz]:
+        attempted_ids = list(await QuizAttempt.filter(user_id=user_id).values_list("quiz_id", flat=True))
+        quizzes = list(await HealthQuiz.filter(is_active=True).exclude(id__in=attempted_ids))
+        random.shuffle(quizzes)
+        return quizzes[:limit]
 
     async def get_attempt(self, user_id: UUID, quiz_id: int) -> QuizAttempt | None:
         return await QuizAttempt.get_or_none(user_id=user_id, quiz_id=quiz_id)

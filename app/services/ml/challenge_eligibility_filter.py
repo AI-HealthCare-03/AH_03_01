@@ -105,7 +105,7 @@ def _extract_risk_factors(
 
     h = profile.get("height_cm")
     w = profile.get("weight_kg")
-    if h and w and float(w) / ((float(h) / 100) ** 2) >= 25.0:
+    if h and w and float(h) > 50 and float(w) > 0 and float(w) / ((float(h) / 100) ** 2) >= 25.0:
         factors["high_bmi"] = True
 
     if profile.get("current_smoker") == 1:
@@ -202,7 +202,11 @@ async def filter_eligible_templates(
         )
 
     # TOP 우선, 같으면 템플릿 ID 오름차순
-    _priority_order = {RecommendationPriority.TOP: 0, RecommendationPriority.RECOMMENDED: 1, RecommendationPriority.OPTIONAL: 2}
+    _priority_order = {
+        RecommendationPriority.TOP: 0,
+        RecommendationPriority.RECOMMENDED: 1,
+        RecommendationPriority.OPTIONAL: 2,
+    }
     eligible.sort(key=lambda e: (_priority_order[e.priority_hint], e.template_id))
 
     priority_reasons: list[str] = []

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { dDayLabel } from "@/lib/dateUtils";
+import { dDayLabel, calcDDay } from "@/lib/dateUtils";
 import ChallengeCategoryIcon from "./common/ChallengeCategoryIcon";
 import ChallengeProgressBar from "./common/ChallengeProgressBar";
 import ChallengeStatusBadge from "./common/ChallengeStatusBadge";
@@ -29,16 +29,21 @@ export default function ChallengeCard({
       : 0;
 
   const isCrisis = (challenge.missed_count ?? 0) >= 1;
-  const dday = dDayLabel(challenge.end_date);
+  const isLeft = challenge.my_participant_status === "LEFT";
+  const isQuit = challenge.status === "CANCELLED";
+  const isAbandoned = isLeft || isQuit;
+  const dday = isAbandoned ? "챌린지 종료" : dDayLabel(challenge.end_date);
+  const isExpired = calcDDay(challenge.end_date) < 0;
 
-  // 그룹 ACTIVE → 인증하기 / 그룹 RECRUITING → 소통하기 / 개인 → 오늘 인증하기
-  const ctaLabel =
+  // 그룹 ACTIVE 또는 RECRUITING(시작일 경과) → 인증하기 / 그룹 RECRUITING(미시작) → 소통하기 / 개인 ACTIVE → 오늘 인증하기
+  const canVerify =
     challenge.scope === "GROUP"
-      ? challenge.status === "ACTIVE" ? "오늘 인증하기" : "소통하기"
-      : "오늘 인증하기";
+      ? challenge.status === "ACTIVE" || (challenge.status === "RECRUITING" && calcDDay(challenge.start_date) <= 0)
+      : challenge.status === "ACTIVE";
+  const ctaLabel = challenge.scope === "GROUP" ? (canVerify ? "오늘 인증하기" : "소통하기") : "오늘 인증하기";
   const ctaHref =
     challenge.scope === "GROUP"
-      ? challenge.status === "ACTIVE"
+      ? canVerify
         ? `/challenges/${challenge.id}/verify`
         : `/challenges/${challenge.id}?tab=chat`
       : `/challenges/${challenge.id}/verify`;
@@ -46,7 +51,12 @@ export default function ChallengeCard({
   return (
     <Link
       href={`/challenges/${challenge.id}`}
-      className="block bg-white rounded-[16px] border border-border shadow-sm hover:shadow-md transition-shadow p-4"
+      className={[
+        "block rounded-[16px] border shadow-sm hover:shadow-md transition-shadow p-4",
+        isAbandoned
+          ? "bg-surface border-border opacity-70"
+          : "bg-white border-border",
+      ].join(" ")}
       aria-label={`${challenge.title} 챌린지 상세 보기`}
     >
       {/* 헤더 */}
@@ -54,11 +64,17 @@ export default function ChallengeCard({
         <ChallengeCategoryIcon category={challenge.category} size="md" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
-            <ChallengeStatusBadge
-              scope={challenge.scope}
-              status={challenge.status}
-              isCrisis={isCrisis && challenge.status === "ACTIVE"}
-            />
+            {isAbandoned ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-surface border border-border text-text-tertiary">
+                포기
+              </span>
+            ) : (
+              <ChallengeStatusBadge
+                scope={challenge.scope}
+                status={challenge.status}
+                isCrisis={isCrisis && challenge.status === "ACTIVE"}
+              />
+            )}
           </div>
           <p className="text-sm font-bold text-text-primary leading-snug line-clamp-2">
             {challenge.title}
@@ -70,7 +86,7 @@ export default function ChallengeCard({
       </div>
 
       {/* 진행률 */}
-      {challenge.status === "ACTIVE" && (
+      {showCTA && canVerify && (
         <div className="mb-3">
           <ChallengeProgressBar
             progress={progressPct}
@@ -80,8 +96,8 @@ export default function ChallengeCard({
         </div>
       )}
 
-      {/* 완료 상태 */}
-      {challenge.status === "COMPLETED" && (
+      {/* 완료/탈퇴/포기 상태 */}
+      {(challenge.status === "COMPLETED" || isAbandoned) && (
         <div className="mb-3 text-xs text-text-secondary">
           {challenge.my_progress ?? 0}/{challenge.total_days ?? 0}일 달성
         </div>
@@ -92,12 +108,15 @@ export default function ChallengeCard({
         <div className="flex items-center gap-3 text-xs text-text-tertiary">
           <span>보상 200P</span>
           {challenge.scope === "GROUP" && challenge.max_participants && (
-            <span>
-              최대 {challenge.max_participants}명
+            <span>최대 {challenge.max_participants}명</span>
+          )}
+          {challenge.scope === "GROUP" && challenge.visibility === "PRIVATE" && (
+            <span className="flex items-center gap-0.5 text-text-tertiary">
+              🔒 비공개
             </span>
           )}
         </div>
-        {showCTA && challenge.status === "ACTIVE" && (
+        {showCTA && canVerify && !isExpired && (
           <button
             type="button"
             onClick={(e) => {

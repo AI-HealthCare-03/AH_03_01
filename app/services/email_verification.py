@@ -29,8 +29,22 @@ def _client() -> redis_async.Redis:
 
 
 class EmailVerificationService:
-    async def send_verification(self, email: str) -> None:
-        """인증 토큰을 발급해 Redis 에 저장하고 인증 링크를 메일로 발송한다."""
+    async def send_verification(self, email: str, name: str | None = None) -> None:
+        """인증 토큰을 발급해 Redis 에 저장하고 인증 링크를 메일로 발송한다.
+
+        name 이 주어지면(비밀번호 찾기 흐름) email+name 이 일치하는 활성 계정이 있을 때만 실제로
+        메일을 발송한다. 불일치/미존재여도 예외 없이 조용히 반환한다 — 라우터는 항상 202 를 반환하므로
+        이메일·이름 존재 여부가 응답으로 노출되지 않는다(account enumeration 방어).
+        name 이 없으면(회원가입 흐름) 기존 동작 그대로 무조건 발송한다.
+        """
+        if name is not None:
+            # 지연 import — repositories ↔ services 순환 의존 방지
+            from app.repositories.user_repository import UserRepository  # noqa: PLC0415
+
+            user = await UserRepository().get_active_user_by_email_and_name(email, name)
+            if user is None:
+                return  # 일치 계정 없음 — 조용히 종료(응답은 라우터에서 동일하게 202)
+
         token = secrets.token_urlsafe(32)
         await _client().set(_TOKEN_KEY.format(token=token), email, ex=_TOKEN_TTL_SEC)
 

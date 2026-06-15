@@ -6,6 +6,9 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useChallenge } from "@/hooks/queries/useChallenge";
 import { useVerifications } from "@/hooks/queries/useVerifications";
+import { useMe } from "@/hooks/queries/useMe";
+import { useLeaveChallenge } from "@/hooks/queries/useLeaveChallenge";
+import { useUpdateChallenge } from "@/hooks/queries/useUpdateChallenge";
 import PersonalDetail from "@/components/challenges/detail/PersonalDetail";
 import GroupDetail from "@/components/challenges/detail/GroupDetail";
 import NonMemberDetail from "@/components/challenges/detail/NonMemberDetail";
@@ -47,9 +50,12 @@ function ChallengeDetailContent({
   const { data: challenge, isLoading, error } = useChallenge(challengeId);
   /* mine: true — 내 인증만 조회. 다른 멤버의 인증이 섞이면 verifiedDates/pendingDates 오탐 발생 */
   const { data: verificationsData } = useVerifications(challengeId, { mine: true });
+  const { data: me } = useMe();
 
   const [shieldOpen, setShieldOpen] = useState(false);
   const shieldMutation = useCreateVerification();
+  const leaveMutation = useLeaveChallenge();
+  const updateMutation = useUpdateChallenge(challengeId);
 
   /* 인증 완료 날짜 목록 (APPROVED 상태만) */
   const verifiedDates =
@@ -156,16 +162,53 @@ function ChallengeDetailContent({
     );
   };
 
+  /* 그룹 챌린지 탈퇴 핸들러 */
+  const handleLeave = () => {
+    leaveMutation.mutate(challengeId, {
+      onSuccess: () => {
+        showToast("챌린지에서 탈퇴했어요.", "success");
+        router.push("/challenges?tab=my");
+      },
+      onError: (err) => {
+        showToast(extractErrorMessage(err), "error");
+      },
+    });
+  };
+
+  /* 그룹 챌린지 취소 핸들러 (방장 전용) — CANCELLED 로 상태 변경 */
+  const handleCancel = () => {
+    updateMutation.mutate({ status: "CANCELLED" }, {
+      onSuccess: () => {
+        showToast("챌린지를 취소했어요.", "info");
+        router.push("/challenges?tab=my");
+      },
+      onError: (err) => {
+        showToast(extractErrorMessage(err), "error");
+      },
+    });
+  };
+
+  /* 개인 챌린지 포기 핸들러 — 소프트 삭제 대신 CANCELLED 로 상태 변경 */
+  const handleQuit = () => {
+    updateMutation.mutate({ status: "CANCELLED" }, {
+      onSuccess: () => {
+        showToast("챌린지를 포기했어요.", "info");
+        router.push("/challenges?tab=my");
+      },
+      onError: (err) => {
+        showToast(extractErrorMessage(err), "error");
+      },
+    });
+  };
+
   /* 참가 완료 핸들러 */
   const handleJoined = () => {
     router.refresh();
   };
 
-  /* 비참여자 여부 판단:
-   * 실제로는 백엔드가 403을 반환하거나 participants API로 확인해야 함.
-   * 현재는 invite 쿼리 파라미터가 있으면 NonMember로 보여주는 간단 처리.
-   * TODO: /challenges/{id}/participants?userId=me API로 정확히 판단 */
-  const isNonMember = !!inviteCode;
+  /* 비참여자 여부: 백엔드가 is_member 필드를 내려줌 */
+  const isNonMember = challenge.is_member === false;
+  const isPrivate = challenge.visibility === "PRIVATE";
 
   return (
     <>
@@ -173,6 +216,7 @@ function ChallengeDetailContent({
         <NonMemberDetail
           challenge={challenge}
           inviteCode={inviteCode}
+          requiresCode={isPrivate}
           onJoined={handleJoined}
         />
       ) : challenge.scope === "GROUP" ? (
@@ -180,6 +224,9 @@ function ChallengeDetailContent({
           challenge={challenge}
           onShield={() => setShieldOpen(true)}
           initialTab={initialTab}
+          onLeave={handleLeave}
+          onCancel={handleCancel}
+          currentUserId={me?.id}
         />
       ) : (
         <PersonalDetail
@@ -188,6 +235,7 @@ function ChallengeDetailContent({
           pendingDates={pendingDates}
           rejectedToday={rejectedToday}
           onShield={() => setShieldOpen(true)}
+          onQuit={handleQuit}
         />
       )}
 

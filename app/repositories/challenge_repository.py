@@ -57,12 +57,14 @@ class ChallengeRepository:
         scope: str | None = None,
         status: str | None = None,
         category: str | None = None,
+        visibility: str | None = None,
         keyword: str | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
         sort_by: str | None = None,  # "start_date" | "end_date" | None(기본: created_at)
         page: int = 1,
         size: int = 20,
+        left_only: bool = False,
     ) -> tuple[list[Challenge], int]:
         qs = self._model.filter(is_deleted=False)
         if scope is not None:
@@ -71,6 +73,8 @@ class ChallengeRepository:
             qs = qs.filter(status=status)
         if category is not None:
             qs = qs.filter(category=category)
+        if visibility is not None:
+            qs = qs.filter(visibility=visibility)
         if keyword:
             qs = qs.filter(Q(title__icontains=keyword) | Q(description__icontains=keyword))
         if date_from is not None:
@@ -79,12 +83,21 @@ class ChallengeRepository:
             qs = qs.filter(start_date__lte=date_to)
         if user_id is not None:
             # Tortoise 가 __in= 에 subquery 객체를 직접 받지 못하므로 list 로 먼저 materialize.
-            # PENDING 상태도 포함 — 초대 코드로 참가 신청 후 승인 대기 중인 챌린지도 목록에 표시
+            # left_only=True: 탈퇴(LEFT)한 챌린지만 조회 (완료 탭 노출용)
+            # 기본: PENDING 상태도 포함 — 초대 코드로 참가 신청 후 승인 대기 중인 챌린지도 목록에 표시
+            participant_statuses = (
+                [ParticipantStatus.LEFT]
+                if left_only
+                else [ParticipantStatus.APPROVED, ParticipantStatus.PENDING]
+            )
             participating_ids = await ChallengeParticipant.filter(
                 user_id=user_id,
-                status__in=[ParticipantStatus.APPROVED, ParticipantStatus.PENDING],
+                status__in=participant_statuses,
             ).values_list("challenge_id", flat=True)
-            qs = qs.filter(Q(creator_id=user_id) | Q(id__in=list(participating_ids)))
+            if left_only:
+                qs = qs.filter(id__in=list(participating_ids))
+            else:
+                qs = qs.filter(Q(creator_id=user_id) | Q(id__in=list(participating_ids)))
         total = await qs.count()
         _order = {"start_date": "start_date", "end_date": "end_date"}.get(sort_by or "", "-created_at")
         items = await qs.order_by(_order).offset((page - 1) * size).limit(size)

@@ -12,15 +12,26 @@ import type { PredictionDetail, RecommendationCategory } from "@/types/health";
 
 /* ── 등급별 헤더 컬러 ─────────────── */
 
-const RISK_HEADER = { bg: "bg-[#fff3e0]", text: "text-[#e65100]", label: "위험" } as const;
-const HIGH_RISK_HEADER = { bg: "bg-[#ffeaea]", text: "text-status-danger", label: "고위험" } as const;
+const RISK_HEADER = {
+  bg: "bg-[#fff3e0]",
+  text: "text-[#e65100]",
+  label: "위험",
+} as const;
+const HIGH_RISK_HEADER = {
+  bg: "bg-[#ffeaea]",
+  text: "text-status-danger",
+  label: "고위험",
+} as const;
 
-const GRADE_HEADER: Record<RiskGrade, { bg: string; text: string; label: string }> = {
-  NORMAL:      { bg: "bg-[#e8f5e9]", text: "text-status-success", label: "정상" },
-  CAUTION:     { bg: "bg-[#fffbe6]", text: "text-[#856404]",       label: "주의" },
-  RISK:        RISK_HEADER,
-  HIGH_RISK:   HIGH_RISK_HEADER,
-  DANGER:      RISK_HEADER,
+const GRADE_HEADER: Record<
+  RiskGrade,
+  { bg: string; text: string; label: string }
+> = {
+  NORMAL: { bg: "bg-[#e8f5e9]", text: "text-status-success", label: "정상" },
+  CAUTION: { bg: "bg-[#fffbe6]", text: "text-[#856404]", label: "주의" },
+  RISK: RISK_HEADER,
+  HIGH_RISK: HIGH_RISK_HEADER,
+  DANGER: RISK_HEADER,
   HIGH_DANGER: HIGH_RISK_HEADER,
 };
 
@@ -28,11 +39,16 @@ const GRADE_HEADER: Record<RiskGrade, { bg: string; text: string; label: string 
 
 function levelToGrade(level?: string): RiskGrade {
   switch (level) {
-    case "NORMAL":    return "NORMAL";
-    case "CAUTION":   return "CAUTION";
-    case "RISK":      return "DANGER";
-    case "HIGH_RISK": return "HIGH_DANGER";
-    default:          return "NORMAL";
+    case "NORMAL":
+      return "NORMAL";
+    case "CAUTION":
+      return "CAUTION";
+    case "RISK":
+      return "DANGER";
+    case "HIGH_RISK":
+      return "HIGH_DANGER";
+    default:
+      return "NORMAL";
   }
 }
 
@@ -87,14 +103,16 @@ export default function RecommendationsPage() {
   const [exerciseModalOpen, setExerciseModalOpen] = useState(false);
 
   const { data: rec, isLoading: recLoading } = useRiskRecommendation(predId);
-  const { data: predictions, isLoading: predLoading } = usePredictionsList({ latest: true });
+  const { data: predictions, isLoading: predLoading } = usePredictionsList({
+    latest: true,
+  });
 
   const isLoading = recLoading || predLoading;
 
   /* 해당 예측의 등급 */
-  const predDetail = (predictions as { items?: PredictionDetail[] } | null)?.items?.find(
-    (p) => p.id === predId
-  );
+  const predDetail = (
+    predictions as { items?: PredictionDetail[] } | null
+  )?.items?.find((p) => p.id === predId);
   const grade = levelToGrade(predDetail?.risk_level);
   const headerConfig = GRADE_HEADER[grade];
 
@@ -124,9 +142,16 @@ export default function RecommendationsPage() {
 
       {/* 등급별 컬러 헤더 */}
       <div className={`px-4 py-5 ${headerConfig.bg}`}>
-        <p className={`text-xs font-semibold ${headerConfig.text} mb-1`}>
-          {headerConfig.label} 등급 맞춤 권고사항
-        </p>
+        <div className="flex items-center gap-2 mb-1">
+          <p className={`text-xs font-semibold ${headerConfig.text}`}>
+            {headerConfig.label} 등급 맞춤 권고사항
+          </p>
+          {predDetail?.risk_level_label && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-white/70 text-text-primary border border-white/50">
+              {predDetail.risk_level_label}
+            </span>
+          )}
+        </div>
         <h1 className="text-xl font-black text-text-primary">
           생활습관 개선 권고사항
         </h1>

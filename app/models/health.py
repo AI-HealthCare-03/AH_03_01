@@ -1,3 +1,4 @@
+from decimal import Decimal
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
@@ -51,6 +52,26 @@ class RiskLevel(StrEnum):
     CAUTION = "CAUTION"
     RISK = "RISK"
     HIGH_RISK = "HIGH_RISK"
+
+
+def score_to_risk_level_label(score: Decimal | float | None) -> str:
+    """risk_score(0~100) → 5단계 한글 라벨.
+
+    학습 모델(ml_risk_predictor_draft._score_to_level)의 20/40/60/80 경계를 미러한다.
+    4단계 RiskLevel enum(risk_level 컬럼)과 별개로, 사용자 표시용 세분화 라벨이다.
+    """
+    if score is None:
+        return "보통"
+    s = float(score)
+    if s <= 20:
+        return "매우 낮음"
+    if s <= 40:
+        return "낮음"
+    if s <= 60:
+        return "보통"
+    if s <= 80:
+        return "높음"
+    return "매우 높음"
 
 
 class UserHealthInfo(models.Model):
@@ -139,7 +160,7 @@ class UserHealthInfo(models.Model):
     ocp_total_months = fields.SmallIntField(null=True)
 
     # ── 기타 건강 지표 ────────────────────────────────────────────────────────
-    anemia = fields.SmallIntField(null=True)  # 빈혈: 1=있음 / 0=없음  → anemia
+    anemia = fields.SmallIntField(null=True)  # 빈혈: 1=있음 / 0=없음 / -1=모름  → anemia
 
     # ── 예측 미사용 · 권고/챗봇용 프로필 ─────────────────────────────────────
     chronic_diseases: list[str] = fields.JSONField(default=list)  # type: ignore[assignment]
@@ -233,6 +254,14 @@ class DiseaseRisk(models.Model):
     )
     guideline_id: int | None
     calculated_at = fields.DatetimeField(auto_now_add=True)
+
+    @property
+    def risk_level_label(self) -> str:
+        """risk_score(0~100 percentile) 기반 5단계 한글 라벨(사용자 표시용).
+
+        4단계 risk_level(enum, predicted_class 기반)과 별개의 표시용 파생값 — DB 컬럼 없음.
+        """
+        return score_to_risk_level_label(self.risk_score)
 
     class Meta:
         table = "disease_risks"

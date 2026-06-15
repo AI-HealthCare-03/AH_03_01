@@ -1,12 +1,11 @@
 import logging
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from app.apis.media import media_router
 from app.apis.v1 import v1_routers
 from app.core import config
 from app.core.db.databases import initialize_tortoise
@@ -39,16 +38,9 @@ app.add_middleware(
 
 initialize_tortoise(app)
 
-# /media 정적 파일 서빙. 업로드된 이미지/리소스에 접근 가능.
-# 컨테이너 환경 기본값 /app/media 는 CI / 로컬에서 권한 거부될 수 있으므로
-# mkdir 실패 시 ./.media 로 폴백한다.
-try:
-    _media_root = Path(config.MEDIA_ROOT)
-    _media_root.mkdir(parents=True, exist_ok=True)
-except (PermissionError, OSError):
-    _media_root = Path.cwd() / ".media"
-    _media_root.mkdir(parents=True, exist_ok=True)
-app.mount(config.MEDIA_URL_PREFIX, StaticFiles(directory=str(_media_root)), name="media")
+# /media 서빙: 무인증 StaticFiles 대신 signed-URL 검증 라우트(app/apis/media.py).
+# 업로드 파일은 PHI(예: 챌린지 인증 사진)를 포함할 수 있어 서명·만료 게이트를 둔다.
+app.include_router(media_router)
 
 app.include_router(v1_routers)
 

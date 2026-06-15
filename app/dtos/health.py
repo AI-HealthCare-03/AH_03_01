@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any
 
@@ -53,13 +53,21 @@ class HealthProfileUpsertRequest(BaseModel):
     # 폐경 / 호르몬: 폐경 1 / 비폐경여성 0 / 남성·비해당 -1
     is_menopause: Annotated[int | None, Field(None, ge=-1, le=1)]
     ocp_total_months: Annotated[int | None, Field(None, ge=0, le=1200)]
-    # 빈혈: 1=있음 / 0=없음
-    anemia: Annotated[int | None, Field(None, ge=0, le=1)]
+    # 빈혈: 1=있음 / 0=없음 / -1=모름 (가족력·폐경과 동일하게 모름 허용)
+    anemia: Annotated[int | None, Field(None, ge=-1, le=1)]
     # 예측 미사용 · 권고/챗봇용 프로필
     chronic_diseases: list[str] | None = None
     medications: list[str] | None = None
     pregnancy_status: PregnancyStatus | None = None
     bp_measure_env: BpMeasureEnv | None = None
+
+
+class ProfileCompleteness(BaseModel):
+    percent: int
+    filled: int
+    total: int
+    missing_fields: list[str]
+    complete: bool
 
 
 class HealthProfileResponse(BaseSerializerModel):
@@ -94,6 +102,7 @@ class HealthProfileResponse(BaseSerializerModel):
     pregnancy_status: PregnancyStatus | None
     bp_measure_env: BpMeasureEnv | None
     updated_at: datetime
+    completeness: ProfileCompleteness | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -194,11 +203,90 @@ class StatisticsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class MonthlyReportHeaderStats(BaseModel):
+    """리포트 상단 요약 통계 (해당 월). 수집 불가 항목은 null."""
+
+    recorded_days: int  # 해당 월 건강기록이 1건 이상 존재하는 distinct 날짜 수
+    avg_sleep_hours: float | None = None  # 평균 수면시간(h). SLEEP 레코드 평균 → 없으면 프로필 sleep_weekday
+    avg_steps: float | None = None  # 평균 걸음 수. ACTIVITY 레코드 평균 → 없으면 null
+
+
+class MonthlyReportRiskFactor(BaseModel):
+    """위험도 판단근거 1건 (DiseaseRisk.contributing_factors 의 한 항목)."""
+
+    factor: str
+    weight: float
+    name_kor: str | None = None  # ML 한글명 (없으면 factor 로 폴백 표기 권장)
+    direction: str | None = None  # "위험 증가↑" / "위험 감소↓"
+    description: str | None = None
+
+
+class MonthlyReportDiseaseRisk(BaseModel):
+    """질환별 최신 위험도 + 판단근거 TOP5."""
+
+    disease_type: DiseaseType
+    risk_score: float | None = None
+    risk_level: RiskLevel | None = None
+    risk_level_label: str | None = None  # 5단계 한글 라벨
+    calculated_at: datetime | None = None
+    has_prediction: bool = False  # 해당 월 예측 존재 여부 (없으면 위 필드 모두 null)
+    top_factors: list[MonthlyReportRiskFactor] = Field(default_factory=list)
+
+
+class MonthlyReportTrendPoint(BaseModel):
+    """추이 시계열 1점."""
+
+    date: date  # 측정일 (Asia/Seoul 기준)
+    value: float
+    secondary_value: float | None = None  # 혈압 이완기 등
+
+
+class MonthlyReportTrend(BaseModel):
+    """건강지표 추이 (해당 월 일자별)."""
+
+    metric: str  # blood_pressure | blood_glucose | weight
+    unit: str | None = None
+    series: list[MonthlyReportTrendPoint] = Field(default_factory=list)
+    avg: float | None = None  # primary_value 평균
+    latest: float | None = None  # 최근값(primary)
+    secondary_avg: float | None = None  # 혈압 이완기 평균
+    secondary_latest: float | None = None
+
+
+class MonthlyReportChallenge(BaseModel):
+    """챌린지 수행 내역 1건 (해당 월 참여 기준)."""
+
+    challenge_id: int
+    title: str
+    category: str
+    status: str  # success | in_progress | failed
+    progress_percent: int  # 0~100
+    success_days: int  # 인증 성공 일수
+    goal_days: int  # 목표 일수(챌린지 기간 일수, 0 가능)
+
+
+class MonthlyReportGoodHabit(BaseModel):
+    """데이터로 도출한 '잘 지킨 습관' (중립 톤, 근거 수치 포함)."""
+
+    key: str  # walking | hydration | sleep | diet | exercise ...
+    label: str  # 한글 표기
+    evidence: str  # 근거 문구(수치 포함)
+
+
 class MonthlyReportResponse(BaseModel):
-    year_month: str
+    year_month: str  # monthly: "YYYY-MM" / custom: "YYYY-MM-DD~YYYY-MM-DD" (표시용 라벨)
+    period: str = "monthly"  # "monthly" | "custom" (임의 기간)
+    date_from: date | None = None  # 집계 기간 시작(양끝 포함). 두 모드 모두 채움
+    date_to: date | None = None  # 집계 기간 끝(양끝 포함)
     disease_risk_summary: dict[str, Any]
     health_data_summary: dict[str, Any]
     challenge_summary: dict[str, Any]
+    # ── 참고 디자인 적응 구조화 섹션 (Phase 1 백엔드 데이터) ──────────────────
+    header_stats: MonthlyReportHeaderStats | None = None
+    disease_risks: list[MonthlyReportDiseaseRisk] = Field(default_factory=list)
+    trends: list[MonthlyReportTrend] = Field(default_factory=list)
+    challenges: list[MonthlyReportChallenge] = Field(default_factory=list)
+    good_habits: list[MonthlyReportGoodHabit] = Field(default_factory=list)
     pdf_url: str | None = None
     generated_at: datetime
 
@@ -217,6 +305,8 @@ class ContributingFactor(BaseModel):
     factor: str
     weight: float
     description: str | None = None
+    name_kor: str | None = None  # 한글명 (ML 경로; 룰 폴백은 None → UI 는 description 사용)
+    direction: str | None = None  # "위험 증가↑"/"위험 감소↓"
 
 
 class PredictionResponse(BaseSerializerModel):
@@ -224,6 +314,7 @@ class PredictionResponse(BaseSerializerModel):
     disease_type: DiseaseType
     risk_score: Decimal
     risk_level: RiskLevel
+    risk_level_label: str  # risk_score 기반 5단계 한글 라벨 (DiseaseRisk.risk_level_label @property 파생)
     contributing_factors: list[ContributingFactor]
     model_version: str
     calculated_at: datetime
