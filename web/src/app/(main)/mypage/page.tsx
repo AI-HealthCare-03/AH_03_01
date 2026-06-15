@@ -242,6 +242,7 @@ export default function MyPage() {
           { href: "/mypage/points", label: "포인트 내역", icon: "💰" },
           { href: "/attendance", label: "출석 체크", icon: "📅" },
           { href: "/leaderboard", label: "주간 리더보드", icon: "🏆" },
+          { href: "/support", label: "고객지원", icon: "🎧" },
           { href: "/withdrawal", label: "회원 탈퇴", icon: "🗑️" },
         ].map((it) => (
           <Link
