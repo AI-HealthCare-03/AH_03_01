@@ -225,3 +225,35 @@ html.dark .border-gray-400 { border-color: #606060 !important; }
    동일 specificity 충돌을 source-order 로 이기도록 파일 맨 끝에 재선언. */
 html.dark .bg-brand *,
 html.dark .\!bg-brand * { color: #111111 !important; }
+
+/* ── 로그인 왼쪽 브랜드 패널 다크 오버라이드 ─────────────────
+   bg-[#FFFBEB] 크림 배경을 라이트모드와 동일하게 유지.
+   전역 dark 텍스트 오버라이드를 패널 내에서 라이트모드 색으로 재고정. */
+html.dark .split-auth-left {
+  background-color: #FFFBEB !important;
+}
+/* 패널 내 텍스트를 라이트모드와 동일한 색으로 고정 */
+html.dark .split-auth-left .text-text-primary  { color: #111111 !important; }
+html.dark .split-auth-left .text-text-secondary { color: #555555 !important; }
+html.dark .split-auth-left .text-text-tertiary  { color: #999999 !important; }
+html.dark .split-auth-left .text-brand-black    { color: #111111 !important; }
+/* 하단 tagline 카드 — 라이트모드와 동일하게 유지 */
+html.dark .split-auth-tagline {
+  background-color: #fef3c7 !important;
+  border-color: #fde68a !important;
+}
+html.dark .split-auth-tagline p {
+  color: #78350f !important;
+}
+
+/* ── 로그인 하단 기능 카드 다크 오버라이드 ──────────────────── */
+html.dark .auth-bottom-bar {
+  background-color: #1f1f1f !important;
+  border-color: #2e2e2e !important;
+}
+html.dark .auth-bottom-bar .bg-blue-50,
+html.dark .auth-bottom-bar .bg-amber-50,
+html.dark .auth-bottom-bar .bg-green-50,
+html.dark .auth-bottom-bar .bg-purple-50 {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}

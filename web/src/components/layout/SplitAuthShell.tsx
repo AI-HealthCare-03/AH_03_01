@@ -69,7 +69,7 @@ export default function SplitAuthShell({ children }: SplitAuthShellProps) {
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
       {/* 좌: 브랜드 패널 (데스크탑만) — 50% */}
-      <div className="hidden md:flex md:w-1/2 flex-shrink-0 bg-[#FFFBEB] flex-col px-10 pt-8 pb-6 sticky top-0 h-screen overflow-hidden">
+      <div className="split-auth-left hidden md:flex md:w-1/2 flex-shrink-0 bg-[#FFFBEB] flex-col px-10 pt-8 pb-6 sticky top-0 h-screen overflow-hidden">
 
         {/* 로고 */}
         <Link href="/" className="inline-flex items-center gap-2.5 mb-5">
@@ -121,7 +121,7 @@ export default function SplitAuthShell({ children }: SplitAuthShellProps) {
         </div>
 
         {/* 하단 tagline 카드 */}
-        <div className="mt-4 bg-amber-100 border border-amber-200 rounded-2xl px-4 py-3 flex items-center gap-3 shrink-0">
+        <div className="split-auth-tagline mt-4 bg-amber-100 border border-amber-200 rounded-2xl px-4 py-3 flex items-center gap-3 shrink-0">
           <Image src="/images/checklogo.png" alt="케어로그 아이콘" width={40} height={40} className="shrink-0 object-contain" unoptimized/>
           <p className="text-xs text-amber-900/80 leading-relaxed font-medium">
             케어로그는 당신의 매일을 기록하고, 더 건강한 내일로 이어주는 든든한 동반자입니다.
