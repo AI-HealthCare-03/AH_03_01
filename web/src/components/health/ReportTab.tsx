@@ -8,7 +8,6 @@ import {
   useMonthlyReportV2Range,
 } from "@/hooks/queries/useMonthlyReport";
 import { requestMonthlyReportPdf } from "@/lib/api/health";
-import { resolveMediaUrl } from "@/lib/api/media";
 import { useToast } from "@/components/ui/Toast";
 import RiskSemiGauge from "@/components/health/RiskSemiGauge";
 import BPTrendChart from "@/components/health/charts/BPTrendChart";
@@ -688,21 +687,25 @@ export default function ReportTab() {
   const handlePdfDownload = async () => {
     if (isPdfLoading) return;
     setIsPdfLoading(true);
+    let objectUrl: string | undefined;
     try {
-      const pdfUrl = await requestMonthlyReportPdf(
+      const { blob, filename } = await requestMonthlyReportPdf(
         mode === "monthly"
           ? { period: "monthly", month: monthStr }
           : { period: "custom", dateFrom: rangeFrom, dateTo: rangeTo },
       );
-      const absoluteUrl = resolveMediaUrl(pdfUrl);
-      if (absoluteUrl) {
-        window.open(absoluteUrl, "_blank", "noopener,noreferrer");
-      } else {
-        showToast("PDF 주소를 불러오지 못했어요.", "error");
-      }
+      objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
     } catch {
       showToast("PDF 생성에 실패했어요. 잠시 후 다시 시도해 주세요.", "error");
     } finally {
+      // click/remove 에서 예외가 나도 objectUrl 누수가 없도록 finally 에서 해제.
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
       setIsPdfLoading(false);
     }
   };

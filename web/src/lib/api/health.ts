@@ -353,14 +353,16 @@ export async function fetchMonthlyReportV2Range(
   }
 }
 
-/** format=pdf 로 서버 렌더 PDF 생성 요청 → 저장된 pdf_url(상대경로) 반환. 실패 시 throw. */
+/** format=pdf 로 서버 렌더 PDF 를 받아 다운로드용 Blob + 파일명으로 반환. 실패 시 throw.
+ *  PHI 보호: 서버가 파일을 영속하지 않고 인증된 응답 본문으로 바로 내려주므로
+ *  공개 URL 없이 받은 자리에서 다운로드시킨다. */
 export type ReportPdfParams =
   | { period: "monthly"; month: string /* YYYY-MM */ }
   | { period: "custom"; dateFrom: string; dateTo: string /* YYYY-MM-DD */ };
 
 export async function requestMonthlyReportPdf(
   params: ReportPdfParams
-): Promise<string> {
+): Promise<{ blob: Blob; filename: string }> {
   const query =
     params.period === "monthly"
       ? { period: "monthly", month: params.month, format: "pdf" }
@@ -370,12 +372,15 @@ export async function requestMonthlyReportPdf(
           date_to: params.dateTo,
           format: "pdf",
         };
-  const { data } = await apiClient.get<MonthlyReportV2Response>(
-    "/api/v1/health-reports",
-    { params: query }
-  );
-  if (!data?.pdf_url) {
-    throw new Error("pdf_url 이 응답에 없습니다.");
-  }
-  return data.pdf_url;
+  const res = await apiClient.get<Blob>("/api/v1/health-reports", {
+    params: query,
+    responseType: "blob",
+  });
+  const disposition = res.headers["content-disposition"] as string | undefined;
+  const match = disposition?.match(/filename="?([^"]+)"?/);
+  const fallback =
+    params.period === "monthly"
+      ? `care_report_${params.month}.pdf`
+      : `care_report_${params.dateFrom}_${params.dateTo}.pdf`;
+  return { blob: res.data, filename: match?.[1] ?? fallback };
 }
