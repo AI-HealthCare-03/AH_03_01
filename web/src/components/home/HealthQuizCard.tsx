@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
 import { getTodayQuiz } from "@/lib/api/community";
 import type { QuizCategory } from "@/types/community";
 
@@ -14,12 +15,14 @@ const CATEGORY_LABEL: Record<QuizCategory, string> = {
 };
 
 export default function HealthQuizCard() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["quiz", "today"],
     queryFn: getTodayQuiz,
     staleTime: 1000 * 60 * 5,
+    retry: false,
   });
 
+  const is404 = isError && axios.isAxiosError(error) && error.response?.status === 404;
   const completed = data?.already_answered ?? false;
   const quiz = data?.quiz;
 
@@ -38,7 +41,9 @@ export default function HealthQuizCard() {
 
       {isLoading ? (
         <p className="text-sm text-text-tertiary">불러오는 중…</p>
-      ) : completed ? (
+      ) : isError && !is404 ? (
+        <p className="text-sm text-text-tertiary">퀴즈를 불러오지 못했어요.</p>
+      ) : completed || is404 ? (
         <div className="flex flex-col items-center justify-center gap-2 pt-8 pb-2">
           <p className="text-base font-bold text-green-600">오늘 퀴즈 완료! 🎉</p>
           <p className="text-sm text-text-tertiary text-center">내일 새로운 퀴즈가 기다리고 있어요.</p>

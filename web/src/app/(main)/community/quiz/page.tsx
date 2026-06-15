@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { getAvailableQuizzes, getQuizHistory } from "@/lib/api/community";
 import QuizCard from "@/components/community/QuizCard";
 import QuizHistoryList from "@/components/community/QuizHistoryList";
@@ -11,6 +12,7 @@ const DAILY_LIMIT = 5;
 type Tab = "quiz" | "history";
 
 export default function CommunityQuizPage() {
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("quiz");
 
   // 오늘의 퀴즈 상태
@@ -60,6 +62,7 @@ export default function CommunityQuizPage() {
   function handleAnswered(result: QuizAnswerResponse) {
     setTotalAnswered((n) => n + 1);
     setTotalPoints((p) => p + result.points_earned);
+    queryClient.invalidateQueries({ queryKey: ["quiz", "today"] });
   }
 
   function handleNext() {
