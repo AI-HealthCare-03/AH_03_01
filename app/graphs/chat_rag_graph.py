@@ -1118,7 +1118,7 @@ async def generate_node(state: ChatState) -> dict[str, Any]:
         _logger.warning("generate 실패: %s", _safe_err_repr(e))
         return {"draft_answer": "", "error": _safe_err_repr(e)}
 
-    _logger.info("generate draft (rev=%d): %s", int(state.get("eval_revision_count", 0)), draft[:300])
+    _logger.debug("generate draft (rev=%d): %s", int(state.get("eval_revision_count", 0)), draft[:300])
     return {"draft_answer": draft}
 
 
