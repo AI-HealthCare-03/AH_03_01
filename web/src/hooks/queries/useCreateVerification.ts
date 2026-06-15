@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createVerification } from "@/lib/api/challenge";
 import { CHALLENGES_KEY } from "./useChallenges";
+import { CHALLENGE_KEY } from "./useChallenge";
 import { VERIFICATIONS_KEY } from "./useVerifications";
 import { POINT_BALANCE_KEY } from "./usePointBalance";
 import { WEEKLY_XP_KEY } from "./useWeeklyXp";
@@ -20,6 +21,7 @@ export function useCreateVerification() {
     }) => createVerification(body, method),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: [CHALLENGES_KEY] });
+      qc.invalidateQueries({ queryKey: [CHALLENGE_KEY, data.challenge_id] });
       qc.invalidateQueries({ queryKey: [VERIFICATIONS_KEY, data.challenge_id] });
       /* APPROVED 인증 시 백엔드에서 포인트 잔액 / 주간 XP / 펫 XP / 내 진행 챌린지가
          함께 갱신된다 (app/services/challenge.py grant_daily + pet xp + experience).
