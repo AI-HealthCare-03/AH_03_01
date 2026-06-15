@@ -162,6 +162,14 @@ export async function respondToInvitation(
   return data;
 }
 
+/* ─── 방장 강제 탈퇴 ─── */
+export async function kickParticipant(
+  challengeId: number,
+  targetUserId: string,
+): Promise<void> {
+  await apiClient.delete(`/api/v1/challenges/${challengeId}/participants/${targetUserId}`);
+}
+
 /* ─── PENDING 참가 신청 처리 (방장이 수락/거절) ─── */
 export async function respondToPendingParticipant(
   challengeId: number,

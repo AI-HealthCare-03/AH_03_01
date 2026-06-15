@@ -4,6 +4,7 @@ import math
 import secrets
 from datetime import date, datetime, timedelta
 from typing import Any
+from uuid import UUID
 
 from fastapi import HTTPException, status
 from tortoise.transactions import in_transaction
@@ -310,6 +311,20 @@ class ParticipantService:
         if participant.role == ParticipantRole.OWNER:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="방장은 챌린지를 삭제해야 합니다.")
         await self.repo.update_status(participant, ParticipantStatus.LEFT, leaving=True)
+
+    async def kick_participant(self, owner: User, challenge_id: int, target_user_id: UUID) -> ChallengeParticipant:
+        """방장이 멤버를 강제 탈퇴시킴."""
+        challenge = await self.challenge_repo.get(challenge_id)
+        if challenge is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="챌린지를 찾을 수 없습니다.")
+        if challenge.creator_id != owner.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="방장만 탈퇴시킬 수 있습니다.")
+        if target_user_id == owner.id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="자기 자신을 탈퇴시킬 수 없습니다.")
+        participant = await self.repo.get_by_user(challenge_id, target_user_id)
+        if participant is None or participant.status != ParticipantStatus.APPROVED:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="참여 중인 멤버가 아닙니다.")
+        return await self.repo.update_status(participant, ParticipantStatus.KICKED)
 
     async def respond_to_pending(
         self,

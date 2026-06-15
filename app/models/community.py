@@ -11,6 +11,7 @@ class ReportTargetType(StrEnum):
     POST = "POST"
     COMMENT = "COMMENT"
     VERIFICATION = "VERIFICATION"
+    CHALLENGE_PARTICIPANT = "CHALLENGE_PARTICIPANT"
 
 
 class ReportReason(StrEnum):

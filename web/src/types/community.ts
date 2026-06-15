@@ -61,7 +61,7 @@ export interface CommentCreateRequest {
   parent_id?: number;
 }
 
-export type ReportTargetType = "POST" | "COMMENT" | "VERIFICATION";
+export type ReportTargetType = "POST" | "COMMENT" | "VERIFICATION" | "CHALLENGE_PARTICIPANT";
 export type ReportReason = "ABUSE" | "MISINFORMATION" | "PRIVACY" | "AD" | "FRAUD" | "ETC";
 
 export interface ReportCreateRequest {
