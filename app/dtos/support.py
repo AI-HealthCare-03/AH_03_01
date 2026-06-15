@@ -13,6 +13,7 @@ class FAQResponse(BaseSerializerModel):
     answer: str
     category: FAQCategory
     order: int
+    is_deleted: bool = False
 
 
 class InquiryAnswerResponse(BaseSerializerModel):

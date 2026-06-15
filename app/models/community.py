@@ -43,6 +43,7 @@ class Post(models.Model):
     category = fields.CharEnumField(PostCategory, max_length=20)
     info_category = fields.CharEnumField(InfoCategory, max_length=20, null=True)
     is_pinned = fields.BooleanField(default=False)
+    is_deleted = fields.BooleanField(default=False)
     view_count = fields.IntField(default=0)
     author: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(
         "models.User", related_name="posts", on_delete=fields.CASCADE
