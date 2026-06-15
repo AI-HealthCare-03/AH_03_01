@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminApi } from "@/lib/api/admin";
 
@@ -20,6 +21,7 @@ const TARGET_LABEL: Record<string, string> = {
 
 export default function AdminCommunityPage() {
   const qc = useQueryClient();
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: number; type: string } | null>(null);
 
   const { data: reports = [], isLoading } = useQuery({
     queryKey: ["admin", "reports"],
@@ -92,11 +94,7 @@ export default function AdminCommunityPage() {
                         {(r.target_type === "POST" || r.target_type === "COMMENT") && (
                           <button
                             type="button"
-                            onClick={() =>
-                              r.target_type === "POST"
-                                ? deletePostMutation.mutate(r.target_id)
-                                : deleteCommentMutation.mutate(r.target_id)
-                            }
+                            onClick={() => setDeleteConfirmTarget({ id: r.target_id, type: r.target_type })}
                             className="text-xs text-red-400 hover:text-red-300 transition-colors"
                           >
                             삭제
@@ -119,6 +117,39 @@ export default function AdminCommunityPage() {
           </table>
         </div>
       </div>
+      {/* 삭제 확인 모달 */}
+      {deleteConfirmTarget !== null && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#1a1a1a] border border-white/10 rounded-[16px] w-full max-w-sm p-6 space-y-4">
+            <h2 className="text-base font-bold text-white">
+              {deleteConfirmTarget.type === "POST" ? "게시글 삭제" : "댓글 삭제"}
+            </h2>
+            <p className="text-sm text-white/60">
+              #{deleteConfirmTarget.id} {deleteConfirmTarget.type === "POST" ? "게시글" : "댓글"}을 삭제합니다. 계속하시겠습니까?
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmTarget(null)}
+                className="flex-1 py-2.5 border border-white/10 rounded-[10px] text-sm text-white/60"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (deleteConfirmTarget.type === "POST") deletePostMutation.mutate(deleteConfirmTarget.id);
+                  else deleteCommentMutation.mutate(deleteConfirmTarget.id);
+                  setDeleteConfirmTarget(null);
+                }}
+                className="flex-1 py-2.5 bg-red-600 text-white text-sm font-semibold rounded-[10px]"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

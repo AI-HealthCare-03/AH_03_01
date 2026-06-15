@@ -13,6 +13,7 @@ export default function AdminNoticesPage() {
   const [editing, setEditing] = useState<AdminNoticeItem | null>(null);
   const [form, setForm] = useState<NoticeForm>(EMPTY);
   const [showDeleted, setShowDeleted] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
   const { data: notices = [], isLoading } = useQuery({
     queryKey: ["admin", "notices", showDeleted],
@@ -87,7 +88,7 @@ export default function AdminNoticesPage() {
                   <button type="button" onClick={() => openEdit(n)} className="text-xs text-white/50 hover:text-white">수정</button>
                   <button
                     type="button"
-                    onClick={() => deleteMutation.mutate(n.id)}
+                    onClick={() => setDeleteConfirmId(n.id)}
                     disabled={deleteMutation.isPending}
                     className="text-xs text-red-400 hover:text-red-300"
                   >
@@ -99,6 +100,32 @@ export default function AdminNoticesPage() {
           ))
         )}
       </div>
+
+      {/* 삭제 확인 모달 */}
+      {deleteConfirmId !== null && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#1a1a1a] border border-white/10 rounded-[16px] w-full max-w-sm p-6 space-y-4">
+            <h2 className="text-base font-bold text-white">공지 삭제</h2>
+            <p className="text-sm text-white/60">삭제된 공지사항은 복구할 수 없습니다. 계속하시겠습니까?</p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmId(null)}
+                className="flex-1 py-2.5 border border-white/10 rounded-[10px] text-sm text-white/60"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => { deleteMutation.mutate(deleteConfirmId); setDeleteConfirmId(null); }}
+                className="flex-1 py-2.5 bg-red-600 text-white text-sm font-semibold rounded-[10px]"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 등록/수정 모달 */}
       {(creating || editing) && (

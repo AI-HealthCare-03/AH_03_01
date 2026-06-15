@@ -10,6 +10,7 @@ export default function AdminUsersPage() {
   const [query, setQuery] = useState("");
   const [banTarget, setBanTarget] = useState<AdminUserItem | null>(null);
   const [banReason, setBanReason] = useState("");
+  const [unbanTarget, setUnbanTarget] = useState<AdminUserItem | null>(null);
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["admin", "users", query],
@@ -105,7 +106,7 @@ export default function AdminUsersPage() {
                       {u.is_banned ? (
                         <button
                           type="button"
-                          onClick={() => unbanMutation.mutate(u.id)}
+                          onClick={() => setUnbanTarget(u)}
                           disabled={unbanMutation.isPending}
                           className="text-xs text-white/50 hover:text-white transition-colors"
                         >
@@ -128,6 +129,35 @@ export default function AdminUsersPage() {
           </table>
         </div>
       </div>
+
+      {/* 정지 해제 확인 모달 */}
+      {unbanTarget && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#1a1a1a] border border-white/10 rounded-[16px] w-full max-w-sm p-6 space-y-4">
+            <h2 className="text-base font-bold text-white">정지 해제</h2>
+            <p className="text-sm text-white/60">
+              <span className="text-white font-semibold">{unbanTarget.email}</span> 회원의 정지를 해제합니다. 계속하시겠습니까?
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setUnbanTarget(null)}
+                className="flex-1 py-2.5 border border-white/10 rounded-[10px] text-sm text-white/60"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => { unbanMutation.mutate(unbanTarget.id); setUnbanTarget(null); }}
+                disabled={unbanMutation.isPending}
+                className="flex-1 py-2.5 bg-brand text-brand-black text-sm font-semibold rounded-[10px] disabled:opacity-40"
+              >
+                해제 확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 강퇴 모달 */}
       {banTarget && (
