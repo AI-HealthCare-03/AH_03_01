@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import pickle
 from decimal import Decimal
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -572,8 +573,14 @@ def _pkl_load(path: Path):
 # ──────────────────────────────────────────────────────────────
 # 모델 로더
 # ──────────────────────────────────────────────────────────────
+@cache
 def _load_model(artifact_dir: Path, sex: str, layer: str, target: str) -> tuple:
-    """pkl 로드 → (model, feature_cols, threshold) 반환"""
+    """pkl 로드 → (model, feature_cols, threshold) 반환
+
+    프로세스 단위로 (artifact_dir, sex, layer, target) 별 1회만 로드해 캐시한다.
+    이전에는 매 예측마다 pkl 을 재역직렬화해 디스크 I/O + sklearn 버전 경고가 반복되고
+    예측이 느려졌다(워커 큐잉 → 타임아웃). 모델은 추론 전용(읽기)이라 캐시 공유가 안전하다.
+    """
     d = artifact_dir / sex / f"{layer}_{target}"
     with open(d / "lgbm_model.pkl", "rb") as f:
         data = _ColabUnpickler(f).load()
