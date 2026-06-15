@@ -1,35 +1,33 @@
 "use client";
 
-/* =========================================
-   오늘의 건강 퀴즈 카드 (C 카드)
-   백엔드 미구현 → 완전 정적 mock 데이터
-   ========================================= */
-
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import { getTodayQuiz } from "@/lib/api/community";
+import type { QuizCategory } from "@/types/community";
 
-/* mock 데이터 — 백엔드 구현 전까지 정적 */
-const MOCK_QUIZ = {
-  day: 14,
-  category: "당뇨",
-  question: "한국인 공복혈당의 정상 범위는?",
-  correctRate: 83,
-  reward: 50,
+const CATEGORY_LABEL: Record<QuizCategory, string> = {
+  BLOOD_SUGAR: "당뇨",
+  BLOOD_PRESSURE: "고혈압",
+  DIET: "식단",
+  EXERCISE: "운동",
+  GENERAL: "건강",
 };
 
 export default function HealthQuizCard() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["quiz", "today"],
+    queryFn: getTodayQuiz,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const completed = data?.already_answered ?? false;
+  const quiz = data?.quiz;
+
   return (
     <article
       aria-label="오늘의 건강 퀴즈"
       className="bg-white rounded-[16px] border border-border p-5 flex flex-col gap-4 shadow-sm relative"
     >
-      {/* 베타 표시 */}
-      <span
-        className="absolute top-3 right-3 text-[10px] text-text-disabled"
-        aria-label="베타 서비스, 곧 출시 예정"
-      >
-        베타 · 곧 출시
-      </span>
-
       {/* 헤더 */}
       <div className="flex items-center gap-2">
         <span className="text-xl" aria-hidden="true">🧠</span>
@@ -38,32 +36,31 @@ export default function HealthQuizCard() {
         </h2>
       </div>
 
-      {/* DAY + 카테고리 라벨 */}
-      <p className="text-xs font-semibold text-text-tertiary">
-        DAY {MOCK_QUIZ.day} · {MOCK_QUIZ.category}
-      </p>
-
-      {/* 질문 */}
-      <p className="text-sm font-semibold text-text-primary leading-snug">
-        {MOCK_QUIZ.question}
-      </p>
-
-      {/* 통계 */}
-      <div className="flex items-center gap-4">
-        <div className="flex flex-col">
-          <span className="text-[10px] text-text-tertiary">정답률</span>
-          <span className="text-base font-bold text-text-primary">
-            {MOCK_QUIZ.correctRate}%
-          </span>
+      {isLoading ? (
+        <p className="text-sm text-text-tertiary">불러오는 중…</p>
+      ) : completed ? (
+        <div className="flex flex-col items-center justify-center gap-2 pt-8 pb-2">
+          <p className="text-base font-bold text-green-600">오늘 퀴즈 완료! 🎉</p>
+          <p className="text-sm text-text-tertiary text-center">내일 새로운 퀴즈가 기다리고 있어요.</p>
         </div>
-        <div className="w-px h-8 bg-border" aria-hidden="true" />
-        <div className="flex flex-col">
-          <span className="text-[10px] text-text-tertiary">보상</span>
-          <span className="text-base font-bold text-brand-black">
-            +{MOCK_QUIZ.reward}P
-          </span>
+      ) : quiz ? (
+        <>
+          {/* 카테고리 라벨 */}
+          <p className="text-xs font-semibold text-text-tertiary">
+            {CATEGORY_LABEL[quiz.category] ?? quiz.category}
+          </p>
+
+          {/* 질문 */}
+          <p className="text-sm font-semibold text-text-primary leading-snug">
+            {quiz.question}
+          </p>
+        </>
+      ) : (
+        <div className="flex flex-col items-center justify-center gap-2 pt-8 pb-2">
+          <p className="text-base font-bold text-green-600">오늘 퀴즈 완료! 🎉</p>
+          <p className="text-sm text-text-tertiary text-center">내일 새로운 퀴즈가 기다리고 있어요.</p>
         </div>
-      </div>
+      )}
 
       {/* 하단 링크 */}
       <div className="mt-auto pt-2 border-t border-border">
@@ -71,7 +68,7 @@ export default function HealthQuizCard() {
           href="/community/quiz"
           className="text-xs font-medium text-text-tertiary hover:text-text-primary transition-colors"
         >
-          퀴즈 풀러가기 →
+          {completed ? "퀴즈 기록 보기 →" : "퀴즈 풀러가기 →"}
         </Link>
       </div>
     </article>
