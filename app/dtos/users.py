@@ -2,8 +2,9 @@ from datetime import date, datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
+from app.core.media import sign_media_url
 from app.core.validators import optional_after_validator, validate_phone_number
 from app.dtos.base import BaseSerializerModel
 from app.models.users import Gender
@@ -43,3 +44,7 @@ class UserInfoResponse(BaseSerializerModel):
     avatar_file_id: int | None = None
     avatar_url: str | None = None
     created_at: datetime
+
+    @field_serializer("avatar_url")
+    def _sign_avatar_url(self, value: str | None) -> str | None:
+        return sign_media_url(value)

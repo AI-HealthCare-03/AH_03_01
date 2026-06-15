@@ -49,6 +49,12 @@ class Config(BaseSettings):
     # 미디어/파일 업로드
     MEDIA_ROOT: str = "/app/media"
     MEDIA_URL_PREFIX: str = "/media"
+    # signed-URL 만료(초). 읽을 때마다 새 서명을 발급하므로, 응답을 받은 뒤
+    # 이 시간 안에 표시하면 된다(이미지 캐시 만료 방지 위해 넉넉히 1일).
+    MEDIA_URL_TTL: int = 24 * 60 * 60
+    # 미디어 signed-URL 서명 키. 미설정("")이면 SECRET_KEY 로 폴백한다.
+    # JWT 와 분리하고 싶거나 독립적으로 키를 rotation 하려면 이 값을 설정한다.
+    MEDIA_SIGNING_KEY: str = ""
     UPLOAD_MAX_BYTES: int = 50 * 1024 * 1024  # 50MB
     ALLOWED_IMAGE_MIME: tuple[str, ...] = ("image/jpeg", "image/png", "image/webp")
 
