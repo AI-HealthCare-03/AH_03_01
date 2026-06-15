@@ -426,12 +426,14 @@ function ContributingBars({ factors }: ContributingBarsProps) {
     );
   }
 
-  const maxWeight = Math.max(...factors.map((f) => Math.abs(f.weight)), 1);
+  // 기여도(%)는 "전체 인자 중 상대적 비중" — 절댓값 합으로 정규화해 합이 100%가 되게 한다.
+  // (이전 max 정규화는 1순위 인자가 항상 100%로 표시돼 오해를 줬다.)
+  const totalWeight = factors.reduce((sum, f) => sum + Math.abs(f.weight), 0) || 1;
 
   return (
     <div className="space-y-3">
       {factors.map((f) => {
-        const pct = Math.min(Math.round((Math.abs(f.weight) / maxWeight) * 100), 100);
+        const pct = Math.round((Math.abs(f.weight) / totalWeight) * 100);
         const isRisk = f.weight > 0;
         // 라벨: name_kor(ML) 우선, 없으면 변수명.
         const label = f.name_kor ?? f.factor;
@@ -442,11 +444,11 @@ function ContributingBars({ factors }: ContributingBarsProps) {
         // 파생변수 산출 방법 설명 — 있으면 ⓘ hover 툴팁으로 노출.
         const tooltip = FACTOR_TOOLTIP[f.factor];
 
-        /* 막대 색: 위험 증가→빨강→주황(상대 강도), 감소→파랑 */
+        /* 막대 색: 위험 증가→빨강→주황(비중 강도), 감소→파랑 */
         const barColor = isRisk
-          ? pct > 70
+          ? pct >= 30
             ? "bg-red-500"
-            : pct > 40
+            : pct >= 15
               ? "bg-orange-400"
               : "bg-yellow-400"
           : "bg-blue-400";
@@ -1042,6 +1044,8 @@ export default function RiskTab() {
       disease: id,
       score: Math.round(Number(ragItem?.risk_score ?? liteItem?.risk_score ?? 0)),
       grade: ragItem ? riskLevelToGrade(ragItem.risk_level) : (liteItem?.risk_grade ?? "NORMAL"),
+      // 게이지 라벨은 모델 클래스(risk_level→grade) 기준으로 표시한다. score 백분위 5단계
+      // 라벨(risk_level_label)은 실제 판정과 어긋나 부정확해 사용하지 않는다.
       riskLevelLabel: null,
     };
   });
