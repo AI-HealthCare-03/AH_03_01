@@ -71,6 +71,7 @@ export interface FAQItem {
 export interface AdminNoticeItem {
   id: number;
   title: string;
+  content: string;
   created_at: string;
   author_name: string | null;
   is_deleted?: boolean;

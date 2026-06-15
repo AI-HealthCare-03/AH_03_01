@@ -142,17 +142,15 @@ export default function AdminNoticesPage() {
                   className="w-full px-3 py-2 bg-[#111] border border-white/10 rounded-[10px] text-sm text-white outline-none focus:border-brand"
                 />
               </div>
-              {creating && (
-                <div className="space-y-1.5">
-                  <label className="text-xs text-white/50">내용</label>
-                  <textarea
-                    value={form.content}
-                    onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-                    rows={6}
-                    className="w-full px-3 py-2 bg-[#111] border border-white/10 rounded-[10px] text-sm text-white outline-none focus:border-brand resize-none"
-                  />
-                </div>
-              )}
+              <div className="space-y-1.5">
+                <label className="text-xs text-white/50">내용</label>
+                <textarea
+                  value={form.content}
+                  onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
+                  rows={6}
+                  className="w-full px-3 py-2 bg-[#111] border border-white/10 rounded-[10px] text-sm text-white outline-none focus:border-brand resize-none"
+                />
+              </div>
             </div>
             <div className="flex gap-3">
               <button
@@ -164,10 +162,10 @@ export default function AdminNoticesPage() {
               </button>
               <button
                 type="button"
-                disabled={!form.title.trim() || (creating && !form.content.trim())}
+                disabled={!form.title.trim() || !form.content.trim()}
                 onClick={() => {
                   if (creating) createMutation.mutate(form);
-                  else if (editing) updateMutation.mutate({ id: editing.id, data: { title: form.title } });
+                  else if (editing) updateMutation.mutate({ id: editing.id, data: { title: form.title, content: form.content } });
                 }}
                 className="flex-1 py-2.5 bg-brand text-brand-black text-sm font-semibold rounded-[10px] disabled:opacity-40"
               >

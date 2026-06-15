@@ -431,6 +431,7 @@ async def delete_faq(
 class AdminNoticeItem(BaseModel):
     id: int
     title: str
+    content: str
     created_at: str
     author_name: str | None
     is_deleted: bool = False
@@ -461,6 +462,7 @@ async def list_notices(
         AdminNoticeItem(
             id=p.id,
             title=p.title,
+            content=p.content,
             created_at=p.created_at.isoformat(),
             author_name=p.author.nickname or p.author.name if p.author else None,
             is_deleted=p.is_deleted,
@@ -483,6 +485,7 @@ async def create_notice(
     return AdminNoticeItem(
         id=post.id,
         title=post.title,
+        content=post.content,
         created_at=post.created_at.isoformat(),
         author_name=admin.nickname or admin.name,
     )
@@ -504,6 +507,7 @@ async def update_notice(
     return AdminNoticeItem(
         id=post.id,
         title=post.title,
+        content=post.content,
         created_at=post.created_at.isoformat(),
         author_name=admin.nickname or admin.name,
     )

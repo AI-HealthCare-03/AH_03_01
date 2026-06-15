@@ -5,11 +5,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminApi } from "@/lib/api/admin";
 
 const REASON_LABEL: Record<string, string> = {
-  SPAM: "스팸",
   ABUSE: "욕설/혐오",
-  SEXUAL: "성적 콘텐츠",
   MISINFORMATION: "허위 정보",
-  OTHER: "기타",
+  PRIVACY: "개인정보 침해",
+  AD: "광고/홍보",
+  FRAUD: "사기/거짓",
+  ETC: "기타",
 };
 
 const TARGET_LABEL: Record<string, string> = {
