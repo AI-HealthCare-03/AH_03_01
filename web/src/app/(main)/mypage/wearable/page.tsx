@@ -69,7 +69,7 @@ export default function WearablePage() {
         <ul className="divide-y divide-border">
           {DEVICES.map((device) => (
             <li key={device.brand} className="flex items-center gap-4 px-5 py-4">
-              <span className="text-2xl shrink-0">{device.icon}</span>
+              <span aria-hidden="true" className="text-2xl shrink-0">{device.icon}</span>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-text-primary">{device.brand}</p>
                 <p className="text-xs text-text-tertiary mt-0.5 leading-relaxed">
@@ -91,7 +91,7 @@ export default function WearablePage() {
       {/* 서비스 준비 중 안내 */}
       <section className="bg-white border border-border rounded-[16px] px-5 py-4 space-y-2">
         <div className="flex items-center gap-2">
-          <span className="text-base">🛠️</span>
+          <span aria-hidden="true" className="text-base">🛠️</span>
           <p className="text-sm font-bold text-text-primary">현재 개발 중인 기능이에요</p>
         </div>
         <p className="text-xs text-text-tertiary leading-relaxed">
