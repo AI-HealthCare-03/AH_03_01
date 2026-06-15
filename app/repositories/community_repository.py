@@ -6,6 +6,8 @@ from uuid import UUID
 
 from tortoise.functions import Count
 
+QUIZ_COOLDOWN_DAYS = 3
+
 from app.models.community import (
     Comment,
     CommentLike,
@@ -212,7 +214,13 @@ class QuizRepository:
         return await QuizAttempt.get_or_none(user_id=user_id, quiz_id=quiz_id, attempted_at__gte=today_start)
 
     async def create_attempt(
-        self, user_id: UUID, quiz_id: int, selected_option: QuizOption, is_correct: bool, points_earned: int
+        self,
+        user_id: UUID,
+        quiz_id: int,
+        selected_option: QuizOption,
+        is_correct: bool,
+        points_earned: int,
+        attempted_date: date,
     ) -> QuizAttempt:
         return await QuizAttempt.create(
             user_id=user_id,
@@ -220,6 +228,7 @@ class QuizRepository:
             selected_option=selected_option,
             is_correct=is_correct,
             points_earned=points_earned,
+            attempted_date=attempted_date,
         )
 
     async def list_attempts(self, user_id: UUID, page: int = 1, size: int = 20) -> tuple[list[QuizAttempt], int]:

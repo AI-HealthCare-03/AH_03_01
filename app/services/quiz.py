@@ -4,6 +4,8 @@ from datetime import date, datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from tortoise.transactions import in_transaction
+
 from app.models.community import QuizAttempt
 from app.repositories.community_repository import DailyAssignmentRepository, QuizRepository
 from app.services.rewards import RewardService
@@ -59,7 +61,8 @@ class HealthQuizService:
         return {"quiz": quizzes[0], "already_answered": False}
 
     async def answer_quiz(self, user_id: UUID, quiz_id: int, selected_option: str) -> dict:
-        today_start = datetime.combine(_today(), datetime.min.time()).replace(tzinfo=SEOUL)
+        today = _today()
+        today_start = datetime.combine(today, datetime.min.time()).replace(tzinfo=SEOUL)
         if await self.repo.get_today_attempt(user_id, quiz_id, today_start):
             raise ValueError("already_answered")
         daily_count = await QuizAttempt.filter(user_id=user_id, attempted_at__gte=today_start).count()
@@ -72,17 +75,19 @@ class HealthQuizService:
 
         is_correct = selected_option == quiz.correct_option
         points_earned = 0
-        if is_correct:
-            result = await self.reward_service.grant_quiz_correct(user_id=user_id, quiz_id=quiz_id)
-            points_earned = result.amount
+        async with in_transaction():
+            if is_correct:
+                result = await self.reward_service.grant_quiz_correct(user_id=user_id, quiz_id=quiz_id)
+                points_earned = result.amount
 
-        await self.repo.create_attempt(
-            user_id=user_id,
-            quiz_id=quiz_id,
-            selected_option=selected_option,
-            is_correct=is_correct,
-            points_earned=points_earned,
-        )
+            await self.repo.create_attempt(
+                user_id=user_id,
+                quiz_id=quiz_id,
+                selected_option=selected_option,
+                is_correct=is_correct,
+                points_earned=points_earned,
+                attempted_date=today,
+            )
         return {
             "is_correct": is_correct,
             "correct_option": quiz.correct_option,
