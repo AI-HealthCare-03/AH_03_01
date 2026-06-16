@@ -125,6 +125,14 @@ def _nice_ceil(v: float) -> float:
     return magnitude * 10
 
 
+def _to_float(value: Any) -> float | None:
+    """DB에 비숫자 문자열("N/A" 등)이 들어있어도 PDF 생성이 죽지 않도록 안전 변환."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _fmt_md(iso_date: str) -> str:
     """ISO 'YYYY-MM-DD' → 'M/d' (0 제거)."""
     try:
@@ -140,12 +148,12 @@ def _trend_chart_svg(trend: dict[str, Any]) -> str:
     unit = trend.get("unit", "")
     series: list[dict[str, Any]] = trend.get("series") or []
     label = _METRIC_LABELS.get(metric, (metric, unit))[0]
-    points = [p for p in series if isinstance(p, dict) and p.get("value") is not None]
+    points = [p for p in series if isinstance(p, dict) and _to_float(p.get("value")) is not None]
     if not points:
         return f'<div class="empty">{_esc(label)} 데이터가 없습니다.</div>'
 
     cfg = _TREND_CHART_CONFIGS.get(metric, {"domain": None, "ticks": None, "bands": [], "lines": [(label, "value", "#2563eb")]})
-    values = [float(p["value"]) for p in points]
+    values = [v for p in points if (v := _to_float(p["value"])) is not None]
     if cfg["domain"] is not None:
         lo, hi = cfg["domain"]
         ticks: list[float] = cfg["ticks"]
@@ -190,12 +198,10 @@ def _trend_chart_svg(trend: dict[str, Any]) -> str:
     lines_svg = []
     legend_items = []
     for name, key, color in cfg["lines"]:
-        pts = [(i, p[key]) for i, p in enumerate(points) if p.get(key) is not None]
+        pts = [(i, fv) for i, p in enumerate(points) if (fv := _to_float(p.get(key))) is not None]
         if pts:
-            coords = " ".join(f"{_x(i):.1f},{_y(float(v)):.1f}" for i, v in pts)
-            dots = "".join(
-                f'<circle cx="{_x(i):.1f}" cy="{_y(float(v)):.1f}" r="2.5" fill="{color}"/>' for i, v in pts
-            )
+            coords = " ".join(f"{_x(i):.1f},{_y(v):.1f}" for i, v in pts)
+            dots = "".join(f'<circle cx="{_x(i):.1f}" cy="{_y(v):.1f}" r="2.5" fill="{color}"/>' for i, v in pts)
             lines_svg.append(f'<polyline points="{coords}" fill="none" stroke="{color}" stroke-width="2"/>{dots}')
         legend_items.append(
             f'<circle cx="0" cy="0" r="4" fill="{color}"/><text x="10" y="4" font-size="11" fill="#333">{_esc(name)}</text>'
