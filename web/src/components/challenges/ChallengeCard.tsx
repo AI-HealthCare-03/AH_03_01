@@ -103,7 +103,11 @@ export default function ChallengeCard({
         <div className="flex items-center gap-3 text-xs text-text-tertiary">
           <span>보상 200P</span>
           {challenge.scope === "GROUP" && challenge.max_participants && (
-            <span>최대 {challenge.max_participants}명</span>
+            <span>
+              {challenge.participant_count !== undefined
+                ? `${challenge.participant_count} / ${challenge.max_participants}명`
+                : `최대 ${challenge.max_participants}명`}
+            </span>
           )}
           {challenge.scope === "GROUP" && challenge.visibility === "PRIVATE" && (
             <span className="flex items-center gap-0.5 text-text-tertiary">

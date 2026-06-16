@@ -250,6 +250,7 @@ async def list_challenges(
                 achievement_rate=_achievement_rate(ch),
                 missed_count=missed_counts.get(ch.id, 0),
                 my_participant_status=participant_statuses.get(ch.id),
+                participant_count=group_active_members.get(ch.id, 0) if ch.scope == ChallengeScope.GROUP else None,
             )
             for ch in items
         ],
@@ -278,6 +279,7 @@ async def get_challenge(
     ).count()
     total_days = max(1, (challenge.end_date - challenge.start_date).days + 1)
 
+    participant_count = None
     if challenge.scope == ChallengeScope.GROUP:
         # 그룹 달성률: 전체 멤버 인증 합계 / (기간 × 활성 멤버 수) × 100
         all_approved = await ChallengeVerification.filter(
@@ -288,6 +290,7 @@ async def get_challenge(
             challenge_id=challenge_id,
             status=ParticipantStatus.APPROVED,
         ).count()
+        participant_count = active_members
         denominator = total_days * max(1, active_members)
         achievement_rate = round(all_approved / denominator * 100)
     else:
@@ -300,6 +303,7 @@ async def get_challenge(
     payload["my_progress"] = my_progress
     payload["total_days"] = total_days
     payload["achievement_rate"] = achievement_rate
+    payload["participant_count"] = participant_count
     # 그룹 챌린지의 경우 참여자/방장에게 invite_code 노출 (코드 복사 기능)
     if challenge.scope.value == "GROUP" and is_member:
         invite_code = await service.get_active_invite_code(challenge.id)
