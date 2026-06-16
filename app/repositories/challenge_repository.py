@@ -61,7 +61,7 @@ class ChallengeRepository:
         keyword: str | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
-        sort_by: str | None = None,  # "start_date" | "end_date" | None(기본: created_at)
+        sort_by: str | None = None,  # "created_at" | "end_date" | None(기본: -created_at)
         page: int = 1,
         size: int = 20,
         left_only: bool = False,
@@ -99,7 +99,7 @@ class ChallengeRepository:
             else:
                 qs = qs.filter(Q(creator_id=user_id) | Q(id__in=list(participating_ids)))
         total = await qs.count()
-        _order = {"start_date": "start_date", "end_date": "end_date"}.get(sort_by or "", "-created_at")
+        _order = {"created_at": "-created_at", "end_date": "end_date"}.get(sort_by or "", "-created_at")
         items = await qs.order_by(_order).offset((page - 1) * size).limit(size)
         return list(items), total
 

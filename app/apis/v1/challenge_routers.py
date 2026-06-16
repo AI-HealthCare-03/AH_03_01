@@ -152,7 +152,7 @@ async def list_challenges(
     date_to: Annotated[date | None, Query(alias="to")] = None,
     mine: Annotated[bool, Query()] = False,
     left_only: Annotated[bool, Query(alias="leftOnly")] = False,
-    sort_by: Annotated[str | None, Query(alias="sortBy")] = None,  # start_date | end_date
+    sort_by: Annotated[str | None, Query(alias="sortBy")] = None,  # created_at | end_date
     page: Annotated[int, Query(ge=1)] = 1,
     size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> Response:
@@ -263,16 +263,31 @@ async def list_challenges(
                 max_participants=ch.max_participants,
                 start_date=ch.start_date,
                 end_date=ch.end_date,
+                created_at=ch.created_at,
                 my_progress=approved_counts.get(ch.id, 0),
                 total_days=_total_days(ch),
+                my_progress_percent=round(approved_counts.get(ch.id, 0) / _total_days(ch) * 100, 1),
                 achievement_rate=_achievement_rate(ch),
                 missed_count=missed_counts.get(ch.id, 0),
                 my_participant_status=participant_statuses.get(ch.id),
                 today_verification_status=today_status_map.get(ch.id),
+                participant_count=group_active_members.get(ch.id, 0) if ch.scope == ChallengeScope.GROUP else None,
             )
             for ch in items
         ],
     )
+
+    # 참여하기 탭: 정원이 찬 그룹 챌린지 제외 (공개/비공개 무관)
+    if not mine:
+        payload.items = [
+            item for item in payload.items
+            if not (
+                item.max_participants is not None
+                and group_active_members.get(item.id, 0) >= item.max_participants
+            )
+        ]
+        payload.total_elements = len(payload.items)
+
     return Response(payload.model_dump(), status_code=status.HTTP_200_OK)
 
 
@@ -297,6 +312,7 @@ async def get_challenge(
     ).count()
     total_days = max(1, (challenge.end_date - challenge.start_date).days + 1)
 
+    participant_count = None
     if challenge.scope == ChallengeScope.GROUP:
         # 그룹 달성률: 전체 멤버 인증 합계 / (기간 × 활성 멤버 수) × 100
         all_approved = await ChallengeVerification.filter(
@@ -307,6 +323,7 @@ async def get_challenge(
             challenge_id=challenge_id,
             status=ParticipantStatus.APPROVED,
         ).count()
+        participant_count = active_members
         denominator = total_days * max(1, active_members)
         achievement_rate = round(all_approved / denominator * 100)
     else:
@@ -319,6 +336,7 @@ async def get_challenge(
     payload["my_progress"] = my_progress
     payload["total_days"] = total_days
     payload["achievement_rate"] = achievement_rate
+    payload["participant_count"] = participant_count
     # 그룹 챌린지의 경우 참여자/방장에게 invite_code 노출 (코드 복사 기능)
     if challenge.scope.value == "GROUP" and is_member:
         invite_code = await service.get_active_invite_code(challenge.id)
@@ -336,7 +354,7 @@ async def get_challenge_feed(
     user: Annotated[User, Depends(get_request_user)],
     service: Annotated[VerificationService, Depends(VerificationService)],
     page: Annotated[int, Query(ge=1)] = 1,
-    size: Annotated[int, Query(ge=1, le=100)] = 20,
+    size: Annotated[int, Query(ge=1, le=200)] = 20,
 ) -> Response:
     items, total = await service.get_feed(user, challenge_id, page, size)
     payload = VerificationFeedResponse(
@@ -619,11 +637,10 @@ async def create_verification(
 ) -> Response:
     if method is not None and method != body.method:
         body.method = method
-    verification = await service.create(user, body)
-    return Response(
-        VerificationResponse.model_validate(verification).model_dump(),
-        status_code=status.HTTP_201_CREATED,
-    )
+    verification, earned_points = await service.create(user, body)
+    payload = VerificationResponse.model_validate(verification).model_dump()
+    payload["earned_points"] = earned_points
+    return Response(payload, status_code=status.HTTP_201_CREATED)
 
 
 @challenge_verifications_router.get("", response_model=VerificationListResponse, status_code=status.HTTP_200_OK)

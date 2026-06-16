@@ -39,6 +39,26 @@ export function getWeekDays(baseDate: Date = new Date()): Date[] {
   return eachDayOfInterval({ start, end });
 }
 
+/**
+ * 이번 주 날짜 배열에서 baseDate를 중심으로 count개 날짜 반환.
+ * 주 경계를 벗어나지 않으며, 남은 자리가 부족하면 반대쪽으로 채움.
+ */
+export function getWeekDaysCompact(baseDate: Date, count: number): Date[] {
+  const week = getWeekDays(baseDate);
+  const todayIdx = week.findIndex((d) => isSameDay(d, baseDate));
+  const half = Math.floor(count / 2);
+  let start = todayIdx - half;
+  let end = start + count;
+  if (start < 0) {
+    start = 0;
+    end = count;
+  } else if (end > week.length) {
+    end = week.length;
+    start = end - count;
+  }
+  return week.slice(start, end);
+}
+
 /** 월간 캘린더 날짜 배열 (앞뒤 빈 칸 포함, 6주 기준) */
 export function getMonthCalendarDays(year: number, month: number): Date[] {
   const firstDay = startOfMonth(new Date(year, month - 1, 1));

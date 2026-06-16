@@ -651,14 +651,16 @@ class VerificationService:
                     )
             if data.method == VerificationMethod.SHIELD:
                 await self.rescue_service.consume(user.id, challenge.id, data.verified_date)
+            earned_points: int | None = None
             if initial_status == VerificationStatus.APPROVED:
                 await self.participant_repo.add_score(participant, points=1)
-                await self.reward_service.grant_daily(
+                reward = await self.reward_service.grant_daily(
                     user_id=user.id,
                     challenge_id=challenge.id,
                     verification_id=verification.id,
                     challenge_title=challenge.title,
                 )
+                earned_points = reward.amount
                 # 펫이 있는 경우 인증당 XP 가산. 펫 없으면 무시.
                 await self.pet_service.grant_xp(
                     user.id,
@@ -677,7 +679,7 @@ class VerificationService:
             except Exception:
                 pass
 
-        return verification
+        return verification, earned_points
 
     async def list_records(
         self,
@@ -775,6 +777,7 @@ class VerificationService:
                     "comment_count": v.comment_count,
                     "my_like": v.id in liked_ids,
                     "created_at": v.created_at,
+                    "status": v.status,
                 }
             )
         return result, total

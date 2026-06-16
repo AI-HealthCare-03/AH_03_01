@@ -41,21 +41,24 @@ function FeedPost({
   };
 
   const isTimer = post.method === "CHECK" && !!post.verified_duration_seconds;
+  const isRejected = post.status === "REJECTED";
 
   const statusLabel =
-    isTimer ? "⏱️ 타이머 인증"
+    isRejected ? "❌ 인증 실패"
+    : isTimer ? "⏱️ 타이머 인증"
     : post.method === "CHECK" ? "✅ 체크 인증"
     : post.method === "PHOTO" ? "📸 사진 인증"
     : "🛡️ 방지권";
 
   const statusBgColor =
-    isTimer ? "bg-surface text-text-secondary"
+    isRejected ? "bg-status-danger-bg text-status-danger"
+    : isTimer ? "bg-surface text-text-secondary"
     : post.method === "CHECK" ? "bg-status-success-bg text-status-success"
     : post.method === "PHOTO" ? "bg-status-info-bg text-status-info"
     : "bg-surface text-text-secondary";
 
   return (
-    <div className="bg-white border border-border rounded-[14px] p-4">
+    <div className={`bg-white border border-border rounded-[14px] p-4${isRejected ? " opacity-60" : ""}`}>
       {/* 헤더 */}
       <div className="flex items-center gap-3 mb-3">
         <div className="w-9 h-9 rounded-full bg-brand flex items-center justify-center text-sm font-bold shrink-0">
