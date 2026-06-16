@@ -137,14 +137,25 @@ export default function DetailTab() {
     isLoading: boolean;
   };
 
-  /* 날짜 선택 시 해당 날짜의 체중/허리둘레 기록 조회 */
-  const { data: weightRecords } = useHealthRecordList(
-    { recordType: "WEIGHT", from: selectedDate, to: selectedDate },
-    { enabled: !!selectedDate }
+  const hasDate = !!selectedDate;
+  /* 디폴트(날짜 미선택): 각 지표의 최신 기록 — 프로필은 갱신이 드물어 옛 값(과 옛 기록일)이
+     디폴트로 떠 실제 저장한 적 없는 날짜처럼 보이던 문제 방지. 오늘 업데이트가 있으면 오늘 값. */
+  const { data: latestWeight } = useHealthRecordList({ recordType: "WEIGHT", size: 1 });
+  const { data: latestWaist } = useHealthRecordList({ recordType: "WAIST", size: 1 });
+  /* 날짜 선택 시: 선택일 기준 최신값(measured_at ≤ 선택일) — 그날 업데이트 안 된 항목은
+     그날 기준 가장 최근 확인 수치를 보여준다. */
+  const { data: asOfWeight } = useHealthRecordList(
+    { recordType: "WEIGHT", to: selectedDate, size: 1 },
+    { enabled: hasDate }
   );
-  const { data: waistRecords } = useHealthRecordList(
-    { recordType: "WAIST", from: selectedDate, to: selectedDate },
-    { enabled: !!selectedDate }
+  const { data: asOfWaist } = useHealthRecordList(
+    { recordType: "WAIST", to: selectedDate, size: 1 },
+    { enabled: hasDate }
+  );
+  /* 선택 날짜에 입력된 데이터(전 타입)가 하나도 없으면 '데이터 없음' 안내. */
+  const { data: dateAnyRecords, isLoading: dateAnyLoading } = useHealthRecordList(
+    { from: selectedDate, to: selectedDate },
+    { enabled: hasDate }
   );
 
   if (isLoading) {
@@ -159,14 +170,28 @@ export default function DetailTab() {
 
   const profile = rawProfile as HealthProfileDetail | null;
 
-  /* 날짜 선택 시 해당 날짜 기록만 사용 (없으면 null), 미선택 시 프로필 기본값 사용 */
-  const displayWeightKg: number | null = selectedDate
-    ? (weightRecords && weightRecords.length > 0 ? parseFloat(weightRecords[0].primary_value) : null)
-    : (profile?.weight_kg != null ? Number(profile.weight_kg) : null);
+  /* 선택 날짜에 입력 데이터가 전혀 없으면 '데이터 없음'으로 안내(데이터 row 미표시). */
+  /* 로딩 중에는 '데이터 없음' 으로 단정하지 않는다(깜빡임 방지). */
+  const noDataForDate = hasDate && !dateAnyLoading && (dateAnyRecords?.length ?? 0) === 0;
 
-  const displayWaistCm: number | null = selectedDate
-    ? (waistRecords && waistRecords.length > 0 ? parseFloat(waistRecords[0].primary_value) : null)
-    : (profile?.waist_cm != null ? Number(profile.waist_cm) : null);
+  const recVal = (list?: { primary_value: string }[]): number | null => {
+    const v = parseFloat(list?.[0]?.primary_value ?? "");
+    return isFinite(v) ? v : null;
+  };
+  const profileWeight = profile?.weight_kg != null ? Number(profile.weight_kg) : null;
+  const profileWaist = profile?.waist_cm != null ? Number(profile.waist_cm) : null;
+
+  /* 체중/허리둘레: 날짜 선택 시 선택일 기준 최신값(≤선택일), 미선택 시 최신 기록. 둘 다 프로필 폴백. */
+  const displayWeightKg: number | null = noDataForDate
+    ? null
+    : hasDate
+      ? (recVal(asOfWeight) ?? profileWeight)
+      : (recVal(latestWeight) ?? profileWeight);
+  const displayWaistCm: number | null = noDataForDate
+    ? null
+    : hasDate
+      ? (recVal(asOfWaist) ?? profileWaist)
+      : (recVal(latestWaist) ?? profileWaist);
 
   const bmi =
     profile?.height_cm && displayWeightKg
@@ -199,6 +224,19 @@ export default function DetailTab() {
   const medicationLabel =
     medications && medications.length > 0 ? medications.join(", ") : null;
 
+  /* 디폴트 기록일 = 최신 체중/허리둘레 기록일(없으면 프로필 갱신일). 프로필 updated_at 만
+     쓰면 실제 측정 안 한 날이 기록일로 떠 혼란스러웠다. */
+  const defaultRecordedAt = (() => {
+    const ds = [
+      latestWeight?.[0]?.measured_at,
+      latestWaist?.[0]?.measured_at,
+      profile?.updated_at ?? profile?.recorded_at,
+    ]
+      .filter((d): d is string => Boolean(d))
+      .map((d) => new Date(d).getTime());
+    return ds.length ? new Date(Math.max(...ds)) : null;
+  })();
+
   /* 빈 상태 */
   const isEmpty = !profile;
 
@@ -222,10 +260,7 @@ export default function DetailTab() {
                 <p className="text-xs text-text-tertiary mt-0.5">
                   {selectedDate
                     ? `조회 날짜: ${new Date(selectedDate).toLocaleDateString("ko-KR")}`
-                    : `기록일: ${(() => {
-                        const d = profile.updated_at ?? profile.recorded_at;
-                        return d ? new Date(d).toLocaleDateString("ko-KR") : "—";
-                      })()}`
+                    : `기록일: ${defaultRecordedAt ? defaultRecordedAt.toLocaleDateString("ko-KR") : "—"}`
                   }
                 </p>
               </div>
@@ -252,26 +287,30 @@ export default function DetailTab() {
               </div>
             </div>
             <div className="px-5">
+              {noDataForDate ? (
+                <div className="py-10 text-center space-y-1">
+                  <p className="text-2xl">🗓️</p>
+                  <p className="text-sm font-semibold text-text-primary">
+                    선택한 날짜에 입력된 데이터가 없습니다
+                  </p>
+                  <p className="text-xs text-text-tertiary">
+                    다른 날짜를 선택하거나 ✕ 로 최신 기록을 확인하세요.
+                  </p>
+                </div>
+              ) : (
+                <>
               <DetailRow
                 label="신장 / 체중"
                 value={
                   profile.height_cm && displayWeightKg
                     ? `${profile.height_cm}cm / ${displayWeightKg}kg`
-                    : selectedDate && weightRecords?.length === 0
-                    ? "해당 날짜 기록 없음"
                     : null
                 }
                 status={bmi !== null ? getBmiStatus(bmi) : "N/A"}
               />
               <DetailRow
                 label="허리둘레"
-                value={
-                  displayWaistCm
-                    ? `${displayWaistCm}cm`
-                    : selectedDate && waistRecords?.length === 0
-                    ? "해당 날짜 기록 없음"
-                    : null
-                }
+                value={displayWaistCm ? `${displayWaistCm}cm` : null}
                 status={
                   displayWaistCm
                     ? getWaistStatus(displayWaistCm, undefined)
@@ -347,6 +386,8 @@ export default function DetailTab() {
               />
               <DetailRow label="만성질환" value={chronicLabel} />
               <DetailRow label="복용중인 약" value={medicationLabel} />
+                </>
+              )}
             </div>
           </div>
         )}
