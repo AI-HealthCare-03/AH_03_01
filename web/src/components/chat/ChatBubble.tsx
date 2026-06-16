@@ -16,6 +16,17 @@ import Button from "@/components/ui/Button";
    - CTA: needs_health_data && !has_health_data
    ========================================= */
 
+/* **텍스트** → <strong>, \n\n → 문단 분리 */
+function formatBotMessage(content: string) {
+  return content.split(/\n\n+/).map((paragraph, i) => (
+    <p key={i} className="whitespace-pre-wrap">
+      {paragraph.split(/\*\*(.+?)\*\*/g).map((part, j) =>
+        j % 2 === 1 ? <strong key={j}>{part}</strong> : part
+      )}
+    </p>
+  ));
+}
+
 interface ChatBubbleProps {
   message: ChatDisplayMessage;
 }
@@ -76,15 +87,15 @@ export default function ChatBubble({ message }: ChatBubbleProps) {
         )}
 
         {/* 본문 */}
-        <p className="text-sm leading-relaxed text-text-primary whitespace-pre-wrap">
-          {message.content}
+        <div className="text-sm leading-relaxed text-text-primary space-y-2">
+          {formatBotMessage(message.content)}
           {message.isStreaming && (
             <span
               className="inline-block w-[2px] h-[1em] bg-text-tertiary ml-0.5 align-middle animate-pulse"
               aria-hidden="true"
             />
           )}
-        </p>
+        </div>
 
         {/* 출처 (상위 3개 문서명) */}
         <ChatSourceList

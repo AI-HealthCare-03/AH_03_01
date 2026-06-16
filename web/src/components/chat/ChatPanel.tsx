@@ -214,7 +214,7 @@ export default function ChatPanel() {
       className={[
         "flex flex-col bg-[#f8f8f8]",
         /* 모바일: 전체화면에 가깝게 / 데스크탑: 고정 크기 */
-        "w-full h-full md:w-[380px] md:h-[600px] md:max-h-full",
+        "w-full h-full md:w-[380px] md:h-full",
         "rounded-t-[20px] md:rounded-[20px]",
         "overflow-hidden shadow-2xl",
       ].join(" ")}
