@@ -7,7 +7,6 @@ import apiClient from "./client";
 import type {
   Me,
   MyPet,
-  ChallengeListResponse,
   PredictionListResponse,
   ChallengeRecommendationResponse,
   AttendanceMonthResponse,
@@ -16,6 +15,7 @@ import type {
   HealthProfileRecord,
   MetricStatResponse,
 } from "@/types/api";
+import type { ChallengeListResponse } from "@/types/challenge";
 
 /** 내 정보 조회 */
 export async function fetchMe(): Promise<Me> {
