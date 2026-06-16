@@ -104,8 +104,10 @@ export default function HealthRecordsNewPage() {
         /* 수정 모드: 모든 단계를 방문 가능으로 표시 */
         setVisitedSteps(new Set([1, 2, 3, 4, 5, 6, 7]));
       }
-      if (weightList?.[0]?.primary_value) setLatestWeightKg(parseFloat(weightList[0].primary_value));
-      if (waistList?.[0]?.primary_value) setLatestWaistCm(parseFloat(waistList[0].primary_value));
+      const wKg = parseFloat(weightList?.[0]?.primary_value ?? "");
+      if (isFinite(wKg)) setLatestWeightKg(wKg);
+      const waistCm = parseFloat(waistList?.[0]?.primary_value ?? "");
+      if (isFinite(waistCm)) setLatestWaistCm(waistCm);
       setProfileLoaded(true);
     });
   }, []);
