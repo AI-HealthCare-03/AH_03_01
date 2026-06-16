@@ -48,6 +48,11 @@ export interface AdminReportItem {
   reason: string;
   reporter_id: string;
   created_at: string;
+  /* 신고된 게시글/댓글의 작성자·내용 (POST/COMMENT 만 채워짐) */
+  author_nickname?: string | null;
+  author_name?: string | null;
+  content_preview?: string | null;
+  target_exists?: boolean;
 }
 
 export interface AdminInquiryItem {

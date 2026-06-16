@@ -57,6 +57,8 @@ export default function AdminCommunityPage() {
               <tr className="border-b border-white/10 text-white/40 text-xs">
                 <th className="px-4 py-3 text-left font-medium">대상</th>
                 <th className="px-4 py-3 text-left font-medium">ID</th>
+                <th className="px-4 py-3 text-left font-medium">작성자</th>
+                <th className="px-4 py-3 text-left font-medium">내용</th>
                 <th className="px-4 py-3 text-left font-medium">신고 사유</th>
                 <th className="px-4 py-3 text-left font-medium hidden md:table-cell">신고일</th>
                 <th className="px-4 py-3 text-right font-medium">처리</th>
@@ -66,14 +68,14 @@ export default function AdminCommunityPage() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b border-white/5">
-                    <td colSpan={5} className="px-4 py-3">
+                    <td colSpan={7} className="px-4 py-3">
                       <div className="h-4 bg-white/5 animate-pulse rounded" />
                     </td>
                   </tr>
                 ))
               ) : reports.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-white/30 text-sm">
+                  <td colSpan={7} className="px-4 py-10 text-center text-white/30 text-sm">
                     처리 대기 신고가 없습니다.
                   </td>
                 </tr>
@@ -86,6 +88,10 @@ export default function AdminCommunityPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-white/50">#{r.target_id}</td>
+                    <td className="px-4 py-3 text-white/60">{r.author_nickname || r.author_name || "—"}</td>
+                    <td className="px-4 py-3 text-white/50 text-xs max-w-[260px] truncate">
+                      {r.target_exists === false ? "삭제된 대상" : r.content_preview || "—"}
+                    </td>
                     <td className="px-4 py-3 text-white/70">{REASON_LABEL[r.reason] ?? r.reason}</td>
                     <td className="px-4 py-3 text-white/40 hidden md:table-cell text-xs">
                       {new Date(r.created_at).toLocaleDateString("ko-KR")}

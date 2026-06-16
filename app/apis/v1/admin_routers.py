@@ -189,9 +189,30 @@ async def list_challenges(
     limit: int = Query(20, ge=1, le=100),  # noqa: B008
     challenge_status: str | None = Query(None, alias="status"),  # noqa: B008
 ) -> list[AdminChallengeItem]:
-    qs = Challenge.filter(is_deleted=False)
-    if challenge_status:
-        qs = qs.filter(status=challenge_status)
+    from datetime import date  # noqa: PLC0415
+
+    from tortoise.expressions import Q  # noqa: PLC0415
+
+    from app.apis.v1.challenge_routers import _effective_status  # noqa: PLC0415
+
+    today = date.today()
+    # 표시·필터 모두 _effective_status 규칙(end_date 지난 ACTIVE/RECRUITING=완료)에 맞춘다.
+    # 취소(CANCELLED)는 soft_delete 가 is_deleted=True 로 만들므로, 취소 탭에서는 is_deleted 를
+    # 거르지 않아야 보인다(기존엔 항상 is_deleted=False 로 시작해 취소 챌린지가 영구 누락됐다).
+    if challenge_status == ChallengeStatus.COMPLETED.value:
+        qs = Challenge.filter(
+            Q(is_deleted=False),
+            Q(status=ChallengeStatus.COMPLETED)
+            | Q(status__in=[ChallengeStatus.ACTIVE, ChallengeStatus.RECRUITING], end_date__lt=today),
+        )
+    elif challenge_status == ChallengeStatus.ACTIVE.value:
+        qs = Challenge.filter(is_deleted=False, status=ChallengeStatus.ACTIVE, end_date__gte=today)
+    elif challenge_status == ChallengeStatus.RECRUITING.value:
+        qs = Challenge.filter(is_deleted=False, status=ChallengeStatus.RECRUITING, end_date__gte=today)
+    elif challenge_status == ChallengeStatus.CANCELLED.value:
+        qs = Challenge.filter(status=ChallengeStatus.CANCELLED)
+    else:
+        qs = Challenge.filter(is_deleted=False)
     challenges = await qs.order_by("-created_at").offset(offset).limit(limit)
     result = []
     for c in challenges:
@@ -200,7 +221,7 @@ async def list_challenges(
             id=c.id,
             title=c.title,
             scope=c.scope,
-            status=c.status,
+            status=_effective_status(c.status, c.end_date),
             category=c.category,
             participant_count=count,
             start_date=str(c.start_date),
@@ -220,6 +241,33 @@ class AdminReportItem(BaseModel):
     reason: str
     reporter_id: str
     created_at: str
+    # 신고된 게시글/댓글의 작성자·내용(관리자가 누가 무엇을 썼는지 확인용).
+    # POST/COMMENT 만 매핑하며, 대상이 이미 삭제됐으면 target_exists=False.
+    author_nickname: str | None = None
+    author_name: str | None = None
+    content_preview: str | None = None
+    target_exists: bool = True
+
+
+_REPORT_PREVIEW_LEN = 100
+
+
+async def _resolve_report_target(target_type: str, target_id: int) -> tuple[str | None, str | None, str | None, bool]:
+    """신고 대상의 (작성자 닉네임, 작성자 이름, 내용 미리보기, 대상 존재여부) 를 반환."""
+    if target_type == ReportTargetType.POST:
+        post = await Post.get_or_none(id=target_id)
+        if post is None:
+            return None, None, None, False
+        author = await post.author
+        return author.nickname, author.name, f"{post.title} · {post.content}"[:_REPORT_PREVIEW_LEN], True
+    if target_type == ReportTargetType.COMMENT:
+        comment = await Comment.get_or_none(id=target_id)
+        if comment is None:
+            return None, None, None, False
+        author = await comment.author
+        return author.nickname, author.name, comment.content[:_REPORT_PREVIEW_LEN], True
+    # VERIFICATION / CHALLENGE_PARTICIPANT 등은 작성자·본문 매핑이 달라 현재 미지원(null).
+    return None, None, None, True
 
 
 @admin_router.get("/reports", response_model=list[AdminReportItem])
@@ -229,17 +277,24 @@ async def list_reports(
     limit: int = Query(20, ge=1, le=100),  # noqa: B008
 ) -> list[AdminReportItem]:
     reports = await Report.all().order_by("-created_at").offset(offset).limit(limit)
-    return [
-        AdminReportItem(
-            id=r.id,
-            target_type=r.target_type,
-            target_id=r.target_id,
-            reason=r.reason,
-            reporter_id=str(r.reporter_id),
-            created_at=r.created_at.isoformat(),
+    items: list[AdminReportItem] = []
+    for r in reports:
+        nickname, name, preview, exists = await _resolve_report_target(r.target_type, r.target_id)
+        items.append(
+            AdminReportItem(
+                id=r.id,
+                target_type=r.target_type,
+                target_id=r.target_id,
+                reason=r.reason,
+                reporter_id=str(r.reporter_id),
+                created_at=r.created_at.isoformat(),
+                author_nickname=nickname,
+                author_name=name,
+                content_preview=preview,
+                target_exists=exists,
+            )
         )
-        for r in reports
-    ]
+    return items
 
 
 @admin_router.delete("/reports/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
