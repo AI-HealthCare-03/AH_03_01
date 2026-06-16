@@ -253,13 +253,12 @@ async def list_challenges(
         ],
     )
 
-    # 참여하기 탭: 비공개 그룹 챌린지 중 정원이 찬 건 제외
+    # 참여하기 탭: 정원이 찬 그룹 챌린지 제외 (공개/비공개 무관)
     if not mine:
         payload.items = [
             item for item in payload.items
             if not (
-                item.visibility == ChallengeVisibility.PRIVATE
-                and item.max_participants is not None
+                item.max_participants is not None
                 and group_active_members.get(item.id, 0) >= item.max_participants
             )
         ]
