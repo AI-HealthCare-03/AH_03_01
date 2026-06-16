@@ -29,7 +29,8 @@ export default function BGTrendChart({ series }: BGTrendChartProps) {
     <ResponsiveContainer width="100%" height={260}>
       <LineChart
         data={data}
-        margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+        /* right 여백 확대: 기준선 라벨(position="right")이 오른쪽 끝에서 잘리지 않도록. */
+        margin={{ top: 8, right: 64, left: 0, bottom: 0 }}
       >
         {/* 구간 배경 */}
         <ReferenceArea y1={140} y2={250} fill="#ffeaea" fillOpacity={0.4}
@@ -57,13 +58,13 @@ export default function BGTrendChart({ series }: BGTrendChartProps) {
           y={100}
           stroke="#f9a825"
           strokeDasharray="4 2"
-          label={{ value: "정상 상한(100)", position: "right", fontSize: 10, fill: "#856404" }}
+          label={{ value: "정상상한 100", position: "right", fontSize: 10, fill: "#856404" }}
         />
         <ReferenceLine
           y={126}
           stroke="#e53935"
           strokeDasharray="4 2"
-          label={{ value: "당뇨 기준(126)", position: "right", fontSize: 10, fill: "#e53935" }}
+          label={{ value: "당뇨기준 126", position: "right", fontSize: 10, fill: "#e53935" }}
         />
 
         <Line
