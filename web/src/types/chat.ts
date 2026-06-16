@@ -13,6 +13,7 @@ export interface FaqResponse {
   question: string;
   answer: string;
   sort_order: number;
+  short_label: string | null;
 }
 
 export interface FaqListResponse {

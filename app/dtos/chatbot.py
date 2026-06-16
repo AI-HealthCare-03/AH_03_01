@@ -13,6 +13,7 @@ class FaqResponse(BaseSerializerModel):
     question: str
     answer: str
     sort_order: int
+    short_label: str | None = None
 
 
 class FaqListResponse(BaseModel):
