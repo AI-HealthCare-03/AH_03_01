@@ -131,6 +131,9 @@ html.dark .border-border {
 html.dark .text-text-primary   { color: #f0f0f0 !important; }
 html.dark .text-text-secondary  { color: #b0b0b0 !important; }
 html.dark .text-text-tertiary   { color: #7a7a7a !important; }
+/* 마크다운 박스(AI 분석 요약 등)의 [&_strong]:text-text-primary 는 CSS 변수(var(--color-text-primary))를
+   직접 참조해 위 유틸 오버라이드가 닿지 않는다 → 다크모드에서 strong 이 #111 로 깔려 안 보였다. 직접 밝게. */
+html.dark .\[\&_strong\]\:text-text-primary strong { color: #f0f0f0 !important; }
 /* text-brand-black → 다크모드에서 밝게 */
 html.dark .text-brand-black { color: #f0f0f0 !important; }
 
