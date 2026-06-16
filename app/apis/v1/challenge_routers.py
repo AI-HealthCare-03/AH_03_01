@@ -276,8 +276,6 @@ async def get_challenge(
     ).count()
     total_days = max(1, (challenge.end_date - challenge.start_date).days + 1)
 
-    from app.models.challenge import ChallengeScope  # noqa: PLC0415
-
     if challenge.scope == ChallengeScope.GROUP:
         # 그룹 달성률: 전체 멤버 인증 합계 / (기간 × 활성 멤버 수) × 100
         all_approved = await ChallengeVerification.filter(
@@ -365,7 +363,7 @@ async def list_participants(
     user: Annotated[User, Depends(get_request_user)],
     service: Annotated[ParticipantService, Depends(ParticipantService)],
 ) -> Response:
-    from app.models.challenge import Challenge, ChallengeVerification, VerificationStatus  # noqa: PLC0415
+    from app.models.challenge import Challenge  # noqa: PLC0415
 
     participants = await service.list_participants(user, challenge_id)
 
