@@ -489,7 +489,8 @@ def _get_top5_features(
             sv = shap_vals[0, :, risk_cls_idx]
             explained_class = risk_cls_idx
         else:
-            # 단일 배열 = 양성(위험) 클래스 기준 → 부호가 곧 위험 방향.
+            # 단일 배열 = 양성(위험) 클래스 기준 → 부호가 곧 위험 방향. 이진 모델이라 negate 불필요.
+            explained_class = None
             sv = np.array(shap_vals).flatten()[: len(feature_cols)]
 
         # negate: 정상(class 0) 클래스를 설명 중이면 SHAP 부호는 '정상쪽 기여' 를 뜻하므로
