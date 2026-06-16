@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useHealthProfile } from "@/hooks/queries/useHealthProfile";
 import { useHealthRecordList } from "@/hooks/queries/useHealthRecordList";
 import { MEDICATION_STORAGE_KEY, type Medication } from "@/components/health/MedicationManager";
-import { medSnapshotKey } from "@/lib/notifKeys";
 import StatusBadge from "./StatusBadge";
 import WaistPopover from "./WaistPopover";
 import type { HealthStatus } from "@/lib/health/status";
@@ -174,34 +173,29 @@ export default function DetailTab() {
       ? calcBmi(profile.height_cm, displayWeightKg)
       : null;
 
-  /* v2 필드 매핑 — 날짜 선택 시 체중/허리둘레만 해당 날짜 기준, 나머지 프로필 항목은 날짜 무관 */
+  /* v2 필드 매핑 — 체중/허리둘레만 해당 날짜 기록 기준. 흡연·음주·가족력·임신·만성질환·복약은
+     시계열이 아닌 정적 프로필 항목이라 날짜와 무관하게 항상 현재 프로필 값을 표시한다.
+     (이전에는 날짜 선택 시 null 로 비워 N/A 가 떠, 과거 날짜 조회 시 정상 데이터가 사라졌다.) */
   const chronicLabel =
-    !selectedDate && profile?.chronic_diseases && profile.chronic_diseases.length > 0
+    profile?.chronic_diseases && profile.chronic_diseases.length > 0
       ? profile.chronic_diseases.map((d) => CHRONIC_LABEL[d] ?? d).join(", ")
       : null;
-  const currentSmoker = selectedDate ? null : profile?.current_smoker;
-  const alcoholFreqY = selectedDate ? null : profile?.alcohol_freq_y;
-  const familyDm = selectedDate ? null : profile?.family_dm;
-  const familyHp = selectedDate ? null : profile?.family_hp;
-  const pregnancyStatus = selectedDate ? null : profile?.pregnancy_status;
-  const medications = useMemo(() => {
-    if (!selectedDate) {
-      // 현재 날짜: 백엔드 프로필 우선, 미동기화 시 localStorage 활성 약 목록 fallback
-      if (profile?.medications && profile.medications.length > 0) return profile.medications;
-      try {
-        const raw = localStorage.getItem(MEDICATION_STORAGE_KEY);
-        if (!raw) return null;
-        const list = JSON.parse(raw) as Medication[];
-        const names = list.filter((m) => m.active).map((m) => m.name);
-        return names.length > 0 ? names : null;
-      } catch { return null; }
-    }
-    // 과거 날짜: 해당 날짜의 복약 스냅샷 조회 (수정 불가 표시용)
+  const currentSmoker = profile?.current_smoker;
+  const alcoholFreqY = profile?.alcohol_freq_y;
+  const familyDm = profile?.family_dm;
+  const familyHp = profile?.family_hp;
+  const pregnancyStatus = profile?.pregnancy_status;
+  const medications = ((): string[] | null => {
+    // 정적 프로필 항목: 백엔드 프로필 우선, 미동기화 시 localStorage 활성 약 목록 fallback.
+    if (profile?.medications && profile.medications.length > 0) return profile.medications;
     try {
-      const raw = localStorage.getItem(medSnapshotKey(selectedDate));
-      return raw ? (JSON.parse(raw) as string[]) : null;
+      const raw = localStorage.getItem(MEDICATION_STORAGE_KEY);
+      if (!raw) return null;
+      const list = JSON.parse(raw) as Medication[];
+      const names = list.filter((m) => m.active).map((m) => m.name);
+      return names.length > 0 ? names : null;
     } catch { return null; }
-  }, [selectedDate, profile]);
+  })();
   const medicationLabel =
     medications && medications.length > 0 ? medications.join(", ") : null;
 

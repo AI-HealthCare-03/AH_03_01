@@ -83,6 +83,10 @@ export default function SummaryTab() {
     subType: "FASTING",
     size: 1,
   });
+  const { data: weightList } = useHealthRecordList({
+    recordType: "WEIGHT",
+    size: 1,
+  });
   /* 날짜 지정 쿼리 (날짜 선택 시에만 실행) */
   const { data: bpDateList } = useHealthRecordList(
     { recordType: "BLOOD_PRESSURE", from: selectedDate, to: selectedDate },
@@ -118,11 +122,16 @@ export default function SummaryTab() {
 
   /* ── 값 파싱 ── */
   const heightCm = profile?.height_cm ?? null;
-  const profileWeightKg = profile?.weight_kg ?? null;
+  /* 디폴트(날짜 미선택)도 최신 체중 '기록' 우선 — 프로필 체중은 갱신이 드물어,
+     오늘 체중을 기록해도 프로필이 옛 값이면 BMI 가 어제처럼 보이던 문제를 막는다.
+     (혈압·혈당 카드가 최신 기록을 쓰는 것과 동일한 기준으로 통일.) */
+  const latestWeightKg = weightList?.[0]
+    ? parseFloat(weightList[0].primary_value)
+    : (profile?.weight_kg ?? null);
   const dateWeightKg = weightDateList?.[0]
     ? parseFloat(weightDateList[0].primary_value)
     : null;
-  const weightKg = hasDateFilter ? dateWeightKg : profileWeightKg;
+  const weightKg = hasDateFilter ? dateWeightKg : latestWeightKg;
   const bmi = heightCm && weightKg ? calcBmi(heightCm, weightKg) : null;
 
   const sysParsed = activeBp ? parseFloat(activeBp.primary_value) : null;
@@ -135,6 +144,7 @@ export default function SummaryTab() {
   const dates: number[] = [
     latestBp?.measured_at,
     latestBg?.measured_at,
+    weightList?.[0]?.measured_at,
     profile?.updated_at ?? profile?.recorded_at,
   ]
     .filter((d): d is string => Boolean(d))
