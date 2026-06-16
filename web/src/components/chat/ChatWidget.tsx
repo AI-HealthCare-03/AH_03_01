@@ -33,38 +33,49 @@ export default function ChatWidget() {
         </div>
       )}
 
-      {/* 토글 버튼 */}
-      <button
-        type="button"
-        onClick={toggleChat}
-        aria-label={isOpen ? "챗봇 닫기" : "건강 도우미 열기"}
-        aria-expanded={isOpen}
+      {/* 토글 버튼 + 말풍선 */}
+      <div
         className={[
           "fixed z-50",
           /* 모바일: 탭바(56px) 바로 위 + 여유 */
           "bottom-[68px] right-4",
           /* 데스크탑 */
           "md:bottom-5 md:right-5",
-          /* 버튼 스타일 */
-          "w-14 h-14 rounded-full shadow-lg flex items-center justify-center overflow-hidden",
-          "transition-all duration-200 active:scale-90",
-          /* 닫힘: 마스코트 이미지가 원형 배경을 채움 / 열림: 검은 원 + X */
-          isOpen ? "bg-brand-black text-white" : "bg-transparent",
         ].join(" ")}
       >
-        {isOpen ? (
-          <X size={24} aria-hidden="true" />
-        ) : (
-          <Image
-            src="/chat-button.png"
-            alt=""
-            width={56}
-            height={56}
-            priority
-            className="w-14 h-14 object-cover"
-          />
-        )}
-      </button>
+        <div className="relative flex items-center justify-end">
+          {!isOpen && (
+            <span className="absolute bottom-full right-0 mb-2 whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-xs font-medium text-brand-black shadow-lg">
+              케어로그 챗봇에게 물어보세요!
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={toggleChat}
+            aria-label={isOpen ? "챗봇 닫기" : "건강 도우미 열기"}
+            aria-expanded={isOpen}
+            className={[
+              "w-16 h-16 rounded-full shadow-lg flex items-center justify-center overflow-hidden shrink-0",
+              "transition-all duration-200 active:scale-90",
+              /* 닫힘: 마스코트 이미지가 원형 배경을 채움 / 열림: 검은 원 + X */
+              isOpen ? "bg-brand-black text-white" : "bg-transparent",
+            ].join(" ")}
+          >
+            {isOpen ? (
+              <X size={24} aria-hidden="true" />
+            ) : (
+              <Image
+                src="/chat-button.png"
+                alt=""
+                width={64}
+                height={64}
+                priority
+                className="w-16 h-16 object-cover"
+              />
+            )}
+          </button>
+        </div>
+      </div>
     </>
   );
 }
