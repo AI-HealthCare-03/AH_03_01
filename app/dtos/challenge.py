@@ -284,6 +284,7 @@ class VerificationFeedItem(BaseModel):
     comment_count: int
     my_like: bool
     created_at: datetime
+    status: VerificationStatus = VerificationStatus.APPROVED
 
 
 class VerificationFeedResponse(BaseModel):
