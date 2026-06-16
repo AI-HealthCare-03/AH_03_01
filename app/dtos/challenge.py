@@ -148,6 +148,7 @@ class ChallengeListItem(BaseModel):
     max_participants: int | None = None
     start_date: date
     end_date: date
+    created_at: datetime
     progress_percent: float | None = None
     my_progress: int | None = None  # 내 달성일 수 (승인된 인증 횟수)
     total_days: int | None = None  # 챌린지 전체 기간 일 수
@@ -171,6 +172,7 @@ class ChallengeListResponse(BaseModel):
 
 class ParticipantResponse(BaseSerializerModel):
     id: int
+    challenge_id: int
     user_id: UUID
     role: ParticipantRole
     status: ParticipantStatus

@@ -53,7 +53,8 @@ export async function fetchMyActiveChallenges(
   ].slice(0, size);
   return {
     items,
-    total: activeRes.data.total + recruitingRes.data.total,
+    total_elements: (activeRes.data.total_elements ?? 0) + (recruitingRes.data.total_elements ?? 0),
+    total_pages: 1,
     page: 1,
     size,
   };

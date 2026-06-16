@@ -18,8 +18,7 @@ export type ChallengeStatus =
   | "RECRUITING"
   | "ACTIVE"
   | "COMPLETED"
-  | "CANCELLED"
-  | "RECRUITING";
+  | "CANCELLED";
 
 /* 목표 타입 */
 export type GoalType = "DURATION" | "COUNT" | "AMOUNT" | "CHECK";
@@ -63,7 +62,7 @@ export interface Challenge {
   invite_code?: string | null;
   visibility?: ChallengeVisibility | null;
   is_member?: boolean;
-  created_by: number;
+  created_by?: number;
   creator_id?: string | null;  /* UUID — 상세 API에서 제공 */
   created_at: string;
   /* 신규: cadence + goal_config */
@@ -81,7 +80,8 @@ export interface Challenge {
 /* 챌린지 목록 응답 */
 export interface ChallengeListResponse {
   items: Challenge[];
-  total: number;
+  total_elements: number;
+  total_pages: number;
   page: number;
   size: number;
 }

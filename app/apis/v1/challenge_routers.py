@@ -151,7 +151,7 @@ async def list_challenges(
     date_to: Annotated[date | None, Query(alias="to")] = None,
     mine: Annotated[bool, Query()] = False,
     left_only: Annotated[bool, Query(alias="leftOnly")] = False,
-    sort_by: Annotated[str | None, Query(alias="sortBy")] = None,  # start_date | end_date
+    sort_by: Annotated[str | None, Query(alias="sortBy")] = None,  # created_at | end_date
     page: Annotated[int, Query(ge=1)] = 1,
     size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> Response:
@@ -243,8 +243,10 @@ async def list_challenges(
                 max_participants=ch.max_participants,
                 start_date=ch.start_date,
                 end_date=ch.end_date,
+                created_at=ch.created_at,
                 my_progress=approved_counts.get(ch.id, 0),
                 total_days=_total_days(ch),
+                progress_percent=round(approved_counts.get(ch.id, 0) / _total_days(ch) * 100, 1),
                 achievement_rate=_achievement_rate(ch),
                 missed_count=missed_counts.get(ch.id, 0),
                 my_participant_status=participant_statuses.get(ch.id),
