@@ -19,9 +19,9 @@ interface RankStyle {
 }
 
 const RANK_STYLE: Record<number, RankStyle> = {
-  1: { bg: "bg-yellow-50 border-yellow-300", textColor: "text-yellow-600", emoji: "🥇" },
-  2: { bg: "bg-gray-50 border-gray-300", textColor: "text-gray-500", emoji: "🥈" },
-  3: { bg: "bg-orange-50 border-orange-300", textColor: "text-orange-500", emoji: "🥉" },
+  1: { bg: "rank-card-gold bg-yellow-50 border-yellow-300", textColor: "text-yellow-600", emoji: "🥇" },
+  2: { bg: "rank-card-silver bg-gray-50 border-gray-300", textColor: "text-gray-500", emoji: "🥈" },
+  3: { bg: "rank-card-bronze bg-orange-50 border-orange-300", textColor: "text-orange-500", emoji: "🥉" },
 };
 
 export default function LeaderboardCard({
