@@ -153,7 +153,7 @@ export default function DetailTab() {
     { enabled: hasDate }
   );
   /* 선택 날짜에 입력된 데이터(전 타입)가 하나도 없으면 '데이터 없음' 안내. */
-  const { data: dateAnyRecords } = useHealthRecordList(
+  const { data: dateAnyRecords, isLoading: dateAnyLoading } = useHealthRecordList(
     { from: selectedDate, to: selectedDate },
     { enabled: hasDate }
   );
@@ -171,7 +171,8 @@ export default function DetailTab() {
   const profile = rawProfile as HealthProfileDetail | null;
 
   /* 선택 날짜에 입력 데이터가 전혀 없으면 '데이터 없음'으로 안내(데이터 row 미표시). */
-  const noDataForDate = hasDate && (dateAnyRecords?.length ?? 0) === 0;
+  /* 로딩 중에는 '데이터 없음' 으로 단정하지 않는다(깜빡임 방지). */
+  const noDataForDate = hasDate && !dateAnyLoading && (dateAnyRecords?.length ?? 0) === 0;
 
   const recVal = (list?: { primary_value: string }[]): number | null => {
     const v = parseFloat(list?.[0]?.primary_value ?? "");

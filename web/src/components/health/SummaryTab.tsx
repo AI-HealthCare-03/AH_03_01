@@ -102,7 +102,7 @@ export default function SummaryTab() {
     { enabled: hasDateFilter }
   );
   /* 선택 날짜에 입력된 데이터(전 타입)가 하나도 없으면 '데이터 없음'. */
-  const { data: dateAnyList } = useHealthRecordList(
+  const { data: dateAnyList, isLoading: dateAnyLoading } = useHealthRecordList(
     { from: selectedDate, to: selectedDate },
     { enabled: hasDateFilter }
   );
@@ -123,7 +123,8 @@ export default function SummaryTab() {
   }
 
   /* 선택 날짜에 입력 데이터가 전혀 없으면 모든 지표를 '데이터 없음'으로 표시. */
-  const noDataForDate = hasDateFilter && (dateAnyList?.length ?? 0) === 0;
+  /* 로딩 중에는 '데이터 없음' 으로 단정하지 않는다(undefined → length 0 오판으로 깜빡임 방지). */
+  const noDataForDate = hasDateFilter && !dateAnyLoading && (dateAnyList?.length ?? 0) === 0;
 
   /* ── 활성 레코드 (날짜 필터 적용 여부에 따라 선택) ── */
   const activeBp = noDataForDate ? null : hasDateFilter ? (bpDateList?.[0] ?? null) : (bpList?.[0] ?? null);
@@ -144,9 +145,9 @@ export default function SummaryTab() {
   const weightKg = noDataForDate ? null : hasDateFilter ? dateWeightKg : latestWeightKg;
   const bmi = heightCm && weightKg ? calcBmi(heightCm, weightKg) : null;
 
-  const sysParsed = activeBp ? parseFloat(activeBp.primary_value) : null;
-  const diaParsed = activeBp ? parseFloat(activeBp.secondary_value ?? "0") : null;
-  const bgParsed = activeBg ? parseFloat(activeBg.primary_value) : null;
+  const sysParsed = activeBp ? recNum(activeBp.primary_value) : null;
+  const diaParsed = activeBp ? recNum(activeBp.secondary_value) : null;
+  const bgParsed = activeBg ? recNum(activeBg.primary_value) : null;
 
   /* 최근 측정일 — 날짜 필터가 없을 때만 계산 */
   const latestBp = bpList?.[0] ?? null;
