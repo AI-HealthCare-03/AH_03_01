@@ -286,7 +286,12 @@ class ChallengeVerificationRepository:
         page: int = 1,
         size: int = 20,
     ) -> tuple[list[ChallengeVerification], int]:
-        qs = self._model.filter(challenge_id=challenge_id, is_deleted=False)
+        # REJECTED(아니오/AI 거부)는 그룹 소통 피드에서 제외
+        qs = self._model.filter(
+            challenge_id=challenge_id,
+            is_deleted=False,
+            status__not=VerificationStatus.REJECTED,
+        )
         total = await qs.count()
         items = await qs.prefetch_related("user").order_by("-created_at").offset((page - 1) * size).limit(size)
         return list(items), total
