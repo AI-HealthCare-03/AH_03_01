@@ -1,7 +1,8 @@
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from redis.exceptions import RedisError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -22,6 +23,18 @@ app = FastAPI(
 app.state.limiter = limiter
 # slowapi 핸들러 시그니처가 Starlette 의 (Request, Exception) 와 정확히 일치하지 않음(알려진 타입 이슈).
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
+
+
+async def _redis_error_handler(request: Request, exc: Exception) -> ORJSONResponse:
+    """Redis 장애 시 미처리 500 대신 명확한 503 으로 응답한다(인증 플래그 게이트 등은 fail-closed 유지)."""
+    _logger.error("Redis 오류로 요청 처리 실패: %s", type(exc).__name__)
+    return ORJSONResponse(
+        content={"detail": "일시적인 오류로 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요."},
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
+
+
+app.add_exception_handler(RedisError, _redis_error_handler)  # type: ignore[arg-type]
 
 # 로컬 프론트엔드(Next.js dev) 와 운영 도메인에서 호출 허용.
 _cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000", config.FRONTEND_BASE_URL]
