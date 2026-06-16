@@ -26,6 +26,9 @@ interface GroupDetailProps {
   onLeave?: () => void;
   onCancel?: () => void;
   currentUserId?: string;
+  verifiedDates?: string[];
+  pendingDates?: string[];
+  rejectedToday?: boolean;
 }
 
 const TABS: { key: GroupTab; label: string }[] = [
@@ -41,6 +44,9 @@ export default function GroupDetail({
   onLeave,
   onCancel,
   currentUserId,
+  verifiedDates = [],
+  pendingDates = [],
+  rejectedToday = false,
 }: GroupDetailProps) {
   const [activeTab, setActiveTab] = useState<GroupTab>(initialTab);
   const { showToast } = useToast();
@@ -152,6 +158,9 @@ export default function GroupDetail({
               onLeave={onLeave}
               onCancel={onCancel}
               onShield={onShield}
+              verifiedDates={verifiedDates}
+              pendingDates={pendingDates}
+              rejectedToday={rejectedToday}
             />
           )}
           {activeTab === "chat" && (

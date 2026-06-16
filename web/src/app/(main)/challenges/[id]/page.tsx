@@ -57,22 +57,28 @@ function ChallengeDetailContent({
   const leaveMutation = useLeaveChallenge();
   const updateMutation = useUpdateChallenge(challengeId);
 
+  /* 오늘 날짜 (YYYY-MM-DD, 로컬 기준) */
+  const todayStr = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+
   /* 인증 완료 날짜 목록 (APPROVED 상태만) */
   const verifiedDates =
     verificationsData?.items
       .filter((v) => v.status === "APPROVED")
-      .map((v) => v.created_at.split("T")[0]) ?? [];
+      .map((v) => v.verified_date ?? "") ?? [];
 
   /* AI 검증 대기 날짜 목록 (PENDING 상태) */
   const pendingDates =
     verificationsData?.items
       .filter((v) => v.status === "PENDING")
-      .map((v) => v.created_at.split("T")[0]) ?? [];
+      .map((v) => v.verified_date ?? "") ?? [];
 
   /* 오늘 체크 인증 실패 여부 (CHECK + checked=false → REJECTED) */
   const rejectedToday =
     verificationsData?.items.some(
-      (v) => v.status === "REJECTED" && v.verified_at?.split("T")[0] === new Date().toLocaleDateString("sv")
+      (v) => v.status === "REJECTED" && v.verified_date === todayStr
     ) ?? false;
 
   /* 사진 인증 결과(완료/실패) 알림.
@@ -93,10 +99,7 @@ function ChallengeDetailContent({
       qc.invalidateQueries({ queryKey: POINT_BALANCE_KEY });
       qc.invalidateQueries({ queryKey: WEEKLY_XP_KEY });
     } else {
-      showToast(
-        `인증 실패: ${v.rejection_reason ?? "사진이 챌린지와 맞지 않아요. 다시 시도해 주세요."}`,
-        "error",
-      );
+      showToast("인증 실패: 사진이 챌린지와 맞지 않아요. 다시 시도해 주세요.", "error");
     }
     /* ?pending 제거 — 새로고침/재진입 시 중복 알림 방지 */
     router.replace(`/challenges/${challengeId}`);
@@ -227,6 +230,9 @@ function ChallengeDetailContent({
           onLeave={handleLeave}
           onCancel={handleCancel}
           currentUserId={me?.id}
+          verifiedDates={verifiedDates}
+          pendingDates={pendingDates}
+          rejectedToday={rejectedToday}
         />
       ) : (
         <PersonalDetail

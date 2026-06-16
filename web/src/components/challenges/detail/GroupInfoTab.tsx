@@ -21,6 +21,9 @@ interface GroupInfoTabProps {
   onLeave?: () => void;
   onCancel?: () => void;
   onShield?: () => void;
+  verifiedDates?: string[];
+  pendingDates?: string[];
+  rejectedToday?: boolean;
 }
 
 function getInitial(name?: string): string {
@@ -48,6 +51,9 @@ export default function GroupInfoTab({
   onLeave,
   onCancel,
   onShield,
+  verifiedDates = [],
+  pendingDates = [],
+  rejectedToday = false,
 }: GroupInfoTabProps) {
   const { showToast } = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -97,6 +103,10 @@ export default function GroupInfoTab({
     myParticipant?.status === "APPROVED" &&
     (challenge.status === "ACTIVE" ||
       (challenge.status === "RECRUITING" && challenge.start_date <= todayStr));
+
+  /* 오늘 인증 상태 — PersonalDetail 과 동일한 패턴 */
+  const verifiedToday = verifiedDates.includes(todayStr);
+  const pendingToday  = pendingDates.includes(todayStr);
 
   const handleCopyCode = async () => {
     if (!challenge.invite_code) return;
@@ -152,19 +162,44 @@ export default function GroupInfoTab({
       {canVerify && (
         <div className="bg-white border border-border rounded-[14px] p-5 space-y-3">
           <p className="text-sm font-bold text-text-primary">오늘의 인증</p>
-          <Link href={`/challenges/${challenge.id}/verify`}>
-            <Button variant="primary" size="md" fullWidth>
-              오늘 인증하기
-            </Button>
-          </Link>
-          {onShield && (
-            <button
-              type="button"
-              onClick={onShield}
-              className="w-full text-xs text-text-tertiary hover:text-text-secondary underline"
-            >
-              🛡️ 방지권 사용
-            </button>
+          {verifiedToday ? (
+            <div className="flex items-center gap-2 py-3 bg-status-success-bg rounded-[12px] px-4">
+              <span className="text-xl" aria-hidden="true">✅</span>
+              <p className="text-sm font-semibold text-status-success">
+                인증 완료!
+              </p>
+            </div>
+          ) : pendingToday ? (
+            <div className="flex items-center gap-2 py-3 bg-status-info-bg rounded-[12px] px-4">
+              <span className="text-xl" aria-hidden="true">⏳</span>
+              <p className="text-sm font-semibold text-status-info">
+                AI 검증 중... 잠시만 기다려주세요
+              </p>
+            </div>
+          ) : rejectedToday ? (
+            <div className="flex items-center gap-2 py-3 bg-status-danger-bg rounded-[12px] px-4">
+              <span className="text-xl" aria-hidden="true">❌</span>
+              <p className="text-sm font-semibold text-status-danger">
+                오늘 목표를 달성하지 못했어요
+              </p>
+            </div>
+          ) : (
+            <>
+              <Link href={`/challenges/${challenge.id}/verify`}>
+                <Button variant="primary" size="md" fullWidth>
+                  오늘 인증하기
+                </Button>
+              </Link>
+              {onShield && (
+                <button
+                  type="button"
+                  onClick={onShield}
+                  className="w-full text-xs text-text-tertiary hover:text-text-secondary underline"
+                >
+                  🛡️ 방지권 사용
+                </button>
+              )}
+            </>
           )}
         </div>
       )}
