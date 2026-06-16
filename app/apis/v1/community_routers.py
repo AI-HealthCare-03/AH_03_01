@@ -35,7 +35,7 @@ _MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\(([^)\s]+)\)")
 
 
 def _to_item(p: Post) -> PostListItem:
-    m = _MD_IMAGE_RE.search(p.content)
+    m = _MD_IMAGE_RE.search(p.content or "")
     return PostListItem(
         id=p.id,
         title=p.title,

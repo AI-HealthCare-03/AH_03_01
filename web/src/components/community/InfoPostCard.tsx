@@ -22,12 +22,19 @@ export default function InfoPostCard({ post }: { post: PostListItem }) {
       className="block bg-white border border-border rounded-[16px] overflow-hidden hover:shadow-md transition-shadow"
     >
       {post.thumbnail_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={post.thumbnail_url}
-          alt={post.title}
-          className="w-full h-36 object-cover"
-        />
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={post.thumbnail_url}
+            alt={post.title}
+            className="w-full h-36 object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+              (e.currentTarget.nextElementSibling as HTMLElement | null)?.removeAttribute("hidden");
+            }}
+          />
+          <div className="w-full h-36 bg-gray-100" hidden />
+        </>
       ) : (
         <div className="w-full h-36 bg-gray-100" />
       )}
