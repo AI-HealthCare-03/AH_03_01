@@ -23,10 +23,7 @@ export default function ChallengeCard({
   showCTA = true,
 }: ChallengeCardProps) {
   const router = useRouter();
-  const progressPct =
-    challenge.total_days && challenge.total_days > 0
-      ? Math.round(((challenge.my_progress ?? 0) / challenge.total_days) * 100)
-      : 0;
+  const progressPct = challenge.achievement_rate ?? 0;
 
   const isCrisis = (challenge.missed_count ?? 0) >= 1;
   const isLeft = challenge.my_participant_status === "LEFT";
@@ -90,8 +87,6 @@ export default function ChallengeCard({
         <div className="mb-3">
           <ChallengeProgressBar
             progress={progressPct}
-            completedDays={challenge.my_progress}
-            totalDays={challenge.total_days}
           />
         </div>
       )}
@@ -99,7 +94,7 @@ export default function ChallengeCard({
       {/* 완료/탈퇴/포기 상태 */}
       {(challenge.status === "COMPLETED" || isAbandoned) && (
         <div className="mb-3 text-xs text-text-secondary">
-          {challenge.my_progress ?? 0}/{challenge.total_days ?? 0}일 달성
+          {challenge.achievement_rate ?? 0}% 달성
         </div>
       )}
 
