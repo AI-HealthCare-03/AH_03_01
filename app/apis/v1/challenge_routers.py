@@ -333,7 +333,7 @@ async def get_challenge_feed(
     user: Annotated[User, Depends(get_request_user)],
     service: Annotated[VerificationService, Depends(VerificationService)],
     page: Annotated[int, Query(ge=1)] = 1,
-    size: Annotated[int, Query(ge=1, le=100)] = 20,
+    size: Annotated[int, Query(ge=1, le=200)] = 20,
 ) -> Response:
     items, total = await service.get_feed(user, challenge_id, page, size)
     payload = VerificationFeedResponse(
