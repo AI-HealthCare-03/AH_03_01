@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 
+from app.core import config
 from app.core.responses import ORJSONResponse as Response
 from app.dependencies.security import get_request_user
 from app.dtos.challenge import (
@@ -202,7 +203,7 @@ async def list_challenges(
             today_rows = await ChallengeVerification.filter(
                 challenge_id__in=challenge_ids,
                 user_id=user.id,
-                verified_date=date.today(),
+                verified_date=datetime.now(config.TIMEZONE).date(),
             ).values("challenge_id")
             for row in today_rows:
                 today_verified_ids.add(row["challenge_id"])
