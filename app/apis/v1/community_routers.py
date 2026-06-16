@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from uuid import uuid4
 
@@ -30,8 +31,11 @@ from app.services.quiz import HealthQuizService
 
 posts_router = APIRouter(prefix="/posts", tags=["community"])
 
+_MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\(([^)\s]+)\)")
+
 
 def _to_item(p: Post) -> PostListItem:
+    m = _MD_IMAGE_RE.search(p.content or "")
     return PostListItem(
         id=p.id,
         title=p.title,
@@ -44,6 +48,7 @@ def _to_item(p: Post) -> PostListItem:
         author_id=p.author_id,
         author_nickname=p.author.nickname,
         created_at=p.created_at,
+        thumbnail_url=m.group(1) if m else None,
     )
 
 

@@ -19,6 +19,7 @@ class PostListItem(BaseSerializerModel):
     author_id: UUID
     author_nickname: str | None
     created_at: datetime
+    thumbnail_url: str | None = None
 
 
 class PostDetailResponse(PostListItem):
