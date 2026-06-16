@@ -11,3 +11,4 @@ export const notifSocialPollKey = () => `notification-social-poll:${activeUserId
 export const notifKickPollKey   = () => `notification-kick-poll:${activeUserId()}`;
 export const notifRiskPollKey   = () => `notification-risk-poll:${activeUserId()}`;
 export const riskLevelCacheKey  = () => `risk-level-cache:${activeUserId()}`;
+export const medSnapshotKey     = (date: string) => `med-snapshot-${date}:${activeUserId()}`;

@@ -33,10 +33,7 @@ export default function PersonalDetail({
 }: PersonalDetailProps) {
   const [confirmQuit, setConfirmQuit] = useState(false);
   const catConfig = CATEGORY_CONFIG[challenge.category] ?? CATEGORY_CONFIG.EXERCISE;
-  const progressPct =
-    challenge.total_days && challenge.total_days > 0
-      ? Math.round(((challenge.my_progress ?? 0) / challenge.total_days) * 100)
-      : 0;
+  const progressPct = challenge.achievement_rate ?? 0;
 
   /* 오늘 인증 여부 확인.
      toISOString() 은 UTC 기준이라 KST 자정 직후(00~09시)에는 하루 어긋나
@@ -66,8 +63,6 @@ export default function PersonalDetail({
         </div>
         <ChallengeProgressBar
           progress={progressPct}
-          completedDays={challenge.my_progress}
-          totalDays={challenge.total_days}
         />
       </div>
 

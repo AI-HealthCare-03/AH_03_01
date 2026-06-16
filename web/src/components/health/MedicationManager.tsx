@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
+import { upsertHealthProfile } from "@/lib/api/health";
+import { HEALTH_PROFILE_KEY } from "@/hooks/queries/useHealthProfile";
+import { medSnapshotKey } from "@/lib/notifKeys";
 
 /* ─────────────────────────────────────────────────────
    복약 관리 컴포넌트 — localStorage 기반
@@ -44,6 +48,18 @@ function saveMedications(list: Medication[]) {
     // 복약 데이터 변경 → 스케줄러 재실행
     window.dispatchEvent(new CustomEvent("notif-reschedule"));
   } catch { /* 무시 */ }
+}
+
+/** 오늘 스냅샷 저장 + 백엔드 동기화 (fire-and-forget) */
+async function syncToBackend(activeNames: string[], qc: QueryClient): Promise<void> {
+  const todayKey = new Date().toISOString().slice(0, 10);
+  try { localStorage.setItem(medSnapshotKey(todayKey), JSON.stringify(activeNames)); } catch { /* 무시 */ }
+  try {
+    await upsertHealthProfile({ medications: activeNames });
+    await qc.invalidateQueries({ queryKey: HEALTH_PROFILE_KEY });
+  } catch (e) {
+    console.warn("[MedicationManager] 백엔드 동기화 실패", e);
+  }
 }
 
 /* ── 시간 태그 입력 ──────────────────────────────────── */
@@ -344,14 +360,24 @@ export default function MedicationManager() {
   const [list, setList] = useState<Medication[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
-    setList(loadMedications());
+    const saved = loadMedications();
+    setList(saved);
+    // localStorage에 데이터가 있으면 최초 1회 백엔드 동기화 + 오늘 스냅샷 저장
+    if (saved.length > 0) {
+      const activeNames = saved.filter((m) => m.active).map((m) => m.name);
+      void syncToBackend(activeNames, queryClient);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const persist = (next: Medication[]) => {
     setList(next);
     saveMedications(next);
+    const activeNames = next.filter((m) => m.active).map((m) => m.name);
+    void syncToBackend(activeNames, queryClient);
   };
 
   const handleAdd = (data: Omit<Medication, "id" | "active">) => {

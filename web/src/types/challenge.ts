@@ -73,6 +73,7 @@ export interface Challenge {
   participant_count?: number;
   my_progress?: number;      /* 내 달성일 수 */
   total_days?: number;       /* 전체 기간 일 수 */
+  achievement_rate?: number; /* 달성률 % (그룹: 전체 멤버 기준, 개인: 내 기준) */
   missed_count?: number;     /* 누락 횟수 */
   my_participant_status?: ParticipantStatus | null;  /* 내 참여 상태 (mine 쿼리 시) */
 }
@@ -116,6 +117,7 @@ export interface ChallengeParticipant {
   status: ParticipantStatus;
   joined_at: string;
   progress_days?: number;
+  achievement_rate?: number; /* 개인 달성률 % */
   missed_count?: number;
   user?: {
     id: string; /* UUID */

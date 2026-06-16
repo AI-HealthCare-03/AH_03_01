@@ -19,7 +19,6 @@ import ReportModal from "@/components/community/ReportModal";
 
 interface GroupMemberTabProps {
   challengeId: number;
-  totalDays?: number;
 }
 
 function getInitial(name?: string): string {
@@ -29,7 +28,6 @@ function getInitial(name?: string): string {
 
 export default function GroupMemberTab({
   challengeId,
-  totalDays,
 }: GroupMemberTabProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
@@ -152,8 +150,7 @@ export default function GroupMemberTab({
           <ul className="space-y-3">
             {approved.map((p) => {
               const name = p.user?.nickname ?? p.user?.name ?? `유저${p.user_id}`;
-              const progress = p.progress_days ?? 0;
-              const pct = totalDays && totalDays > 0 ? Math.round((progress / totalDays) * 100) : 0;
+              const pct = p.achievement_rate ?? 0;
               const isCrisis = (p.missed_count ?? 0) >= 1;
               const isSelf = me?.id === p.user_id;
               const isKickConfirm = kickConfirmUserId === p.user_id;
@@ -186,7 +183,7 @@ export default function GroupMemberTab({
                         />
                       </div>
                       <span className="text-xs text-text-tertiary shrink-0">
-                        {progress}/{totalDays ?? "?"}일
+                        {pct}%
                       </span>
                     </div>
                   </div>
