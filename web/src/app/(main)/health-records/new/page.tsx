@@ -16,7 +16,7 @@ import { useCreateHealthRecord } from "@/hooks/queries/useCreateHealthRecord";
 import { useMe } from "@/hooks/queries/useMe";
 import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
-import { fetchHealthProfileDetail } from "@/lib/api/health";
+import { fetchHealthProfileDetail, fetchHealthRecordList } from "@/lib/api/health";
 import type {
   WizardFormStep1,
   WizardFormStep2,
@@ -84,30 +84,43 @@ export default function HealthRecordsNewPage() {
   /* 기존 프로필 로드 — 수정 모드 판별 */
   const [existingProfile, setExistingProfile] = useState<HealthProfileDetail | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
+  /* 몸무게·허리둘레는 프로필보다 갱신이 잦은 일별 기록의 최신값을 우선 prefill 한다
+     (프로필은 갱신이 드물어 옛 값이 채워지던 문제). 키는 일별 기록이 없어 프로필 사용. */
+  const [latestWeightKg, setLatestWeightKg] = useState<number | undefined>(undefined);
+  const [latestWaistCm, setLatestWaistCm] = useState<number | undefined>(undefined);
   /* 이미 방문한(또는 prefill된) 단계 번호 집합 — 수정 모드에서만 클릭 이동 허용 */
   const [visitedSteps, setVisitedSteps] = useState<Set<number>>(new Set([1]));
   /* 수정 모드 = 기존 프로필 존재 */
   const isEditMode = profileLoaded && existingProfile !== null;
 
   useEffect(() => {
-    fetchHealthProfileDetail().then((profile) => {
+    Promise.all([
+      fetchHealthProfileDetail(),
+      fetchHealthRecordList({ recordType: "WEIGHT", size: 1 }),
+      fetchHealthRecordList({ recordType: "WAIST", size: 1 }),
+    ]).then(([profile, weightList, waistList]) => {
       if (profile) {
         setExistingProfile(profile);
         /* 수정 모드: 모든 단계를 방문 가능으로 표시 */
         setVisitedSteps(new Set([1, 2, 3, 4, 5, 6, 7]));
       }
+      if (weightList?.[0]?.primary_value) setLatestWeightKg(parseFloat(weightList[0].primary_value));
+      if (waistList?.[0]?.primary_value) setLatestWaistCm(parseFloat(waistList[0].primary_value));
       setProfileLoaded(true);
     });
   }, []);
 
-  /* prefill 헬퍼 — 기존 프로필에서 각 스텝 defaultValues 생성 */
+  /* prefill 헬퍼 — 기존 프로필/최신 기록에서 각 스텝 defaultValues 생성 */
   const prefillStep1 = (): Partial<WizardFormStep1> | undefined => {
-    if (!existingProfile) return undefined;
     const p = existingProfile;
+    /* 몸무게·허리둘레: 최신 기록 우선 → 프로필 폴백. 키: 프로필. */
+    const weight = latestWeightKg ?? (p?.weight_kg != null ? Number(p.weight_kg) : undefined);
+    const waist = latestWaistCm ?? (p?.waist_cm != null ? Number(p.waist_cm) : undefined);
+    if (!p && weight === undefined && waist === undefined) return undefined;
     return {
-      height_cm: p.height_cm !== undefined ? String(p.height_cm) : "",
-      weight_kg: p.weight_kg !== undefined ? String(p.weight_kg) : "",
-      waist_cm: p.waist_cm !== undefined ? String(p.waist_cm) : "",
+      height_cm: p?.height_cm != null ? String(p.height_cm) : "",
+      weight_kg: weight !== undefined ? String(weight) : "",
+      waist_cm: waist !== undefined ? String(waist) : "",
     };
   };
 
@@ -418,7 +431,11 @@ export default function HealthRecordsNewPage() {
         onStepClick={isEditMode ? (s) => setStep(s as Step) : undefined}
       >
         {step === 1 && (
+          /* key: 프로필 로드는 비동기라 Step1(첫 화면)이 로드 전 마운트되면 prefill 이 비어
+             react-hook-form 이 이후 defaultValues 변경을 무시한다. 로드 완료 시 remount 해
+             최신 저장값(키·몸무게·허리둘레)으로 채운다. */
           <StepMeasure
+            key={profileLoaded ? "profile-loaded" : "profile-loading"}
             defaultValues={prefillStep1()}
             onSubmit={handleStep1}
             isLoading={createProfile.isPending || createRecord.isPending}
