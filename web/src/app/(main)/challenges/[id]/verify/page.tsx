@@ -196,8 +196,8 @@ export default function VerifyPage({ params }: VerifyPageProps) {
     );
   }
 
-  /* 오늘 이미 인증한 경우 */
-  if (alreadyVerifiedToday) {
+  /* 오늘 이미 인증한 경우 — 보상 모달이 열려 있으면 건너뜀 */
+  if (alreadyVerifiedToday && !rewardOpen) {
     return (
       <div className="max-w-md mx-auto px-5 py-16 text-center">
         <p className="text-5xl mb-4" aria-hidden="true">✅</p>
