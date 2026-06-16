@@ -479,31 +479,56 @@ def _get_top5_features(
         # 고혈압1기 등)인 사용자에서 핵심 위험인자(혈당·혈압)가 최고위험 클래스 대비
         # 음수가 되어 "위험 감소↓" 로 뒤집혀 점수와 모순된다. 예측 클래스로 설명해야
         # positive = 해당 위험 단계로의 기여 증가↑ 로 점수 방향과 일치한다.
+        explained_class: int | None = None
         if isinstance(shap_vals, list):
             risk_cls_idx = min(predicted_class, len(shap_vals) - 1)
             sv = np.array(shap_vals[risk_cls_idx]).flatten()[: len(feature_cols)]
+            explained_class = risk_cls_idx
         elif isinstance(shap_vals, np.ndarray) and shap_vals.ndim == 3:
             risk_cls_idx = min(predicted_class, shap_vals.shape[2] - 1)
             sv = shap_vals[0, :, risk_cls_idx]
+            explained_class = risk_cls_idx
         else:
+            # 단일 배열 = 양성(위험) 클래스 기준 → 부호가 곧 위험 방향.
             sv = np.array(shap_vals).flatten()[: len(feature_cols)]
+
+        # negate: 정상(class 0) 클래스를 설명 중이면 SHAP 부호는 '정상쪽 기여' 를 뜻하므로
+        #   위험도 기준 방향으로 통일하기 위해 부호를 반전한다(정상 지표가 "위험 증가" 로 뒤집히는
+        #   문제 해결). 이진 모델의 단일 배열은 이미 양성(위험) 클래스 기준이라 반전하지 않는다.
+        # normal_framing: 정상으로 예측된 사용자에게는 위험 증가/감소 대신 '정상 범위/주의 요인'
+        #   전용 문구로 안내한다(예측 결과가 정상인데 위험 표현이 나오는 혼란 방지).
+        negate = explained_class == 0
+        normal_framing = predicted_class == 0
 
         top_idx = np.argsort(np.abs(sv))[-n:][::-1]
         result = []
         for i in top_idx:
             fname = feature_cols[i] if i < len(feature_cols) else f"feat_{i}"
-            contribution = float(sv[i])
+            kor = FEAT_KOR.get(fname, fname)
+            # risk_weight: 양수 = 위험 증가 방향, 음수 = 위험 감소 방향.
+            risk_weight = -float(sv[i]) if negate else float(sv[i])
+            if normal_framing:
+                if risk_weight <= 0:  # 정상 범위라 위험을 낮게 유지
+                    direction = "정상 범위"
+                    desc = FEAT_DESC_DOWN.get(fname, f"{kor}이(가) 정상 범위라 위험을 낮게 유지하고 있어요")
+                else:  # 정상이지만 상대적으로 주의가 필요한 요인
+                    direction = "주의 요인"
+                    desc = FEAT_DESC_UP.get(fname, f"{kor}이(가) 위험을 약간 높이는 요인이에요")
+            else:
+                direction = "위험 증가↑" if risk_weight > 0 else "위험 감소↓"
+                desc = (
+                    FEAT_DESC_UP.get(fname, f"{kor}이(가) 위험도를 높이고 있어요")
+                    if risk_weight > 0
+                    else FEAT_DESC_DOWN.get(fname, f"{kor}이(가) 위험도를 낮추고 있어요")
+                )
             result.append(
                 {
                     "feature": fname,
-                    "name_kor": FEAT_KOR.get(fname, fname),
-                    "shap_contribution": round(contribution, 4),
-                    "direction": "위험 증가↑" if contribution > 0 else "위험 감소↓",
-                    "user_description": (
-                        FEAT_DESC_UP.get(fname, f"{FEAT_KOR.get(fname, fname)}이(가) 위험도를 높이고 있어요")
-                        if contribution > 0
-                        else FEAT_DESC_DOWN.get(fname, f"{FEAT_KOR.get(fname, fname)}이(가) 위험도를 낮추고 있어요")
-                    ),
+                    "name_kor": kor,
+                    "shap_contribution": round(risk_weight, 4),
+                    "direction": direction,
+                    "normal_context": normal_framing,
+                    "user_description": desc,
                 }
             )
         return result
