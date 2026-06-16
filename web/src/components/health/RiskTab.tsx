@@ -82,7 +82,7 @@ const GRADE_LABEL: Record<RiskGrade, string> = {
 
 /* ── 파생변수 툴팁 설명 ──────────────── */
 
-const FACTOR_TOOLTIP: Record<string, string> = {
+export const FACTOR_TOOLTIP: Record<string, string> = {
   bp_cat:
     "혈압을 4단계로 구분한 지표입니다. 정상 → 주의혈압 → 고혈압1기 → 고혈압2기 순으로 위험도가 높아집니다.",
   bmi_age_index:
@@ -90,7 +90,7 @@ const FACTOR_TOOLTIP: Record<string, string> = {
   metabolic_age:
     "혈당·비만·운동·수면 상태를 종합해 계산한 몸의 실제 나이입니다. 실제 나이보다 높을수록 건강 관리가 필요합니다.",
   GLYCEMIC_BURDEN_PROXY:
-    "혈당 관련 15개 지표를 종합한 혈당 부담 점수입니다. 높을수록 당뇨 위험이 큽니다.",
+    "공복혈당·당화혈색소 추정치·혈당 상호작용(나이·비만·나트륨) 등 혈당 관련 15개 지표를 종합한 혈당 부담 점수입니다. 높을수록 당뇨 위험이 큽니다.",
   lipid_hidden_risk_proxy:
     "혈액검사 없이 생활습관(체형·음주·운동·호르몬)으로 추정한 숨은 지질 위험 점수입니다.",
   body_metabolic_score:
