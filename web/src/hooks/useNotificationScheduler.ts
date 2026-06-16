@@ -200,6 +200,8 @@ export function useNotificationScheduler() {
               const isChallenge = n.target_type === "VERIFICATION";
               const isCommunity = n.target_type === "POST" || n.target_type === "COMMENT";
               if (n.notification_type === "RISK_CHANGE") continue; // 독립 riskPoll에서 처리
+              // KICK/INVITE 는 kickPoll 에서 독립 처리 — 소셜 폴링에서 중복/오표시 방지
+              if (n.notification_type === "CHALLENGE_KICK" || n.notification_type === "CHALLENGE_INVITE") continue;
               if (isChallenge && !settings.challengeInteraction) continue;
               if (isCommunity && !settings.community) continue;
 
