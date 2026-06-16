@@ -252,6 +252,19 @@ async def list_challenges(
             for ch in items
         ],
     )
+
+    # 참여하기 탭: 비공개 그룹 챌린지 중 정원이 찬 건 제외
+    if not mine:
+        payload.items = [
+            item for item in payload.items
+            if not (
+                item.visibility == ChallengeVisibility.PRIVATE
+                and item.max_participants is not None
+                and group_active_members.get(item.id, 0) >= item.max_participants
+            )
+        ]
+        payload.total_elements = len(payload.items)
+
     return Response(payload.model_dump(), status_code=status.HTTP_200_OK)
 
 
