@@ -52,6 +52,13 @@ class ResetPasswordRequest(BaseModel):
     new_password: Annotated[str, Field(min_length=8, max_length=64), AfterValidator(validate_password)]
 
 
+class UnlockAccountRequest(BaseModel):
+    """로그인 5회 실패 잠금 해제 — 이메일 본인 인증 + email/name 일치 필요(비밀번호 재설정과 동일 패턴)."""
+
+    email: Annotated[EmailStr, Field(max_length=40)]
+    name: Annotated[str, Field(min_length=1, max_length=20)]
+
+
 class RestoredAccountResponse(BaseModel):
     """복구 완료 응답. 이메일 인증을 마친 본인이므로 상세 통계 포함."""
 

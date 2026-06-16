@@ -26,6 +26,10 @@ from app.services.jwt import JwtService
 # 탈퇴(soft delete) 후 개인정보 보관 기간. 이 기간 내에는 복구 가능, 경과 시 파기(개인정보처리방침 기준).
 ACCOUNT_RETENTION_DAYS = 30
 
+# 로그인 연속 실패 잠금 정책 — 임계 도달 시 이메일 인증으로만 해제.
+LOGIN_FAIL_LOCK_THRESHOLD = 5
+ACCOUNT_LOCKED_DETAIL = "로그인 5회 실패로 계정이 잠겼습니다. 이메일 인증으로 잠금을 해제해 주세요."
+
 logger = logging.getLogger(__name__)
 
 
@@ -77,8 +81,16 @@ class AuthService:
                 status_code=status.HTTP_400_BAD_REQUEST, detail="이메일 또는 비밀번호가 올바르지 않습니다."
             )
 
+        # 로그인 연속 실패 잠금: 임계 도달 시 비밀번호 검증 전에 차단하고 이메일 인증 해제로 안내.
+        if user.login_fail_count >= LOGIN_FAIL_LOCK_THRESHOLD:
+            raise HTTPException(status_code=status.HTTP_423_LOCKED, detail=ACCOUNT_LOCKED_DETAIL)
+
         # 비밀번호 검증
         if not verify_password(data.password, user.hashed_password):
+            await self.user_repo.increment_login_fail(user.id)
+            # 이번 실패로 임계 도달 시 잠금 안내(아니면 기존과 동일한 일반 메시지 — 잔여 횟수 비노출).
+            if user.login_fail_count + 1 >= LOGIN_FAIL_LOCK_THRESHOLD:
+                raise HTTPException(status_code=status.HTTP_423_LOCKED, detail=ACCOUNT_LOCKED_DETAIL)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="이메일 또는 비밀번호가 올바르지 않습니다."
             )
@@ -86,6 +98,10 @@ class AuthService:
         # 활성 사용자 체크
         if not user.is_active:
             raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="비활성화된 계정입니다.")
+
+        # 로그인 성공 — 누적 실패 카운트 초기화.
+        if user.login_fail_count:
+            await self.user_repo.reset_login_fail(user.id)
 
         return user
 
@@ -200,6 +216,23 @@ class AuthService:
         await self.email_verification.consume(email)
         # 감사 추적: 비밀번호 재설정 — PII 마스킹(이메일)하여 기록.
         logger.info("비밀번호 재설정 user_id=%s email=%s", user.id, self._mask_email(email))
+
+    async def unlock_account(self, email: str, name: str) -> None:
+        """로그인 연속 실패로 잠긴 계정을 이메일 본인 인증 후 해제(실패 카운트 초기화).
+
+        비밀번호 재설정과 동일하게 email 본인 인증 + email/name 일치로 계정을 식별한다.
+        """
+        if not await self.email_verification.is_verified(email):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이메일 본인 인증이 필요합니다.")
+
+        user = await self.user_repo.get_user_by_email(email)
+        if user is None or user.is_deleted or user.name != name:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="일치하는 계정을 찾을 수 없습니다.")
+
+        await self.user_repo.reset_login_fail(user.id)
+        await self.email_verification.consume(email)
+        # 감사 추적: 계정 잠금 해제 — PII 마스킹(이메일)하여 기록.
+        logger.info("계정 잠금 해제 user_id=%s email=%s", user.id, self._mask_email(email))
 
     @staticmethod
     async def _account_stats(user_id: object) -> dict:

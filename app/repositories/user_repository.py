@@ -3,6 +3,7 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import EmailStr
+from tortoise.expressions import F
 
 from app.core import config
 from app.models.users import Gender, User
@@ -82,6 +83,14 @@ class UserRepository:
 
     async def update_last_login(self, user_id: UUID) -> None:
         await self._model.filter(id=user_id).update(last_login=datetime.now(config.TIMEZONE))
+
+    async def increment_login_fail(self, user_id: UUID) -> None:
+        """로그인 실패 카운트 원자적 +1 (동시 실패 경합 방지)."""
+        await self._model.filter(id=user_id).update(login_fail_count=F("login_fail_count") + 1)
+
+    async def reset_login_fail(self, user_id: UUID) -> None:
+        """로그인 성공·잠금 해제 시 실패 카운트 초기화."""
+        await self._model.filter(id=user_id).update(login_fail_count=0)
 
     async def update_instance(self, user: User, data: dict[str, Any]) -> None:
         update_fields = []
