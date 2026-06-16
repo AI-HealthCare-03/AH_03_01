@@ -96,6 +96,19 @@ MAX_REVISIONS = 2
 RETRIEVE_TOP_K_MEDICAL = 8  # ChatRAGGraph 와 동일 — 4측면 커버
 RISK_HIGH_THRESHOLD = 50.0  # diseases[] 필터로 retrieve 보강하는 임계 (팀원 CRAG 패턴)
 
+# 위험도 변화 알림 메시지용 라벨 (persist_disease_risk 에서 사용)
+_DISEASE_LABEL: dict[str, str] = {
+    "HYPERTENSION": "고혈압",
+    "DIABETES": "당뇨",
+    "CARDIOVASCULAR": "심혈관",
+}
+_RISK_LABEL: dict[str, str] = {
+    "NORMAL": "정상",
+    "CAUTION": "주의",
+    "RISK": "위험",
+    "HIGH_RISK": "고위험",
+}
+
 MEDICAL_DISCLAIMER = (
     "본 결과는 의학적 진단이 아닌 참고용 위험도 지표입니다. 정확한 평가와 처방은 담당 의사 또는 약사와 상담하세요."
 )
@@ -607,19 +620,6 @@ async def persist_disease_risk(state: RiskState) -> dict[str, Any]:
     # H-3: 같은 호출의 3 disease persist 를 한 트랜잭션으로 묶어 부분 실패 시
     # row 가 일부만 남는 일관성 깨짐을 차단. (노드 간 gap — ml_inference SUCCESS
     # 후 그래프 crash 시나리오는 backlog: monitoring 으로 보정 예정.)
-    # 트랜잭션 전 유효한 예측 파싱 + 이전 risk_level 수집
-    _DISEASE_LABEL: dict[str, str] = {
-        "HYPERTENSION": "고혈압",
-        "DIABETES": "당뇨",
-        "CARDIOVASCULAR": "심혈관",
-    }
-    _RISK_LABEL: dict[str, str] = {
-        "NORMAL": "정상",
-        "CAUTION": "주의",
-        "RISK": "위험",
-        "HIGH_RISK": "고위험",
-    }
-
     valid_preds: list[tuple[dict[str, Any], DiseaseType, RiskLevel]] = []
     for p in predictions:
         try:
@@ -627,10 +627,17 @@ async def persist_disease_risk(state: RiskState) -> dict[str, Any]:
         except (KeyError, ValueError):
             continue
 
+    # 이전 risk_level 을 트랜잭션 외부에서 단일 쿼리로 수집.
+    # 트랜잭션 안에서 읽어도 동일한 결과이나, 예측은 단일 사용자의 순차 흐름이므로
+    # race condition 가능성이 없어 외부에서 미리 읽는 것으로 충분하다.
+    disease_types = [dt for _, dt, _ in valid_preds]
+    all_prev = await DiseaseRisk.filter(
+        user_id=user_id, disease_type__in=disease_types
+    ).order_by("-calculated_at")
     prev_levels: dict[DiseaseType, RiskLevel | None] = {}
-    for _, dt, _ in valid_preds:
-        prev = await DiseaseRisk.filter(user_id=user_id, disease_type=dt).order_by("-calculated_at").first()
-        prev_levels[dt] = prev.risk_level if prev else None
+    for row in all_prev:
+        if row.disease_type not in prev_levels:
+            prev_levels[row.disease_type] = row.risk_level
 
     row_ids: list[int] = []
     async with in_transaction():
