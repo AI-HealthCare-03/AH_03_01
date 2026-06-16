@@ -148,10 +148,13 @@ class ChallengeListItem(BaseModel):
     max_participants: int | None = None
     start_date: date
     end_date: date
-    progress_percent: float | None = None
+    created_at: datetime
+    # 스코프에 관계없이 항상 "내 개인 진행률" (my_progress ÷ total_days × 100)
+    # 그룹 챌린지 전체 달성률은 achievement_rate 사용 — 두 필드를 혼용하지 않도록 주의
+    my_progress_percent: float | None = None
     my_progress: int | None = None  # 내 달성일 수 (승인된 인증 횟수)
     total_days: int | None = None  # 챌린지 전체 기간 일 수
-    achievement_rate: int = 0       # 달성률 % (그룹: 전체 멤버 기준, 개인: 내 기준)
+    achievement_rate: int = 0       # 달성률 % (그룹: 전체 멤버 평균, 개인: 내 기준)
     missed_count: int | None = None  # 누락 횟수
     my_participant_status: str | None = None  # 현재 사용자의 참여 상태 (APPROVED/LEFT 등)
 
@@ -171,6 +174,7 @@ class ChallengeListResponse(BaseModel):
 
 class ParticipantResponse(BaseSerializerModel):
     id: int
+    challenge_id: int
     user_id: UUID
     role: ParticipantRole
     status: ParticipantStatus

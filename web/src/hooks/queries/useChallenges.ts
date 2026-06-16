@@ -15,7 +15,7 @@ export function useChallenges(params: {
   page?: number;
   from?: string;
   to?: string;
-  sortBy?: "start_date" | "end_date";
+  sortBy?: "created_at" | "end_date";
   enabled?: boolean;
 }) {
   const { enabled = true, ...fetchParams } = params;

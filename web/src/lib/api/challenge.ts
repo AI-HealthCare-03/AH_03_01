@@ -35,7 +35,7 @@ export async function fetchChallenges(params: {
   page?: number;
   from?: string;
   to?: string;
-  sortBy?: "start_date" | "end_date";
+  sortBy?: "created_at" | "end_date";
 }): Promise<ChallengeListResponse> {
   const { data } = await apiClient.get<ChallengeListResponse>(
     "/api/v1/challenges",

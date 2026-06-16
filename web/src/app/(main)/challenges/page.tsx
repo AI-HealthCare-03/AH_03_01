@@ -24,7 +24,7 @@ import { calcDDay } from "@/lib/dateUtils";
 
 type TabKey = "join" | "my" | "recommended";
 type MySubTab = "active" | "completed";
-type SortKey = "start_date" | "end_date" | undefined;
+type SortKey = "created_at" | "end_date" | undefined;
 type PeriodKey = "1w" | "1m" | undefined;
 
 function ChallengeListContent() {
@@ -113,8 +113,15 @@ function ChallengeListContent() {
     useChallengeRecommendations(latestPredictionId, 6);
 
   const allActiveItems = [...(activeData?.items ?? []), ...(recruitingData?.items ?? [])];
+  if (sortBy === "created_at") {
+    allActiveItems.sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+  } else if (sortBy === "end_date") {
+    allActiveItems.sort((a, b) => (a.end_date ?? "").localeCompare(b.end_date ?? ""));
+  }
   /* end_date 지난 ACTIVE/RECRUITING 챌린지는 완료 탭으로 이동 */
   const activeItems = allActiveItems.filter((c) => calcDDay(c.end_date) >= 0);
+  const personalActiveItems = activeItems.filter((c) => c.scope === "PERSONAL");
+  const groupActiveItems = activeItems.filter((c) => c.scope === "GROUP");
   const expiredActiveItems = allActiveItems.filter((c) => calcDDay(c.end_date) < 0);
   /* 탈퇴(LEFT) 챌린지도 완료 탭으로 이동 */
   const leftItems = (leftData?.items ?? []).filter(
@@ -122,6 +129,13 @@ function ChallengeListContent() {
   );
   const cancelledItems = cancelledData?.items ?? [];
   const completedItems = [...expiredActiveItems, ...leftItems, ...cancelledItems, ...(completedData?.items ?? [])];
+  if (sortBy === "created_at") {
+    completedItems.sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+  } else if (sortBy === "end_date") {
+    completedItems.sort((a, b) => (a.end_date ?? "").localeCompare(b.end_date ?? ""));
+  }
+  const personalCompletedItems = completedItems.filter((c) => c.scope === "PERSONAL");
+  const groupCompletedItems = completedItems.filter((c) => c.scope === "GROUP");
   /* 참여가능 탭: end_date 지난 챌린지 제외 */
   const groupItems = (joinData?.items ?? []).filter((c) => calcDDay(c.end_date) >= 0);
   const recommendationItems = recommendationData?.items ?? [];
@@ -182,7 +196,7 @@ function ChallengeListContent() {
             </div>
             <div className="w-px h-4 bg-border" />
             <div className="flex gap-1.5">
-              {([undefined, "start_date", "end_date"] as SortKey[]).map((s) => (
+              {([undefined, "created_at", "end_date"] as SortKey[]).map((s) => (
                 <button
                   key={String(s)}
                   type="button"
@@ -194,7 +208,7 @@ function ChallengeListContent() {
                       : "bg-white text-text-secondary border-border hover:border-brand-black",
                   ].join(" ")}
                 >
-                  {s === undefined ? "기본순" : s === "start_date" ? "시작 날짜순" : "마감 임박순"}
+                  {s === undefined ? "기본순" : s === "created_at" ? "만든 날짜순" : "마감 임박순"}
                 </button>
               ))}
             </div>
@@ -294,8 +308,27 @@ function ChallengeListContent() {
                   </Link>
                 </div>
               ) : (
-                <div className="space-y-3 md:grid md:grid-cols-3 md:gap-4 md:space-y-0">
-                  {activeItems.map((c) => <ChallengeCard key={c.id} challenge={c} />)}
+                <div className="space-y-6">
+                  {personalActiveItems.length > 0 && (
+                    <div>
+                      <p className="text-sm font-bold text-text-secondary mb-3">
+                        개인 챌린지 <span className="font-normal text-text-tertiary">({personalActiveItems.length})</span>
+                      </p>
+                      <div className="space-y-3 md:grid md:grid-cols-3 md:gap-4 md:space-y-0">
+                        {personalActiveItems.map((c) => <ChallengeCard key={c.id} challenge={c} />)}
+                      </div>
+                    </div>
+                  )}
+                  {groupActiveItems.length > 0 && (
+                    <div>
+                      <p className="text-sm font-bold text-text-secondary mb-3">
+                        그룹 챌린지 <span className="font-normal text-text-tertiary">({groupActiveItems.length})</span>
+                      </p>
+                      <div className="space-y-3 md:grid md:grid-cols-3 md:gap-4 md:space-y-0">
+                        {groupActiveItems.map((c) => <ChallengeCard key={c.id} challenge={c} />)}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </>
@@ -315,8 +348,27 @@ function ChallengeListContent() {
                   <p className="text-sm font-semibold text-text-secondary">완료된 챌린지가 없어요</p>
                 </div>
               ) : (
-                <div className="space-y-3 md:grid md:grid-cols-3 md:gap-4 md:space-y-0">
-                  {completedItems.map((c) => <ChallengeCard key={c.id} challenge={c} showCTA={false} />)}
+                <div className="space-y-6">
+                  {personalCompletedItems.length > 0 && (
+                    <div>
+                      <p className="text-sm font-bold text-text-secondary mb-3">
+                        개인 챌린지 <span className="font-normal text-text-tertiary">({personalCompletedItems.length})</span>
+                      </p>
+                      <div className="space-y-3 md:grid md:grid-cols-3 md:gap-4 md:space-y-0">
+                        {personalCompletedItems.map((c) => <ChallengeCard key={c.id} challenge={c} showCTA={false} />)}
+                      </div>
+                    </div>
+                  )}
+                  {groupCompletedItems.length > 0 && (
+                    <div>
+                      <p className="text-sm font-bold text-text-secondary mb-3">
+                        그룹 챌린지 <span className="font-normal text-text-tertiary">({groupCompletedItems.length})</span>
+                      </p>
+                      <div className="space-y-3 md:grid md:grid-cols-3 md:gap-4 md:space-y-0">
+                        {groupCompletedItems.map((c) => <ChallengeCard key={c.id} challenge={c} showCTA={false} />)}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </>
