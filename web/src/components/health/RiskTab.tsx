@@ -11,6 +11,7 @@ import { compareAndPushRiskNotifications } from "@/lib/riskNotification";
 import { useMe } from "@/hooks/queries/useMe";
 import { useProfileCompleteness } from "@/hooks/queries/useProfileCompleteness";
 import RiskSemiGauge from "@/components/health/RiskSemiGauge";
+import { renderMarkdown } from "@/components/community/MarkdownEditor";
 import { CATEGORY_CONFIG } from "@/components/challenges/common/ChallengeCategoryIcon";
 import type { RiskGrade, DiseaseType, ChallengeCategory } from "@/types/api";
 import type { RagRiskRecommendationResponse, RecommendedChallengeItem } from "@/types/health";
@@ -702,16 +703,14 @@ function AiSuggestions({ ragResult }: AiSuggestionsProps) {
         <h3 className="font-bold text-text-primary">AI 맞춤 제안</h3>
       </div>
 
-      {/* AI 권고 요약 (LLM 답변에서 첫 단락 — 전체 덤프 대신 핵심 1~2줄) */}
+      {/* AI 권고 요약 — LLM 답변을 마크다운으로 렌더(볼드·줄바꿈·불릿). bg-surface 로 다크모드 가독성 확보. */}
       {ragResult.answer && (
-        <div className="bg-[#f8f9fa] rounded-[12px] p-4">
+        <div className="bg-surface rounded-[12px] p-4">
           <p className="text-xs font-semibold text-text-tertiary mb-1">AI 분석 요약</p>
-          <p className="text-sm text-text-secondary leading-relaxed">
-            {ragResult.answer
-              .split(/\n\n+/)
-              .map((p) => p.replace(/^#+\s*/, "").trim())
-              .find((p) => p.length > 10) ?? ""}
-          </p>
+          <div
+            className="text-sm text-text-secondary leading-relaxed [&_strong]:font-semibold [&_strong]:text-text-primary [&_li]:my-0.5"
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(ragResult.answer) }}
+          />
         </div>
       )}
 

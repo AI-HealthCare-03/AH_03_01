@@ -113,6 +113,15 @@ html.dark .bg-surface {
   background-color: #2e2e2e !important;
 }
 
+/* 위험도 탭 앰버(크림) 하이라이트 — 다크모드 대비.
+   bg-[#fffde7] 카드들은 내부 텍스트가 시맨틱 토큰(다크 시 밝아짐)이라, 크림 배경 그대로면
+   밝은 글자가 안 보였다(추천 챌린지 제목·하단 안내문 등). 어두운 앰버 톤으로 전환한다. */
+html.dark .bg-\[\#fffde7\] { background-color: #2c2718 !important; }
+html.dark .bg-\[\#fff3cd\] { background-color: #3d341a !important; }
+html.dark .hover\:bg-\[\#fff9c4\]:hover { background-color: #3a3320 !important; }
+html.dark .border-\[\#ffe082\] { border-color: #5c4a1f !important; }
+html.dark .text-\[\#856404\] { color: #e8c860 !important; }
+
 /* 테두리 */
 html.dark .border-border {
   border-color: #3a3a3a !important;
