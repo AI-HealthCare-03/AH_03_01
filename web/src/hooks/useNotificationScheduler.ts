@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { MEDICATION_STORAGE_KEY, type Medication } from "@/components/health/MedicationManager";
 import { pushNotification } from "@/components/layout/NotificationDropdown";
-import { notifKickPollKey, notifLastSeenKey, notifSettingsKey, notifSocialPollKey } from "@/lib/notifKeys";
+import { notifKickPollKey, notifLastSeenKey, notifRiskPollKey, notifSettingsKey, notifSocialPollKey } from "@/lib/notifKeys";
 import { listNotifications } from "@/lib/api/notifications";
 import { useAuthStore } from "@/stores/auth";
 
@@ -116,6 +116,7 @@ export function useNotificationScheduler() {
   const scheduleAllRef = useRef<(() => void) | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const kickPollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const riskPollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   useEffect(() => {
@@ -198,6 +199,7 @@ export function useNotificationScheduler() {
             for (const n of notifs) {
               const isChallenge = n.target_type === "VERIFICATION";
               const isCommunity = n.target_type === "POST" || n.target_type === "COMMENT";
+              if (n.notification_type === "RISK_CHANGE") continue; // 독립 riskPoll에서 처리
               if (isChallenge && !settings.challengeInteraction) continue;
               if (isCommunity && !settings.community) continue;
 
@@ -214,6 +216,28 @@ export function useNotificationScheduler() {
         };
         pollIntervalRef.current = setInterval(poll, 30_000);
       }
+
+      // ── 위험도 변화 알림 폴링 (설정과 무관하게 항상 수신, 독립 cursor) ──
+      if (riskPollIntervalRef.current) {
+        clearInterval(riskPollIntervalRef.current);
+        riskPollIntervalRef.current = null;
+      }
+      const riskPoll = async () => {
+        try {
+          const lastPoll = localStorage.getItem(notifRiskPollKey())
+            ?? new Date(Date.now() - 60_000).toISOString();
+          const now = new Date().toISOString();
+          const notifs = await listNotifications(lastPoll);
+          localStorage.setItem(notifRiskPollKey(), now);
+
+          for (const n of notifs) {
+            if (n.notification_type !== "RISK_CHANGE") continue;
+            pushNotification({ category: "위험도", title: "⚠️ 위험도 변화", body: n.message });
+            await sendBrowserNotification("⚠️ 위험도 변화", n.message);
+          }
+        } catch { /* 무시 */ }
+      };
+      riskPollIntervalRef.current = setInterval(riskPoll, 30_000);
 
       // ── 강퇴 알림 폴링 (설정과 무관하게 항상 수신, 독립 cursor) ──
       if (kickPollIntervalRef.current) {
@@ -275,6 +299,7 @@ export function useNotificationScheduler() {
       timers.forEach(clearTimeout);
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
       if (kickPollIntervalRef.current) clearInterval(kickPollIntervalRef.current);
+      if (riskPollIntervalRef.current) clearInterval(riskPollIntervalRef.current);
       window.removeEventListener("notif-reschedule", handleReschedule);
       window.removeEventListener("storage", handleStorage);
     };

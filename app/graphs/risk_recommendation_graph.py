@@ -75,7 +75,9 @@ from app.models.ml_inference import (
     MLInferenceRequest,
     MLInferenceStatus,
 )
+from app.models.notifications import NotificationType
 from app.repositories.challenge_recommendation_repository import save_recommendations
+from app.repositories.notification_repository import NotificationRepository
 from app.services.ml.challenge_eligibility_filter import EligibleTemplate, filter_eligible_templates
 from app.services.ml.retrieval import RetrievedChunk, retrieve
 from app.services.ml.risk_predictor import (
@@ -605,14 +607,34 @@ async def persist_disease_risk(state: RiskState) -> dict[str, Any]:
     # H-3: 같은 호출의 3 disease persist 를 한 트랜잭션으로 묶어 부분 실패 시
     # row 가 일부만 남는 일관성 깨짐을 차단. (노드 간 gap — ml_inference SUCCESS
     # 후 그래프 crash 시나리오는 backlog: monitoring 으로 보정 예정.)
+    # 트랜잭션 전 유효한 예측 파싱 + 이전 risk_level 수집
+    _DISEASE_LABEL: dict[str, str] = {
+        "HYPERTENSION": "고혈압",
+        "DIABETES": "당뇨",
+        "CARDIOVASCULAR": "심혈관",
+    }
+    _RISK_LABEL: dict[str, str] = {
+        "NORMAL": "정상",
+        "CAUTION": "주의",
+        "RISK": "위험",
+        "HIGH_RISK": "고위험",
+    }
+
+    valid_preds: list[tuple[dict[str, Any], DiseaseType, RiskLevel]] = []
+    for p in predictions:
+        try:
+            valid_preds.append((p, DiseaseType(p["disease_type"]), RiskLevel(p["risk_level"])))
+        except (KeyError, ValueError):
+            continue
+
+    prev_levels: dict[DiseaseType, RiskLevel | None] = {}
+    for _, dt, _ in valid_preds:
+        prev = await DiseaseRisk.filter(user_id=user_id, disease_type=dt).order_by("-calculated_at").first()
+        prev_levels[dt] = prev.risk_level if prev else None
+
     row_ids: list[int] = []
     async with in_transaction():
-        for p in predictions:
-            try:
-                disease_type = DiseaseType(p["disease_type"])
-                risk_level = RiskLevel(p["risk_level"])
-            except (KeyError, ValueError):
-                continue
+        for p, disease_type, risk_level in valid_preds:
             # guideline 매칭 (없으면 null)
             guideline = await DiseaseRiskGuideline.filter(disease_type=disease_type, risk_level=risk_level).first()
             row = await DiseaseRisk.create(
@@ -626,6 +648,22 @@ async def persist_disease_risk(state: RiskState) -> dict[str, Any]:
                 guideline_id=guideline.id if guideline else None,
             )
             row_ids.append(row.id)
+
+            # 이전 risk_level 과 다를 때만 알림 생성
+            prev_level = prev_levels.get(disease_type)
+            if prev_level is not None and prev_level != risk_level:
+                disease_label = _DISEASE_LABEL.get(disease_type.value, disease_type.value)
+                prev_label = _RISK_LABEL.get(prev_level.value, prev_level.value)
+                new_label = _RISK_LABEL.get(risk_level.value, risk_level.value)
+                await NotificationRepository().create(
+                    recipient_id=user_id,
+                    actor_id=None,
+                    notification_type=NotificationType.RISK_CHANGE,
+                    target_type="DISEASE_RISK",
+                    target_id=row.id,
+                    message=f"{disease_label} 위험도가 '{prev_label}'에서 '{new_label}'으로 변했습니다.",
+                )
+
     return {"disease_risk_row_ids": row_ids}
 
 

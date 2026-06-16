@@ -9,3 +9,5 @@ export const notifLastSeenKey   = () => `notif-last-seen:${activeUserId()}`;
 export const notifSettingsKey   = () => `notification-settings:${activeUserId()}`;
 export const notifSocialPollKey = () => `notification-social-poll:${activeUserId()}`;
 export const notifKickPollKey   = () => `notification-kick-poll:${activeUserId()}`;
+export const notifRiskPollKey   = () => `notification-risk-poll:${activeUserId()}`;
+export const riskLevelCacheKey  = () => `risk-level-cache:${activeUserId()}`;
