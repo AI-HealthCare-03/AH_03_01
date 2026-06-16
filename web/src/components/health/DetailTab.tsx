@@ -173,8 +173,10 @@ export default function DetailTab() {
   /* 선택 날짜에 입력 데이터가 전혀 없으면 '데이터 없음'으로 안내(데이터 row 미표시). */
   const noDataForDate = hasDate && (dateAnyRecords?.length ?? 0) === 0;
 
-  const recVal = (list?: { primary_value: string }[]): number | null =>
-    list?.[0]?.primary_value != null ? parseFloat(list[0].primary_value) : null;
+  const recVal = (list?: { primary_value: string }[]): number | null => {
+    const v = parseFloat(list?.[0]?.primary_value ?? "");
+    return isFinite(v) ? v : null;
+  };
   const profileWeight = profile?.weight_kg != null ? Number(profile.weight_kg) : null;
   const profileWaist = profile?.waist_cm != null ? Number(profile.waist_cm) : null;
 

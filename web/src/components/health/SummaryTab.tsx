@@ -130,16 +130,17 @@ export default function SummaryTab() {
   const activeBg = noDataForDate ? null : hasDateFilter ? (bgDateList?.[0] ?? null) : (bgList?.[0] ?? null);
 
   /* ── 값 파싱 ── */
+  /* 숫자 파싱 — 비정상 문자열(NaN·Infinity)은 null 로 떨궈 'NaN' 표시를 막는다. */
+  const recNum = (s?: string | null): number | null => {
+    const v = parseFloat(s ?? "");
+    return isFinite(v) ? v : null;
+  };
   const heightCm = profile?.height_cm ?? null;
   /* 디폴트(날짜 미선택)도 최신 체중 '기록' 우선 — 프로필 체중은 갱신이 드물어,
      오늘 체중을 기록해도 프로필이 옛 값이면 BMI 가 어제처럼 보이던 문제를 막는다.
      (혈압·혈당 카드가 최신 기록을 쓰는 것과 동일한 기준으로 통일.) */
-  const latestWeightKg = weightList?.[0]
-    ? parseFloat(weightList[0].primary_value)
-    : (profile?.weight_kg ?? null);
-  const dateWeightKg = weightDateList?.[0]
-    ? parseFloat(weightDateList[0].primary_value)
-    : null;
+  const latestWeightKg = recNum(weightList?.[0]?.primary_value) ?? (profile?.weight_kg ?? null);
+  const dateWeightKg = recNum(weightDateList?.[0]?.primary_value);
   const weightKg = noDataForDate ? null : hasDateFilter ? dateWeightKg : latestWeightKg;
   const bmi = heightCm && weightKg ? calcBmi(heightCm, weightKg) : null;
 
