@@ -19,6 +19,7 @@ from app.dtos.auth import (
     SendVerificationRequest,
     SignUpRequest,
     TokenRefreshResponse,
+    UnlockAccountRequest,
     VerifyEmailRequest,
     VerifyEmailResponse,
 )
@@ -121,6 +122,18 @@ async def reset_password(
     """비밀번호 재설정(비밀번호 찾기). 이메일 본인 인증 + email/name 일치 필수. 기존과 동일한 비번 거부."""
     await auth_service.reset_password(str(payload.email), payload.name, payload.new_password)
     return Response(content={"detail": "비밀번호가 변경되었습니다."}, status_code=status.HTTP_200_OK)
+
+
+@auth_router.post("/unlock", status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
+async def unlock_account(
+    request: Request,
+    payload: UnlockAccountRequest,
+    auth_service: Annotated[AuthService, Depends(AuthService)],
+) -> Response:
+    """로그인 5회 실패로 잠긴 계정 해제. 이메일 본인 인증 + email/name 일치 필수."""
+    await auth_service.unlock_account(str(payload.email), payload.name)
+    return Response(content={"detail": "계정 잠금이 해제되었습니다."}, status_code=status.HTTP_200_OK)
 
 
 @auth_router.post("/email/send-verification", status_code=status.HTTP_202_ACCEPTED)
