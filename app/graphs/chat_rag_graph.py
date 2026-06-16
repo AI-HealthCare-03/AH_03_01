@@ -878,7 +878,8 @@ def _fmt_risks(risks: dict[str, Any]) -> list[str]:
         label = _DISEASE_KO.get(disease, disease)
         level_ko = _RISK_LEVEL_KO.get(str(data.get("risk_level", "")), str(data.get("risk_level", "")))
         score = data.get("risk_score")
-        lines.append(f"- {label}: {level_ko} ({score:.0f}점)")
+        score_str = f"{score:.0f}점" if score is not None else "측정 없음"
+        lines.append(f"- {label}: {level_ko} ({score_str})")
     return lines
 
 
