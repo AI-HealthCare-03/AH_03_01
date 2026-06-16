@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { upsertHealthProfile } from "@/lib/api/health";
 import { HEALTH_PROFILE_KEY } from "@/hooks/queries/useHealthProfile";
+import { medSnapshotKey } from "@/lib/notifKeys";
 
 /* ─────────────────────────────────────────────────────
    복약 관리 컴포넌트 — localStorage 기반
@@ -47,6 +48,18 @@ function saveMedications(list: Medication[]) {
     // 복약 데이터 변경 → 스케줄러 재실행
     window.dispatchEvent(new CustomEvent("notif-reschedule"));
   } catch { /* 무시 */ }
+}
+
+/** 오늘 스냅샷 저장 + 백엔드 동기화 (fire-and-forget) */
+async function syncToBackend(activeNames: string[], qc: QueryClient): Promise<void> {
+  const todayKey = new Date().toISOString().slice(0, 10);
+  try { localStorage.setItem(medSnapshotKey(todayKey), JSON.stringify(activeNames)); } catch { /* 무시 */ }
+  try {
+    await upsertHealthProfile({ medications: activeNames });
+    await qc.invalidateQueries({ queryKey: HEALTH_PROFILE_KEY });
+  } catch (e) {
+    console.warn("[MedicationManager] 백엔드 동기화 실패", e);
+  }
 }
 
 /* ── 시간 태그 입력 ──────────────────────────────────── */
@@ -355,11 +368,7 @@ export default function MedicationManager() {
     // localStorage에 데이터가 있으면 최초 1회 백엔드 동기화 + 오늘 스냅샷 저장
     if (saved.length > 0) {
       const activeNames = saved.filter((m) => m.active).map((m) => m.name);
-      const todayKey = new Date().toLocaleDateString("sv");
-      try { localStorage.setItem(`med-snapshot-${todayKey}`, JSON.stringify(activeNames)); } catch { /* 무시 */ }
-      void upsertHealthProfile({ medications: activeNames }).then(() => {
-        void queryClient.invalidateQueries({ queryKey: HEALTH_PROFILE_KEY });
-      }).catch((e) => { console.warn("[MedicationManager] 초기 동기화 실패", e); });
+      void syncToBackend(activeNames, queryClient);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -367,14 +376,8 @@ export default function MedicationManager() {
   const persist = (next: Medication[]) => {
     setList(next);
     saveMedications(next);
-    // 오늘 날짜 스냅샷 저장 (과거 날짜 조회 시 사용)
-    const todayKey = new Date().toLocaleDateString("sv");
     const activeNames = next.filter((m) => m.active).map((m) => m.name);
-    try { localStorage.setItem(`med-snapshot-${todayKey}`, JSON.stringify(activeNames)); } catch { /* 무시 */ }
-    // 백엔드 프로필과 동기화 (fire-and-forget)
-    void upsertHealthProfile({ medications: activeNames }).then(() => {
-      void queryClient.invalidateQueries({ queryKey: HEALTH_PROFILE_KEY });
-    }).catch((e) => { console.warn("[MedicationManager] 백엔드 동기화 실패", e); });
+    void syncToBackend(activeNames, queryClient);
   };
 
   const handleAdd = (data: Omit<Medication, "id" | "active">) => {
