@@ -136,6 +136,7 @@ class ChallengeResponse(BaseSerializerModel):
     my_progress: int | None = None  # 내 달성일 수 (승인된 인증 횟수)
     total_days: int | None = None   # 챌린지 전체 기간 일 수
     achievement_rate: int = 0       # 달성률 % (그룹: 전체 멤버 기준, 개인: 내 기준)
+    participant_count: int | None = None  # 현재 참여 인원 (그룹 챌린지)
 
 
 class ChallengeListItem(BaseModel):
@@ -157,6 +158,7 @@ class ChallengeListItem(BaseModel):
     achievement_rate: int = 0       # 달성률 % (그룹: 전체 멤버 평균, 개인: 내 기준)
     missed_count: int | None = None  # 누락 횟수
     my_participant_status: str | None = None  # 현재 사용자의 참여 상태 (APPROVED/LEFT 등)
+    participant_count: int | None = None  # 현재 참여 인원 (그룹 챌린지)
 
 
 class ChallengeListResponse(BaseModel):

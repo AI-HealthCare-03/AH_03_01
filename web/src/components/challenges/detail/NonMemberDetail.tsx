@@ -9,6 +9,7 @@ import { useJoinChallenge } from "@/hooks/queries/useJoinChallenge";
 import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
 import { dDayLabel } from "@/lib/dateUtils";
+import { formatGoalDescription } from "@/lib/challengeGoal";
 import type { Challenge } from "@/types/challenge";
 
 /* =========================================
@@ -38,6 +39,7 @@ export default function NonMemberDetail({
   const inviteCode = requiresCode ? codeInput || undefined : (initialInviteCode ?? undefined);
 
   const catConfig = CATEGORY_CONFIG[challenge.category] ?? CATEGORY_CONFIG.EXERCISE;
+  const goalDescription = formatGoalDescription(challenge);
 
   const handleJoin = () => {
     if (requiresCode && !codeInput) return;
@@ -114,6 +116,7 @@ export default function NonMemberDetail({
         <dl className="space-y-2">
           {[
             { label: "카테고리", value: catConfig.label },
+            goalDescription && { label: "목표", value: goalDescription },
             {
               label: "기간",
               value: `${challenge.start_date} ~ ${challenge.end_date}`,
@@ -128,8 +131,11 @@ export default function NonMemberDetail({
                   : "방지권",
             },
             challenge.scope === "GROUP" && {
-              label: "최대 인원",
-              value: `${challenge.max_participants}명`,
+              label: "모집 인원",
+              value:
+                challenge.participant_count !== undefined
+                  ? `${challenge.participant_count} / ${challenge.max_participants}명`
+                  : `${challenge.max_participants}명`,
             },
           ]
             .filter(Boolean)

@@ -7,6 +7,8 @@ import InviteUserModal from "@/components/challenges/detail/InviteUserModal";
 import { useToast } from "@/components/ui/Toast";
 import { useQuery } from "@tanstack/react-query";
 import { fetchChallengeFeed } from "@/lib/api/challenge";
+import { formatGoalDescription } from "@/lib/challengeGoal";
+import { CATEGORY_CONFIG } from "@/components/challenges/common/ChallengeCategoryIcon";
 import type { Challenge } from "@/types/challenge";
 import type { ChallengeParticipant } from "@/types/challenge";
 
@@ -127,6 +129,9 @@ export default function GroupInfoTab({
     (p) => (p.missed_count ?? 0) >= 1
   ).length;
 
+  const catConfig = CATEGORY_CONFIG[challenge.category] ?? CATEGORY_CONFIG.EXERCISE;
+  const goalDescription = formatGoalDescription(challenge);
+
   const isCompleted = challenge.status === "COMPLETED";
   /* 획득한 보상 = 200P / 참여자 수 (그룹은 분배) */
   const rewardPerPerson = participants.length > 0
@@ -135,6 +140,44 @@ export default function GroupInfoTab({
 
   return (
     <div className="space-y-5">
+      {/* 챌린지 정보 카드 */}
+      <div className="bg-white rounded-[16px] border border-border p-5 shadow-sm">
+        <p className="text-sm font-bold text-text-primary mb-3">챌린지 정보</p>
+        <dl className="space-y-2">
+          {[
+            { label: "카테고리", value: catConfig.label },
+            goalDescription && { label: "목표", value: goalDescription },
+            {
+              label: "기간",
+              value: `${challenge.start_date} ~ ${challenge.end_date}`,
+            },
+            {
+              label: "인증 방식",
+              value:
+                challenge.verification_type === "CHECK"
+                  ? "체크 인증"
+                  : challenge.verification_type === "PHOTO"
+                  ? "사진 인증"
+                  : "방지권",
+            },
+            {
+              label: "모집 인원",
+              value: `${participants.length} / ${challenge.max_participants ?? participants.length}명`,
+            },
+          ]
+            .filter(Boolean)
+            .map((item) => {
+              const row = item as { label: string; value: string };
+              return (
+                <div key={row.label} className="flex justify-between text-sm">
+                  <dt className="text-text-tertiary">{row.label}</dt>
+                  <dd className="font-semibold text-text-primary">{row.value}</dd>
+                </div>
+              );
+            })}
+        </dl>
+      </div>
+
       {/* 초대 코드 카드 — 방장/참여자에게만 노출됨 */}
       {challenge.invite_code && (
         <div className="bg-brand/10 border border-brand rounded-[14px] p-4 flex items-center justify-between gap-3">
