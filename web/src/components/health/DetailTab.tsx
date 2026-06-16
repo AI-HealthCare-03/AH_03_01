@@ -182,7 +182,24 @@ export default function DetailTab() {
   const familyDm = selectedDate ? null : profile?.family_dm;
   const familyHp = selectedDate ? null : profile?.family_hp;
   const pregnancyStatus = selectedDate ? null : profile?.pregnancy_status;
-  const medications = selectedDate ? null : profile?.medications;
+  const medications = (() => {
+    if (!selectedDate) {
+      // 현재 날짜: 백엔드 프로필 우선, 미동기화 시 localStorage 활성 약 목록 fallback
+      if (profile?.medications && profile.medications.length > 0) return profile.medications;
+      try {
+        const raw = localStorage.getItem("medication-list");
+        if (!raw) return null;
+        const list = JSON.parse(raw) as Array<{ name: string; active: boolean }>;
+        const names = list.filter((m) => m.active).map((m) => m.name);
+        return names.length > 0 ? names : null;
+      } catch { return null; }
+    }
+    // 과거 날짜: 해당 날짜의 복약 스냅샷 조회 (수정 불가 표시용)
+    try {
+      const raw = localStorage.getItem(`med-snapshot-${selectedDate}`);
+      return raw ? (JSON.parse(raw) as string[]) : null;
+    } catch { return null; }
+  })();
   const medicationLabel =
     medications && medications.length > 0 ? medications.join(", ") : null;
 

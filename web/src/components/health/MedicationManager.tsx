@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { upsertHealthProfile } from "@/lib/api/health";
+import { HEALTH_PROFILE_KEY } from "@/hooks/queries/useHealthProfile";
 
 /* ─────────────────────────────────────────────────────
    복약 관리 컴포넌트 — localStorage 기반
@@ -344,14 +347,32 @@ export default function MedicationManager() {
   const [list, setList] = useState<Medication[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
-    setList(loadMedications());
+    const saved = loadMedications();
+    setList(saved);
+    // localStorage에 데이터가 있으면 최초 1회 백엔드 동기화
+    if (saved.length > 0) {
+      const activeNames = saved.filter((m) => m.active).map((m) => m.name);
+      void upsertHealthProfile({ medications: activeNames }).then(() => {
+        void queryClient.invalidateQueries({ queryKey: HEALTH_PROFILE_KEY });
+      }).catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const persist = (next: Medication[]) => {
     setList(next);
     saveMedications(next);
+    // 오늘 날짜 스냅샷 저장 (과거 날짜 조회 시 사용)
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const activeNames = next.filter((m) => m.active).map((m) => m.name);
+    try { localStorage.setItem(`med-snapshot-${todayKey}`, JSON.stringify(activeNames)); } catch { /* 무시 */ }
+    // 백엔드 프로필과 동기화 (fire-and-forget)
+    void upsertHealthProfile({ medications: activeNames }).then(() => {
+      void queryClient.invalidateQueries({ queryKey: HEALTH_PROFILE_KEY });
+    }).catch(() => { /* 네트워크 오류 무시 — UI 차단 없이 다음 조회 시 반영됨 */ });
   };
 
   const handleAdd = (data: Omit<Medication, "id" | "active">) => {
