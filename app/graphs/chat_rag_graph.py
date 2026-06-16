@@ -152,6 +152,14 @@ _PERSONAL_STATUS_NOUN_PATTERN = re.compile(
 # 단독 1인칭 의문문 — "나는?", "저는?", "내가?" (2글자 이상 1인칭만, M-2: "나?"/"저?" 1글자는 제외).
 _PERSONAL_BARE_PATTERN = re.compile(r"^(나는|저는|내가|제가)\s*\?\s*$")
 
+# 건강 상태 요약 요청 감지 — RAG 없이 DB 데이터 직접 요약 경로로 라우팅.
+# "내 건강상태 어때?", "내 건강 알려줘", "제 컨디션 어떤가요?"
+_HEALTH_SUMMARY_PATTERN = re.compile(
+    r"^(?:내|제|나의|저의)?\s*(건강|건강\s*상태|컨디션|상태)\s*"
+    r"(어때|어떤가|어떻|괜찮|평가|봐줘|봐주세요|알려줘|알려주세요)"
+    r"[\s가-힣\w!?.,~]*[?.!~]?$"
+)
+
 # N2 가드: 약품명·의약품 보관/용법 / 병원·진료 안내 → 무조건 medical_inquiry 강제.
 # LLM이 diseases=[] 를 근거로 service_guide 로 오분류하는 케이스를 차단.
 _DRUG_KEYWORD_PATTERN = re.compile(
@@ -322,6 +330,7 @@ class ChatState(TypedDict, total=False):
     missing_fields: list[str]
     action_hint: str | None
     is_greeting: bool  # prefilter hit 신호 — retrieve/generate 모두 스킵하고 final_greeting 으로
+    is_health_summary: bool  # 건강 상태 요약 요청 — RAG 없이 DB 데이터 직접 포매팅
 
     # fetch_health_data
     health_data: dict[str, Any] | None
@@ -630,7 +639,10 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:  # noqa: C901
 
     # 코드 기반: needs_health_data — intent=medical_inquiry + 1인칭 표현 조합으로 결정.
     # LLM 판단 대신 코드로 결정하여 비결정성 제거.
-    needs = intent == "medical_inquiry" and bool(_FIRST_PERSON_PATTERN.search(state["original_question"]))
+    is_health_summary = bool(_HEALTH_SUMMARY_PATTERN.match(state["original_question"].strip()))
+    needs = is_health_summary or (
+        intent == "medical_inquiry" and bool(_FIRST_PERSON_PATTERN.search(state["original_question"]))
+    )
     missing = ["profile"] if needs else []
 
     # 코드 기반: diseases · topics — 키워드 패턴으로 결정.
@@ -644,6 +656,7 @@ async def classify_intent(state: ChatState) -> dict[str, Any]:  # noqa: C901
         "diseases": diseases,
         "topics": topics,
         "needs_health_data": needs,
+        "is_health_summary": is_health_summary,
         "needs_challenge_catalog": needs_challenge,
         "missing_fields": missing if needs else [],
         "action_hint": "navigate_to_health_info" if needs else None,
@@ -784,9 +797,14 @@ async def fetch_health_data(state: ChatState) -> dict[str, Any]:
     return {"health_data": None, "has_health_data": False}
 
 
-def decide_after_fetch_health(state: ChatState) -> Literal["retrieve", "final_missing_info"]:
-    # has_health_data 가 명시적 플래그 — health_data dict 존재 여부와 동치이나 의미를 명확히 함.
-    return "retrieve" if state.get("has_health_data") else "final_missing_info"
+def decide_after_fetch_health(
+    state: ChatState,
+) -> Literal["retrieve", "final_missing_info", "final_health_summary"]:
+    if not state.get("has_health_data"):
+        return "final_missing_info"
+    if state.get("is_health_summary"):
+        return "final_health_summary"
+    return "retrieve"
 
 
 async def final_missing_info(state: ChatState) -> dict[str, Any]:
@@ -796,6 +814,104 @@ async def final_missing_info(state: ChatState) -> dict[str, Any]:
         "is_fallback": False,
         "disclaimer": MEDICAL_DISCLAIMER,
         "confidence": 0.0,
+        "model_version": "chatragraph-v1",
+    }
+
+
+# ─────────────────────────────────────────────
+# 노드: final_health_summary
+# ─────────────────────────────────────────────
+_RISK_LEVEL_KO: dict[str, str] = {
+    "very_low": "매우 낮음",
+    "low": "낮음",
+    "moderate": "보통",
+    "high": "높음",
+    "very_high": "매우 높음",
+}
+_DISEASE_KO: dict[str, str] = {
+    "diabetes": "당뇨",
+    "hypertension": "고혈압",
+    "dyslipidemia": "이상지질혈증",
+}
+_RECORD_TYPE_KO: dict[str, str] = {
+    "blood_pressure": "혈압",
+    "blood_sugar": "혈당",
+    "weight": "체중",
+    "waist": "허리둘레",
+    "height": "키",
+    "cholesterol": "콜레스테롤",
+    "triglyceride": "중성지방",
+    "hdl": "HDL 콜레스테롤",
+    "ldl": "LDL 콜레스테롤",
+}
+
+
+def _fmt_records(records: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
+    for rt, data in records.items():
+        pv = data.get("primary_value")
+        if pv is None:
+            continue
+        label = _RECORD_TYPE_KO.get(rt, rt)
+        sv = data.get("secondary_value")
+        unit = data.get("unit", "")
+        measured = (data.get("measured_at") or "")[:10]
+        if rt == "blood_pressure" and sv is not None:
+            lines.append(f"- {label}: {pv}/{sv} {unit} ({measured})")
+        else:
+            lines.append(f"- {label}: {pv} {unit} ({measured})")
+    return ["**최근 측정값**", *lines] if lines else []
+
+
+def _fmt_profile(profile: dict[str, Any]) -> list[str]:
+    parts: list[str] = []
+    if profile.get("height_cm") is not None:
+        parts.append(f"키 {profile['height_cm']} cm")
+    if profile.get("weight_kg") is not None:
+        parts.append(f"체중 {profile['weight_kg']} kg")
+    if profile.get("waist_cm") is not None:
+        parts.append(f"허리 {profile['waist_cm']} cm")
+    return [f"\n**신체 정보**: {', '.join(parts)}"] if parts else []
+
+
+def _fmt_risks(risks: dict[str, Any]) -> list[str]:
+    lines: list[str] = ["\n**질환 위험도**"]
+    for disease, data in risks.items():
+        label = _DISEASE_KO.get(disease, disease)
+        level_ko = _RISK_LEVEL_KO.get(str(data.get("risk_level", "")), str(data.get("risk_level", "")))
+        score = data.get("risk_score")
+        score_str = f"{score:.0f}점" if score is not None else "측정 없음"
+        lines.append(f"- {label}: {level_ko} ({score_str})")
+    return lines
+
+
+def _format_health_summary(health_data: dict[str, Any]) -> str:
+    profile: dict[str, Any] = health_data.get("profile") or {}
+    records: dict[str, Any] = health_data.get("recent_records") or {}
+    risks: dict[str, Any] = health_data.get("disease_risks") or {}
+
+    lines: list[str] = ["## 건강 현황 요약\n"]
+    if records:
+        lines.extend(_fmt_records(records))
+    profile_lines = _fmt_profile(profile)
+    lines.extend(profile_lines)
+    if risks:
+        lines.extend(_fmt_risks(risks))
+    if not records and not profile_lines and not risks:
+        lines.append("입력된 건강 데이터가 없습니다.")
+    return "\n".join(lines)
+
+
+async def final_health_summary(state: ChatState) -> dict[str, Any]:
+    """DB 건강 데이터를 직접 포매팅해 반환. RAG/LLM 호출 없음."""
+    health_data = state.get("health_data") or {}
+    summary = _format_health_summary(health_data)
+    return {
+        "final_answer": summary,
+        "sources": [],
+        "is_fallback": False,
+        "disclaimer": MEDICAL_DISCLAIMER,
+        "confidence": 1.0,
         "model_version": "chatragraph-v1",
     }
 
@@ -1265,6 +1381,7 @@ def _build_graph() -> Any:
     g.add_node("final_greeting", _timed_node(final_greeting))
     g.add_node("fetch_health_data", _timed_node(fetch_health_data))
     g.add_node("final_missing_info", _timed_node(final_missing_info))
+    g.add_node("final_health_summary", _timed_node(final_health_summary))
     g.add_node("retrieve", _timed_node(retrieve_node))
     g.add_node("generate", _timed_node(generate_node))
     g.add_node("evaluate", _timed_node(evaluate_node))
@@ -1286,8 +1403,9 @@ def _build_graph() -> Any:
     g.add_conditional_edges(
         "fetch_health_data",
         decide_after_fetch_health,
-        {"retrieve": "retrieve", "final_missing_info": "final_missing_info"},
+        {"retrieve": "retrieve", "final_missing_info": "final_missing_info", "final_health_summary": "final_health_summary"},
     )
+    g.add_edge("final_health_summary", END)
     g.add_edge("retrieve", "generate")
     g.add_edge("generate", "evaluate")
     g.add_conditional_edges(
