@@ -1,9 +1,9 @@
-export type NotificationType = "COMMENT" | "REPLY" | "LIKE" | "CHALLENGE_KICK" | "CHALLENGE_INVITE";
+export type NotificationType = "COMMENT" | "REPLY" | "LIKE" | "CHALLENGE_KICK" | "CHALLENGE_INVITE" | "RISK_CHANGE";
 
 export interface Notification {
   id: number;
   notification_type: NotificationType;
-  target_type: "POST" | "COMMENT" | "VERIFICATION" | "CHALLENGE";
+  target_type: "POST" | "COMMENT" | "VERIFICATION" | "CHALLENGE" | "DISEASE_RISK";
   target_id: number;
   message: string;
   is_read: boolean;

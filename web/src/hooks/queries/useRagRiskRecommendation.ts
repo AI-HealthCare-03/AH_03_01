@@ -6,6 +6,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchRagRiskRecommendation } from "@/lib/api/health";
+import { compareAndPushRiskNotifications } from "@/lib/riskNotification";
 import type { RagRiskRecommendationResponse } from "@/types/health";
 
 export const RAG_RISK_RECOMMENDATION_KEY = ["rag-risk-recommendation"] as const;
@@ -18,6 +19,7 @@ export function useRagRiskRecommendation() {
     onSuccess: (data) => {
       // 응답을 쿼리 캐시에도 저장해 AiSuggestions 에서 읽을 수 있게 한다.
       queryClient.setQueryData(RAG_RISK_RECOMMENDATION_KEY, data);
+      compareAndPushRiskNotifications(data.predictions ?? []);
     },
   });
 }

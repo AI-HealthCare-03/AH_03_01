@@ -75,7 +75,9 @@ from app.models.ml_inference import (
     MLInferenceRequest,
     MLInferenceStatus,
 )
+from app.models.notifications import NotificationType
 from app.repositories.challenge_recommendation_repository import save_recommendations
+from app.repositories.notification_repository import NotificationRepository
 from app.services.ml.challenge_eligibility_filter import EligibleTemplate, filter_eligible_templates
 from app.services.ml.retrieval import RetrievedChunk, retrieve
 from app.services.ml.risk_predictor import (
@@ -93,6 +95,19 @@ _logger = logging.getLogger(__name__)
 MAX_REVISIONS = 2
 RETRIEVE_TOP_K_MEDICAL = 8  # ChatRAGGraph 와 동일 — 4측면 커버
 RISK_HIGH_THRESHOLD = 50.0  # diseases[] 필터로 retrieve 보강하는 임계 (팀원 CRAG 패턴)
+
+# 위험도 변화 알림 메시지용 라벨 (persist_disease_risk 에서 사용)
+_DISEASE_LABEL: dict[str, str] = {
+    "HYPERTENSION": "고혈압",
+    "DIABETES": "당뇨",
+    "CARDIOVASCULAR": "이상지질혈증",
+}
+_RISK_LABEL: dict[str, str] = {
+    "NORMAL": "정상",
+    "CAUTION": "주의",
+    "RISK": "위험",
+    "HIGH_RISK": "고위험",
+}
 
 MEDICAL_DISCLAIMER = (
     "본 결과는 의학적 진단이 아닌 참고용 위험도 지표입니다. 정확한 평가와 처방은 담당 의사 또는 약사와 상담하세요."
@@ -605,14 +620,31 @@ async def persist_disease_risk(state: RiskState) -> dict[str, Any]:
     # H-3: 같은 호출의 3 disease persist 를 한 트랜잭션으로 묶어 부분 실패 시
     # row 가 일부만 남는 일관성 깨짐을 차단. (노드 간 gap — ml_inference SUCCESS
     # 후 그래프 crash 시나리오는 backlog: monitoring 으로 보정 예정.)
+    valid_preds: list[tuple[dict[str, Any], DiseaseType, RiskLevel]] = []
+    for p in predictions:
+        try:
+            valid_preds.append((p, DiseaseType(p["disease_type"]), RiskLevel(p["risk_level"])))
+        except (KeyError, ValueError):
+            continue
+
+    # 이전 risk_level 을 트랜잭션 외부에서 단일 쿼리로 수집.
+    # 트랜잭션 안에서 읽어도 동일한 결과이나, 예측은 단일 사용자의 순차 흐름이므로
+    # race condition 가능성이 없어 외부에서 미리 읽는 것으로 충분하다.
+    disease_types = [dt for _, dt, _ in valid_preds]
+    all_prev = await DiseaseRisk.filter(
+        user_id=user_id, disease_type__in=disease_types
+    ).order_by("-calculated_at").limit(len(disease_types) * 10)
+    prev_levels: dict[DiseaseType, RiskLevel | None] = {}
+    for row in all_prev:
+        if row.disease_type not in prev_levels:
+            prev_levels[row.disease_type] = row.risk_level
+
     row_ids: list[int] = []
+    # (row_id, disease_type, prev_level, risk_level) — 트랜잭션 커밋 후 알림 생성용
+    pending_notifs: list[tuple[int, DiseaseType, RiskLevel, RiskLevel]] = []
+
     async with in_transaction():
-        for p in predictions:
-            try:
-                disease_type = DiseaseType(p["disease_type"])
-                risk_level = RiskLevel(p["risk_level"])
-            except (KeyError, ValueError):
-                continue
+        for p, disease_type, risk_level in valid_preds:
             # guideline 매칭 (없으면 null)
             guideline = await DiseaseRiskGuideline.filter(disease_type=disease_type, risk_level=risk_level).first()
             row = await DiseaseRisk.create(
@@ -626,6 +658,28 @@ async def persist_disease_risk(state: RiskState) -> dict[str, Any]:
                 guideline_id=guideline.id if guideline else None,
             )
             row_ids.append(row.id)
+
+            prev_level = prev_levels.get(disease_type)
+            if prev_level is not None and prev_level != risk_level:
+                pending_notifs.append((row.id, disease_type, prev_level, risk_level))
+
+    # 트랜잭션 외부에서 알림 생성 — 실패해도 DiseaseRisk 롤백 없음
+    for row_id, disease_type, prev_level, risk_level in pending_notifs:
+        disease_label = _DISEASE_LABEL.get(disease_type.value, disease_type.value)
+        prev_label = _RISK_LABEL.get(prev_level.value, prev_level.value)
+        new_label = _RISK_LABEL.get(risk_level.value, risk_level.value)
+        try:
+            await NotificationRepository().create(
+                recipient_id=user_id,
+                actor_id=None,
+                notification_type=NotificationType.RISK_CHANGE,
+                target_type="DISEASE_RISK",
+                target_id=row_id,
+                message=f"{disease_label} 위험도가 '{prev_label}'에서 '{new_label}'으로 변했습니다.",
+            )
+        except Exception:
+            _logger.warning("RISK_CHANGE 알림 생성 실패 (무시) — target_id=%s", row_id)
+
     return {"disease_risk_row_ids": row_ids}
 
 

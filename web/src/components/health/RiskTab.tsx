@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useLatestPredictions, LATEST_PREDICTIONS_KEY } from "@/hooks/queries/useLatestPredictions";
 import { RAG_RISK_RECOMMENDATION_KEY } from "@/hooks/queries/useRagRiskRecommendation";
 import { streamRagRiskRecommendation } from "@/lib/api/health";
+import { compareAndPushRiskNotifications } from "@/lib/riskNotification";
 import { useMe } from "@/hooks/queries/useMe";
 import { useProfileCompleteness } from "@/hooks/queries/useProfileCompleteness";
 import RiskSemiGauge from "@/components/health/RiskSemiGauge";
@@ -1014,6 +1015,9 @@ export default function RiskTab() {
           } else {
             // 성공 — latestPredictions 도 갱신해 latestDate 반영
             void queryClient.invalidateQueries({ queryKey: LATEST_PREDICTIONS_KEY });
+
+            // 위험도 변화 알림
+            compareAndPushRiskNotifications(result.predictions ?? []);
           }
         },
         onError: (message) => {
