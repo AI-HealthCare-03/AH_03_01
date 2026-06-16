@@ -144,6 +144,25 @@ html.dark select {
 html.dark input::placeholder,
 html.dark textarea::placeholder { color: #666666 !important; }
 
+/* date input 네이티브 달력 아이콘 — 검정 아이콘이 다크 배경에 묻혀 안 보임 */
+html.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
+
+/* ── 위험 인자 기여도 막대 — 어두운 트랙(bg-surface)과 구분이 잘 안 되어 더 밝게 ── */
+html.dark .bg-red-500    { background-color: #ff6b6b !important; }
+html.dark .bg-orange-400 { background-color: #ffa94d !important; }
+html.dark .bg-yellow-400 { background-color: #ffd43b !important; }
+html.dark .bg-blue-400   { background-color: #74c0fc !important; }
+
+/* ── 월간 리포트 "판단 근거 TOP 5" 막대 — bg-brand-black 배경 오버라이드가 없어
+   다크모드에서 트랙(bg-surface)과 거의 같은 색으로 안 보임. 라이트모드는 그대로 두고
+   다크모드에서만 방향/크기별 색상 적용. ── */
+html.dark .factor-tier-high { background-color: #ff6b6b !important; }
+html.dark .factor-tier-mid  { background-color: #ffa94d !important; }
+html.dark .factor-tier-low  { background-color: #ffd43b !important; }
+html.dark .factor-tier-down { background-color: #74c0fc !important; }
+
 /* overflow-hidden 카드 내부 border */
 html.dark .divide-border > * + * { border-color: #3a3a3a !important; }
 
@@ -201,6 +220,11 @@ html.dark .bg-brand-light p,
 html.dark .bg-brand-light li,
 html.dark .bg-brand-light span {
   color: #e8d87a !important;
+}
+/* "한눈에 보는 맞춤 요약" 안의 칩 카드(.summary-chip)는 제목과 달리
+   흰색 글씨로 — 위 규칙보다 우선하도록 더 구체적인 선택자로 재지정 */
+html.dark .bg-brand-light .summary-chip p {
+  color: #f0f0f0 !important;
 }
 
 /* ── 퀴즈 페이지 gray-* 토큰 다크 보완 ─────────────────────

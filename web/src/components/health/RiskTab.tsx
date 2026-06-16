@@ -296,7 +296,7 @@ function MascotBanner({ userName }: { userName: string | null }) {
   const name = userName ?? "회원";
 
   return (
-    <div className="bg-[#fffde7] rounded-[16px] p-4 flex items-center gap-4 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+    <div className="bg-brand-light rounded-[16px] p-4 flex items-center gap-4 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
       {/* 마스코트 이미지 */}
       <div className="shrink-0">
         <Image
@@ -313,7 +313,7 @@ function MascotBanner({ userName }: { userName: string | null }) {
         />
       </div>
       {/* 말풍선 */}
-      <div className="bg-white rounded-[12px] px-4 py-3 shadow-sm flex-1 relative">
+      <div className="summary-chip bg-surface rounded-[12px] px-4 py-3 shadow-sm flex-1 relative">
         {/* 말풍선 꼬리 */}
         <div
           className="absolute left-[-8px] top-1/2 -translate-y-1/2 w-0 h-0"
@@ -376,7 +376,7 @@ function SummaryStrip({
   ];
 
   return (
-    <div className="bg-[#fffde7] rounded-[16px] p-4 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+    <div className="bg-brand-light rounded-[16px] p-4 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
       <p className="text-sm font-black text-text-primary mb-3">
         한눈에 보는 맞춤 요약
       </p>
@@ -384,7 +384,7 @@ function SummaryStrip({
         {chips.map((chip) => (
           <div
             key={chip.icon}
-            className="bg-white rounded-[12px] p-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
+            className="summary-chip bg-surface rounded-[12px] p-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
           >
             <p className="text-base mb-1" aria-hidden="true">
               {chip.icon}
@@ -824,14 +824,23 @@ function DisclaimerBar({ text }: { text?: string }) {
   const content =
     text ??
     "본 위험도 결과는 입력하신 데이터를 기반으로 AI가 산출한 참고 정보입니다. 의학적 진단이나 처방을 대체하지 않으며, 정확한 진단·치료는 반드시 의료 전문가에게 문의하세요. 출처: KSH 2022 / KDA 2023 / KSoLA 2022 / KSSO 2022";
+  const sourceIdx = content.indexOf("출처:");
+  const mainText = sourceIdx === -1 ? content : content.slice(0, sourceIdx).trim();
+  const sourceText = sourceIdx === -1 ? null : content.slice(sourceIdx);
 
   return (
-    <div className="bg-[#fffde7] rounded-[14px] border border-[#ffe082] p-4 flex items-start gap-3">
+    <div className="bg-surface rounded-[14px] p-4 flex items-start gap-3">
       <span className="text-lg shrink-0 mt-0.5" aria-hidden="true">
         🛡️
       </span>
-      <p className="text-[11px] text-text-secondary leading-relaxed">
-        {content}
+      <p className="text-xs text-text-tertiary leading-relaxed">
+        {mainText}
+        {sourceText && (
+          <>
+            <br />
+            {sourceText}
+          </>
+        )}
       </p>
     </div>
   );
