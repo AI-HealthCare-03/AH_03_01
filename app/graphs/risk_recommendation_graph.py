@@ -100,7 +100,7 @@ RISK_HIGH_THRESHOLD = 50.0  # diseases[] 필터로 retrieve 보강하는 임계 
 _DISEASE_LABEL: dict[str, str] = {
     "HYPERTENSION": "고혈압",
     "DIABETES": "당뇨",
-    "CARDIOVASCULAR": "심혈관",
+    "CARDIOVASCULAR": "이상지질혈증",
 }
 _RISK_LABEL: dict[str, str] = {
     "NORMAL": "정상",
@@ -633,13 +633,16 @@ async def persist_disease_risk(state: RiskState) -> dict[str, Any]:
     disease_types = [dt for _, dt, _ in valid_preds]
     all_prev = await DiseaseRisk.filter(
         user_id=user_id, disease_type__in=disease_types
-    ).order_by("-calculated_at")
+    ).order_by("-calculated_at").limit(len(disease_types) * 10)
     prev_levels: dict[DiseaseType, RiskLevel | None] = {}
     for row in all_prev:
         if row.disease_type not in prev_levels:
             prev_levels[row.disease_type] = row.risk_level
 
     row_ids: list[int] = []
+    # (row_id, disease_type, prev_level, risk_level) — 트랜잭션 커밋 후 알림 생성용
+    pending_notifs: list[tuple[int, DiseaseType, RiskLevel, RiskLevel]] = []
+
     async with in_transaction():
         for p, disease_type, risk_level in valid_preds:
             # guideline 매칭 (없으면 null)
@@ -656,20 +659,26 @@ async def persist_disease_risk(state: RiskState) -> dict[str, Any]:
             )
             row_ids.append(row.id)
 
-            # 이전 risk_level 과 다를 때만 알림 생성
             prev_level = prev_levels.get(disease_type)
             if prev_level is not None and prev_level != risk_level:
-                disease_label = _DISEASE_LABEL.get(disease_type.value, disease_type.value)
-                prev_label = _RISK_LABEL.get(prev_level.value, prev_level.value)
-                new_label = _RISK_LABEL.get(risk_level.value, risk_level.value)
-                await NotificationRepository().create(
-                    recipient_id=user_id,
-                    actor_id=None,
-                    notification_type=NotificationType.RISK_CHANGE,
-                    target_type="DISEASE_RISK",
-                    target_id=row.id,
-                    message=f"{disease_label} 위험도가 '{prev_label}'에서 '{new_label}'으로 변했습니다.",
-                )
+                pending_notifs.append((row.id, disease_type, prev_level, risk_level))
+
+    # 트랜잭션 외부에서 알림 생성 — 실패해도 DiseaseRisk 롤백 없음
+    for row_id, disease_type, prev_level, risk_level in pending_notifs:
+        disease_label = _DISEASE_LABEL.get(disease_type.value, disease_type.value)
+        prev_label = _RISK_LABEL.get(prev_level.value, prev_level.value)
+        new_label = _RISK_LABEL.get(risk_level.value, risk_level.value)
+        try:
+            await NotificationRepository().create(
+                recipient_id=user_id,
+                actor_id=None,
+                notification_type=NotificationType.RISK_CHANGE,
+                target_type="DISEASE_RISK",
+                target_id=row_id,
+                message=f"{disease_label} 위험도가 '{prev_label}'에서 '{new_label}'으로 변했습니다.",
+            )
+        except Exception:
+            _logger.warning("RISK_CHANGE 알림 생성 실패 (무시) — target_id=%s", row_id)
 
     return {"disease_risk_row_ids": row_ids}
 
