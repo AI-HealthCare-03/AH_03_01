@@ -263,6 +263,7 @@ class VerificationResponse(BaseSerializerModel):
     like_count: int
     comment_count: int
     created_at: datetime
+    earned_points: int | None = None
 
 
 class VerificationListResponse(BaseModel):

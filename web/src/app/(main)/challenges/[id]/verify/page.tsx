@@ -36,6 +36,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
   const verifyMutation = useCreateVerification();
 
   const [rewardOpen, setRewardOpen] = useState(false);
+  const [earnedPoints, setEarnedPoints] = useState<number | null>(null);
 
   /* 오늘 날짜 (YYYY-MM-DD, 로컬 기준) */
   const today = format(new Date(), "yyyy-MM-dd");
@@ -63,6 +64,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
       {
         onSuccess: (data) => {
           if (data.status === "APPROVED") {
+            setEarnedPoints(data.earned_points ?? null);
             setRewardOpen(true);
           } else {
             showToast("인증이 처리되었어요", "info");
@@ -92,6 +94,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
       {
         onSuccess: (data) => {
           if (data.status === "APPROVED") {
+            setEarnedPoints(data.earned_points ?? null);
             setRewardOpen(true);
           } else {
             showToast("설문이 제출되었어요", "info");
@@ -121,6 +124,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
       {
         onSuccess: (data) => {
           if (data.status === "APPROVED") {
+            setEarnedPoints(data.earned_points ?? null);
             setRewardOpen(true);
             return;
           }
@@ -152,6 +156,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
       {
         onSuccess: (data) => {
           if (data.status === "APPROVED") {
+            setEarnedPoints(data.earned_points ?? null);
             setRewardOpen(true);
           } else {
             showToast("명상 인증이 처리되었어요", "info");
@@ -277,6 +282,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
         open={rewardOpen}
         onClose={handleRewardClose}
         rewardType="daily"
+        earnedPoints={earnedPoints}
       />
     </div>
   );

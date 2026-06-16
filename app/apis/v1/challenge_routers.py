@@ -616,11 +616,10 @@ async def create_verification(
 ) -> Response:
     if method is not None and method != body.method:
         body.method = method
-    verification = await service.create(user, body)
-    return Response(
-        VerificationResponse.model_validate(verification).model_dump(),
-        status_code=status.HTTP_201_CREATED,
-    )
+    verification, earned_points = await service.create(user, body)
+    payload = VerificationResponse.model_validate(verification).model_dump()
+    payload["earned_points"] = earned_points
+    return Response(payload, status_code=status.HTTP_201_CREATED)
 
 
 @challenge_verifications_router.get("", response_model=VerificationListResponse, status_code=status.HTTP_200_OK)

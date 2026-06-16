@@ -147,6 +147,7 @@ export interface ChallengeVerification {
   verified_date?: string | null;  /* YYYY-MM-DD, 백엔드 verified_date */
   verified_at?: string | null;
   created_at: string;
+  earned_points?: number | null;  /* APPROVED 인증 시 실제 적립 포인트 */
 }
 
 export interface CreateVerificationRequest {
