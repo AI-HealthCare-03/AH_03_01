@@ -213,6 +213,7 @@ export interface HealthProfileRecord {
   weight_kg?: number;
   updated_at?: string;
   recorded_at?: string;
+  medications?: string[];
 }
 
 /* 측정 통계 시리즈 포인트 */

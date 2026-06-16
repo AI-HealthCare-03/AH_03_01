@@ -9,3 +9,4 @@ export const notifLastSeenKey   = () => `notif-last-seen:${activeUserId()}`;
 export const notifSettingsKey   = () => `notification-settings:${activeUserId()}`;
 export const notifSocialPollKey = () => `notification-social-poll:${activeUserId()}`;
 export const notifKickPollKey   = () => `notification-kick-poll:${activeUserId()}`;
+export const medSnapshotKey     = (date: string) => `med-snapshot-${date}:${activeUserId()}`;

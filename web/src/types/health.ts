@@ -98,6 +98,7 @@ export interface HealthProfileUpsertRequest {
   chronic_diseases?: string[];
   pregnancy_status?: "NOT_APPLICABLE" | "PREGNANT" | "POSTPARTUM";
   bp_measure_env?: "HOME" | "HOSPITAL";
+  medications?: string[];
 }
 
 /** 건강 프로필 상세 응답.
