@@ -87,17 +87,23 @@ export default function SummaryTab() {
     recordType: "WEIGHT",
     size: 1,
   });
-  /* 날짜 지정 쿼리 (날짜 선택 시에만 실행) */
+  /* 날짜 지정 쿼리 — 선택일 기준 최신값(measured_at ≤ 선택일). 그날 업데이트 안 된 지표는
+     그날 기준 가장 최근 확인 수치를 보여준다. */
   const { data: bpDateList } = useHealthRecordList(
-    { recordType: "BLOOD_PRESSURE", from: selectedDate, to: selectedDate },
+    { recordType: "BLOOD_PRESSURE", to: selectedDate, size: 1 },
     { enabled: hasDateFilter }
   );
   const { data: bgDateList } = useHealthRecordList(
-    { recordType: "BLOOD_GLUCOSE", subType: "FASTING", from: selectedDate, to: selectedDate },
+    { recordType: "BLOOD_GLUCOSE", subType: "FASTING", to: selectedDate, size: 1 },
     { enabled: hasDateFilter }
   );
   const { data: weightDateList } = useHealthRecordList(
-    { recordType: "WEIGHT", from: selectedDate, to: selectedDate },
+    { recordType: "WEIGHT", to: selectedDate, size: 1 },
+    { enabled: hasDateFilter }
+  );
+  /* 선택 날짜에 입력된 데이터(전 타입)가 하나도 없으면 '데이터 없음'. */
+  const { data: dateAnyList } = useHealthRecordList(
+    { from: selectedDate, to: selectedDate },
     { enabled: hasDateFilter }
   );
 
@@ -116,9 +122,12 @@ export default function SummaryTab() {
     );
   }
 
+  /* 선택 날짜에 입력 데이터가 전혀 없으면 모든 지표를 '데이터 없음'으로 표시. */
+  const noDataForDate = hasDateFilter && (dateAnyList?.length ?? 0) === 0;
+
   /* ── 활성 레코드 (날짜 필터 적용 여부에 따라 선택) ── */
-  const activeBp = hasDateFilter ? (bpDateList?.[0] ?? null) : (bpList?.[0] ?? null);
-  const activeBg = hasDateFilter ? (bgDateList?.[0] ?? null) : (bgList?.[0] ?? null);
+  const activeBp = noDataForDate ? null : hasDateFilter ? (bpDateList?.[0] ?? null) : (bpList?.[0] ?? null);
+  const activeBg = noDataForDate ? null : hasDateFilter ? (bgDateList?.[0] ?? null) : (bgList?.[0] ?? null);
 
   /* ── 값 파싱 ── */
   const heightCm = profile?.height_cm ?? null;
@@ -131,7 +140,7 @@ export default function SummaryTab() {
   const dateWeightKg = weightDateList?.[0]
     ? parseFloat(weightDateList[0].primary_value)
     : null;
-  const weightKg = hasDateFilter ? dateWeightKg : latestWeightKg;
+  const weightKg = noDataForDate ? null : hasDateFilter ? dateWeightKg : latestWeightKg;
   const bmi = heightCm && weightKg ? calcBmi(heightCm, weightKg) : null;
 
   const sysParsed = activeBp ? parseFloat(activeBp.primary_value) : null;
@@ -158,7 +167,9 @@ export default function SummaryTab() {
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-sm text-text-secondary">
           {hasDateFilter
-            ? `${selectedDate} 기록`
+            ? noDataForDate
+              ? `${selectedDate} · 입력된 데이터 없음`
+              : `${selectedDate} 기록`
             : hasAnyData
             ? `최근 측정 ${latestDate!.toLocaleDateString("ko-KR", {
                 year: "numeric",
