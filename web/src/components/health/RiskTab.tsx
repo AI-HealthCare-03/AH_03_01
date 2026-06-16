@@ -407,7 +407,7 @@ function SummaryStrip({
    ======================================================== */
 
 interface ContributingBarsProps {
-  factors: { factor: string; weight: number; description?: string; name_kor?: string }[];
+  factors: { factor: string; weight: number; description?: string; name_kor?: string; direction?: string }[];
 }
 
 function ContributingBars({ factors }: ContributingBarsProps) {
@@ -436,12 +436,19 @@ function ContributingBars({ factors }: ContributingBarsProps) {
       {factors.map((f) => {
         const pct = Math.round((Math.abs(f.weight) / totalWeight) * 100);
         const isRisk = f.weight > 0;
+        // 위험도 결과가 정상인 사용자: 백엔드가 '정상 범위/주의 요인' 전용 방향을 보냄.
+        const isNormalCtx = f.direction === "정상 범위" || f.direction === "주의 요인";
         // 라벨: name_kor(ML) 우선, 없으면 변수명.
         const label = f.name_kor ?? f.factor;
         // 중립 방향 문구 — 값(잦은/적은 등)을 단정하지 않고 기여 '방향'만 표현(사실 오류 방지).
-        const neutralDesc = isRisk
-          ? "위험도를 높이는 방향으로 작용했어요"
-          : "위험도를 낮추는 방향으로 작용했어요";
+        // 정상 예측 사용자는 '위험 증가/감소' 대신 정상 맥락 문구로 안내(혼란 방지).
+        const neutralDesc = isNormalCtx
+          ? f.direction === "정상 범위"
+            ? "정상 범위라 위험을 낮게 유지하고 있어요"
+            : "정상이지만 관심이 필요한 요인이에요"
+          : isRisk
+            ? "위험도를 높이는 방향으로 작용했어요"
+            : "위험도를 낮추는 방향으로 작용했어요";
         // 파생변수 산출 방법 설명 — 있으면 ⓘ hover 툴팁으로 노출.
         const tooltip = FACTOR_TOOLTIP[f.factor];
 
@@ -543,7 +550,7 @@ interface SelectedDetail {
   risk_level: "NORMAL" | "CAUTION" | "RISK" | "HIGH_RISK";
   risk_grade: RiskGrade;
   risk_level_label?: string | null;
-  contributing_factors: { factor: string; weight: number; description?: string; name_kor?: string }[];
+  contributing_factors: { factor: string; weight: number; description?: string; name_kor?: string; direction?: string }[];
   created_at: string;
 }
 
@@ -561,7 +568,7 @@ function ContributingCard({
   return (
     <div className="bg-white rounded-[16px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.07)] flex-1 min-w-0">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-bold text-text-primary">위험 인자 기여도</h3>
+        <h3 className="font-bold text-text-primary">위험도 예측 기여도</h3>
       </div>
 
       {/* 질환 탭 */}
