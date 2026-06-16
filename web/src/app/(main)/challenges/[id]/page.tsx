@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { POINT_BALANCE_KEY } from "@/hooks/queries/usePointBalance";
 import { WEEKLY_XP_KEY } from "@/hooks/queries/useWeeklyXp";
+import { format } from "@/lib/dateUtils";
 
 /* =========================================
    챌린지 상세 페이지 (10-C08 / 10-C09 / 10-C19)
@@ -58,22 +59,19 @@ function ChallengeDetailContent({
   const updateMutation = useUpdateChallenge(challengeId);
 
   /* 오늘 날짜 (YYYY-MM-DD, 로컬 기준) */
-  const todayStr = (() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  })();
+  const todayStr = format(new Date(), "yyyy-MM-dd");
 
   /* 인증 완료 날짜 목록 (APPROVED 상태만) */
   const verifiedDates =
     verificationsData?.items
-      .filter((v) => v.status === "APPROVED")
-      .map((v) => v.verified_date ?? "") ?? [];
+      .filter((v) => v.status === "APPROVED" && v.verified_date != null)
+      .map((v) => v.verified_date!) ?? [];
 
   /* AI 검증 대기 날짜 목록 (PENDING 상태) */
   const pendingDates =
     verificationsData?.items
-      .filter((v) => v.status === "PENDING")
-      .map((v) => v.verified_date ?? "") ?? [];
+      .filter((v) => v.status === "PENDING" && v.verified_date != null)
+      .map((v) => v.verified_date!) ?? [];
 
   /* 오늘 체크 인증 실패 여부 (CHECK + checked=false → REJECTED) */
   const rejectedToday =
