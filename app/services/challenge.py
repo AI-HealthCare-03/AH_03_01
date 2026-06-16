@@ -454,8 +454,9 @@ class ParticipantService:
                 target_id=challenge_id,
                 message=f"'{challenge.title[:40]}' 챌린지에 초대되었습니다.",
             )
-        except Exception:
-            pass
+        except Exception as e:  # noqa: BLE001
+            import logging  # noqa: PLC0415
+            logging.getLogger(__name__).warning("CHALLENGE_INVITE 알림 생성 실패: %s", e)
         return invite
 
     async def list_my_invitations(self, user: User, *, status_filter: str | None) -> list[ChallengeInvite]:
