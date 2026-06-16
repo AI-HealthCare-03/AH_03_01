@@ -197,13 +197,12 @@ async def list_challenges(
             missed_counts[row["challenge_id"]] = row["missed_count"] or 0
             participant_statuses[row["challenge_id"]] = row["status"]
 
-        # 오늘 인증 완료 여부 (mine 탭 카드 상태 표시용)
+        # 오늘 인증 완료 여부 (mine 탭 카드 상태 표시용) — 성공/실패/심사중 모두 포함
         if mine:
             today_rows = await ChallengeVerification.filter(
                 challenge_id__in=challenge_ids,
                 user_id=user.id,
                 verified_date=date.today(),
-                status__in=[VerificationStatus.APPROVED, VerificationStatus.PENDING],
             ).values("challenge_id")
             for row in today_rows:
                 today_verified_ids.add(row["challenge_id"])
