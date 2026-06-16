@@ -32,6 +32,7 @@ class ChatbotFaq(models.Model):
     category = fields.CharEnumField(enum_type=FaqCategory)
     question = fields.CharField(max_length=200)
     answer = fields.TextField()
+    short_label = fields.CharField(max_length=20, null=True)
     sort_order = fields.IntField(default=0)
     is_active = fields.BooleanField(default=True)
     created_at = fields.DatetimeField(auto_now_add=True)

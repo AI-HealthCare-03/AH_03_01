@@ -30,6 +30,9 @@ export default function ChatMessageList({
   }, [messages, isLoading]);
 
   const isEmpty = messages.length === 0;
+  const lastMsg = messages[messages.length - 1];
+  const showFaqAfterResponse =
+    !isEmpty && !isLoading && lastMsg?.role === "BOT" && !lastMsg?.isStreaming;
 
   return (
     <div
@@ -57,6 +60,7 @@ export default function ChatMessageList({
           ))}
           {/* 스트리밍 placeholder 가 없는 경우에만 TypingIndicator 표시 (FAQ 모드 폴백) */}
           {isLoading && !messages.some((m) => m.isStreaming) && <TypingIndicator />}
+          {showFaqAfterResponse && <FaqChips onSelect={onFaqSelect} />}
         </>
       )}
       <div ref={bottomRef} />

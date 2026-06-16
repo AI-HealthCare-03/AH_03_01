@@ -1,48 +1,50 @@
 "use client";
 
+import { useMemo } from "react";
 import { useFaqs } from "@/hooks/queries/useFaqs";
 import type { FaqResponse } from "@/types/chat";
-
-/* =========================================
-   FAQ 칩 목록
-   - 대화 없을 때 / 새 대화 시작 시 표시
-   - 클릭 → onSelect(faq) 콜백
-   ========================================= */
 
 interface FaqChipsProps {
   onSelect: (faq: FaqResponse) => void;
 }
 
+function chipLabel(faq: { question: string; short_label: string | null }) {
+  return faq.short_label ?? faq.question;
+}
+
 export default function FaqChips({ onSelect }: FaqChipsProps) {
   const { data: faqs, isLoading } = useFaqs();
+
+  const picked = useMemo(() => {
+    if (!faqs || faqs.length === 0) return [];
+    const shuffled = [...faqs].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, 5);
+  }, [faqs]);
 
   if (isLoading) {
     return (
       <div className="space-y-2 px-4">
-        <p className="text-xs text-text-tertiary">자주 묻는 질문을 불러오는 중...</p>
         <div className="flex flex-wrap gap-2">
           {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-8 w-28 bg-surface rounded-full animate-pulse"
-            />
+            <div key={i} className="h-8 w-24 bg-surface rounded-full animate-pulse" />
           ))}
         </div>
       </div>
     );
   }
 
-  if (!faqs || faqs.length === 0) return null;
+  if (picked.length === 0) return null;
 
   return (
     <div className="space-y-2 px-4">
       <p className="text-xs text-text-tertiary font-medium">자주 묻는 질문</p>
       <div className="flex flex-wrap gap-2">
-        {faqs.slice(0, 8).map((faq) => (
+        {picked.map((faq) => (
           <button
             key={faq.id}
             type="button"
             onClick={() => onSelect(faq)}
+            title={faq.question}
             className={[
               "text-[12px] px-3 py-1.5 rounded-full border transition-colors",
               "border-border bg-white text-text-secondary",
@@ -50,7 +52,7 @@ export default function FaqChips({ onSelect }: FaqChipsProps) {
               "active:scale-95",
             ].join(" ")}
           >
-            {faq.question}
+            {chipLabel(faq)}
           </button>
         ))}
       </div>
