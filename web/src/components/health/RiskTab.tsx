@@ -82,7 +82,7 @@ const GRADE_LABEL: Record<RiskGrade, string> = {
 
 /* ── 파생변수 툴팁 설명 ──────────────── */
 
-const FACTOR_TOOLTIP: Record<string, string> = {
+export const FACTOR_TOOLTIP: Record<string, string> = {
   bp_cat:
     "혈압을 4단계로 구분한 지표입니다. 정상 → 주의혈압 → 고혈압1기 → 고혈압2기 순으로 위험도가 높아집니다.",
   bmi_age_index:
@@ -90,7 +90,7 @@ const FACTOR_TOOLTIP: Record<string, string> = {
   metabolic_age:
     "혈당·비만·운동·수면 상태를 종합해 계산한 몸의 실제 나이입니다. 실제 나이보다 높을수록 건강 관리가 필요합니다.",
   GLYCEMIC_BURDEN_PROXY:
-    "혈당 관련 15개 지표를 종합한 혈당 부담 점수입니다. 높을수록 당뇨 위험이 큽니다.",
+    "공복혈당·당화혈색소 추정치·혈당 상호작용(나이·비만·나트륨) 등 혈당 관련 15개 지표를 종합한 혈당 부담 점수입니다. 높을수록 당뇨 위험이 큽니다.",
   lipid_hidden_risk_proxy:
     "혈액검사 없이 생활습관(체형·음주·운동·호르몬)으로 추정한 숨은 지질 위험 점수입니다.",
   body_metabolic_score:
@@ -407,7 +407,7 @@ function SummaryStrip({
    ======================================================== */
 
 interface ContributingBarsProps {
-  factors: { factor: string; weight: number; description?: string; name_kor?: string }[];
+  factors: { factor: string; weight: number; description?: string; name_kor?: string; direction?: string }[];
 }
 
 function ContributingBars({ factors }: ContributingBarsProps) {
@@ -436,12 +436,19 @@ function ContributingBars({ factors }: ContributingBarsProps) {
       {factors.map((f) => {
         const pct = Math.round((Math.abs(f.weight) / totalWeight) * 100);
         const isRisk = f.weight > 0;
+        // 위험도 결과가 정상인 사용자: 백엔드가 '정상 범위/주의 요인' 전용 방향을 보냄.
+        const isNormalCtx = f.direction === "정상 범위" || f.direction === "주의 요인";
         // 라벨: name_kor(ML) 우선, 없으면 변수명.
         const label = f.name_kor ?? f.factor;
         // 중립 방향 문구 — 값(잦은/적은 등)을 단정하지 않고 기여 '방향'만 표현(사실 오류 방지).
-        const neutralDesc = isRisk
-          ? "위험도를 높이는 방향으로 작용했어요"
-          : "위험도를 낮추는 방향으로 작용했어요";
+        // 정상 예측 사용자는 '위험 증가/감소' 대신 정상 맥락 문구로 안내(혼란 방지).
+        const neutralDesc = isNormalCtx
+          ? f.direction === "정상 범위"
+            ? "정상 범위라 위험을 낮게 유지하고 있어요"
+            : "정상이지만 관심이 필요한 요인이에요"
+          : isRisk
+            ? "위험도를 높이는 방향으로 작용했어요"
+            : "위험도를 낮추는 방향으로 작용했어요";
         // 파생변수 산출 방법 설명 — 있으면 ⓘ hover 툴팁으로 노출.
         const tooltip = FACTOR_TOOLTIP[f.factor];
 
@@ -543,7 +550,7 @@ interface SelectedDetail {
   risk_level: "NORMAL" | "CAUTION" | "RISK" | "HIGH_RISK";
   risk_grade: RiskGrade;
   risk_level_label?: string | null;
-  contributing_factors: { factor: string; weight: number; description?: string; name_kor?: string }[];
+  contributing_factors: { factor: string; weight: number; description?: string; name_kor?: string; direction?: string }[];
   created_at: string;
 }
 
@@ -561,7 +568,7 @@ function ContributingCard({
   return (
     <div className="bg-white rounded-[16px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.07)] flex-1 min-w-0">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-bold text-text-primary">위험 인자 기여도</h3>
+        <h3 className="font-bold text-text-primary">위험도 예측 기여도</h3>
       </div>
 
       {/* 질환 탭 */}

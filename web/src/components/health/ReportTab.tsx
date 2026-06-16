@@ -10,6 +10,7 @@ import {
 import { requestMonthlyReportPdf } from "@/lib/api/health";
 import { useToast } from "@/components/ui/Toast";
 import RiskSemiGauge from "@/components/health/RiskSemiGauge";
+import { FACTOR_TOOLTIP } from "@/components/health/RiskTab";
 import BPTrendChart from "@/components/health/charts/BPTrendChart";
 import BGTrendChart from "@/components/health/charts/BGTrendChart";
 import WeightTrendChart from "@/components/health/charts/WeightTrendChart";
@@ -391,6 +392,12 @@ function TopFactorsSection({ risks }: { risks: ReportDiseaseRisk[] }) {
                     )}
                   </div>
                   <FactorBar weight={f.weight} />
+                  {/* 변수 산출 방법 설명 — 의료진이 파생 지표를 이해하기 쉽도록 노출. */}
+                  {FACTOR_TOOLTIP[f.factor] && (
+                    <p className="mt-1 text-[11px] leading-snug text-text-tertiary">
+                      {FACTOR_TOOLTIP[f.factor]}
+                    </p>
+                  )}
                 </div>
                 <span className="text-xs font-bold text-text-secondary shrink-0 mt-0.5">
                   {(f.weight * 100).toFixed(0)}%
