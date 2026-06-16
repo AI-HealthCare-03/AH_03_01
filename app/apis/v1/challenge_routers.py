@@ -246,7 +246,7 @@ async def list_challenges(
                 created_at=ch.created_at,
                 my_progress=approved_counts.get(ch.id, 0),
                 total_days=_total_days(ch),
-                progress_percent=round(approved_counts.get(ch.id, 0) / _total_days(ch) * 100, 1),
+                my_progress_percent=round(approved_counts.get(ch.id, 0) / _total_days(ch) * 100, 1),
                 achievement_rate=_achievement_rate(ch),
                 missed_count=missed_counts.get(ch.id, 0),
                 my_participant_status=participant_statuses.get(ch.id),
