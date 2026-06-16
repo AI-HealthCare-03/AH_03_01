@@ -36,6 +36,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
   const verifyMutation = useCreateVerification();
 
   const [rewardOpen, setRewardOpen] = useState(false);
+  const [earnedPoints, setEarnedPoints] = useState<number | null>(null);
 
   /* 오늘 날짜 (YYYY-MM-DD, 로컬 기준) */
   const today = format(new Date(), "yyyy-MM-dd");
@@ -63,6 +64,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
       {
         onSuccess: (data) => {
           if (data.status === "APPROVED") {
+            setEarnedPoints(data.earned_points ?? null);
             setRewardOpen(true);
           } else {
             showToast("인증이 처리되었어요", "info");
@@ -92,6 +94,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
       {
         onSuccess: (data) => {
           if (data.status === "APPROVED") {
+            setEarnedPoints(data.earned_points ?? null);
             setRewardOpen(true);
           } else {
             showToast("설문이 제출되었어요", "info");
@@ -121,6 +124,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
       {
         onSuccess: (data) => {
           if (data.status === "APPROVED") {
+            setEarnedPoints(data.earned_points ?? null);
             setRewardOpen(true);
             return;
           }
@@ -152,6 +156,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
       {
         onSuccess: (data) => {
           if (data.status === "APPROVED") {
+            setEarnedPoints(data.earned_points ?? null);
             setRewardOpen(true);
           } else {
             showToast("명상 인증이 처리되었어요", "info");
@@ -191,8 +196,8 @@ export default function VerifyPage({ params }: VerifyPageProps) {
     );
   }
 
-  /* 오늘 이미 인증한 경우 */
-  if (alreadyVerifiedToday) {
+  /* 오늘 이미 인증한 경우 — 보상 모달이 열려 있으면 건너뜀 */
+  if (alreadyVerifiedToday && !rewardOpen) {
     return (
       <div className="max-w-md mx-auto px-5 py-16 text-center">
         <p className="text-5xl mb-4" aria-hidden="true">✅</p>
@@ -277,6 +282,7 @@ export default function VerifyPage({ params }: VerifyPageProps) {
         open={rewardOpen}
         onClose={handleRewardClose}
         rewardType="daily"
+        earnedPoints={earnedPoints}
       />
     </div>
   );

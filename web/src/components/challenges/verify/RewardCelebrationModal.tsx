@@ -5,8 +5,6 @@ import Button from "@/components/ui/Button";
 
 /* =========================================
    인증 성공 보상 모달 (10-C13/C14/C15)
-   - 데일리: 50/70/100P 클라이언트 랜덤 표시
-   - 실제 보상은 백엔드 PointTransaction 에서 처리됨
    ========================================= */
 
 interface RewardCelebrationModalProps {
@@ -14,12 +12,7 @@ interface RewardCelebrationModalProps {
   onClose: () => void;
   onShare?: () => void;
   rewardType?: "daily" | "period" | "group";
-}
-
-const DAILY_POINTS = [50, 70, 100] as const;
-
-function getRandomDailyPoints(): number {
-  return DAILY_POINTS[Math.floor(Math.random() * DAILY_POINTS.length)];
+  earnedPoints?: number | null;
 }
 
 export default function RewardCelebrationModal({
@@ -27,15 +20,14 @@ export default function RewardCelebrationModal({
   onClose,
   onShare,
   rewardType = "daily",
+  earnedPoints,
 }: RewardCelebrationModalProps) {
-  const dailyPoints = getRandomDailyPoints();
-
   const content = {
     daily: {
       emoji: "🎉",
       title: "인증 완료!",
       subtitle: "오늘도 훌륭해요!",
-      points: dailyPoints,
+      points: earnedPoints ?? 100,
       desc: "데일리 인증 보상",
     },
     period: {
