@@ -155,7 +155,7 @@ _PERSONAL_BARE_PATTERN = re.compile(r"^(나는|저는|내가|제가)\s*\?\s*$")
 # 건강 상태 요약 요청 감지 — RAG 없이 DB 데이터 직접 요약 경로로 라우팅.
 # "내 건강상태 어때?", "내 건강 알려줘", "제 컨디션 어떤가요?"
 _HEALTH_SUMMARY_PATTERN = re.compile(
-    r"^(내|제|나의|저의)\s*(건강|건강\s*상태|컨디션|상태)\s*"
+    r"^(?:내|제|나의|저의)?\s*(건강|건강\s*상태|컨디션|상태)\s*"
     r"(어때|어떤가|어떻|괜찮|평가|봐줘|봐주세요|알려줘|알려주세요)"
     r"[\s가-힣\w!?.,~]*[?.!~]?$"
 )
@@ -849,8 +849,10 @@ _RECORD_TYPE_KO: dict[str, str] = {
 def _fmt_records(records: dict[str, Any]) -> list[str]:
     lines: list[str] = ["**최근 측정값**"]
     for rt, data in records.items():
-        label = _RECORD_TYPE_KO.get(rt, rt)
         pv = data.get("primary_value")
+        if pv is None:
+            continue
+        label = _RECORD_TYPE_KO.get(rt, rt)
         sv = data.get("secondary_value")
         unit = data.get("unit", "")
         measured = (data.get("measured_at") or "")[:10]
