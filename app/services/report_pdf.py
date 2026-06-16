@@ -87,33 +87,145 @@ def _risk_gauge_svg(score: float) -> str:
     )
 
 
-def _line_chart_svg(points: list[float], *, label: str) -> str:
-    """series(숫자 리스트) → 인라인 SVG 폴리라인. 점 0/1개도 안전."""
+# metric → (y domain, y축 눈금, 기준 구간 밴드[y1,y2,배경색,글자색,라벨], 라인[이름,값 키,색]).
+# domain/ticks 가 None 이면 데이터 기반 자동 스케일(체중 등 고정 기준치가 없는 지표).
+_TREND_CHART_CONFIGS: dict[str, dict[str, Any]] = {
+    "blood_pressure": {
+        "domain": (40.0, 200.0),
+        "ticks": [40, 80, 120, 160, 200],
+        "bands": [
+            (60, 120, "#e8f5e9", "#2e7d32", "정상"),
+            (120, 140, "#fffbe6", "#856404", "주의"),
+            (140, 200, "#ffeaea", "#e53935", "위험"),
+        ],
+        "lines": [("수축기", "value", "#dc2626"), ("이완기", "secondary_value", "#2563eb")],
+    },
+    "blood_glucose": {
+        "domain": (60.0, 250.0),
+        "ticks": [60, 110, 160, 210, 250],
+        "bands": [
+            (60, 100, "#e8f5e9", "#2e7d32", "정상"),
+            (100, 140, "#fffbe6", "#856404", "주의"),
+            (140, 250, "#ffeaea", "#e53935", "위험"),
+        ],
+        "lines": [("공복혈당", "value", "#2563eb")],
+    },
+    "weight": {"domain": None, "ticks": None, "bands": [], "lines": [("체중", "value", "#2563eb")]},
+}
+
+
+def _nice_ceil(v: float) -> float:
+    """v 이상인 '보기 좋은' 눈금 최대값(체중 등 고정 기준치가 없는 지표의 자동 도메인용)."""
+    if v <= 0:
+        return 10.0
+    magnitude = 10 ** math.floor(math.log10(v))
+    for m in (1, 2, 2.5, 4, 5, 8, 10):
+        if magnitude * m >= v:
+            return magnitude * m
+    return magnitude * 10
+
+
+def _fmt_md(iso_date: str) -> str:
+    """ISO 'YYYY-MM-DD' → 'M/d' (0 제거)."""
+    try:
+        _, mm, dd = iso_date.split("-")
+        return f"{int(mm)}/{int(dd)}"
+    except ValueError:
+        return iso_date
+
+
+def _trend_chart_svg(trend: dict[str, Any]) -> str:
+    """트렌드 dict(metric/unit/series/avg/secondary_avg) → 축·기준구간·범례·평균배지 포함 SVG."""
+    metric = trend.get("metric", "")
+    unit = trend.get("unit", "")
+    series: list[dict[str, Any]] = trend.get("series") or []
+    label = _METRIC_LABELS.get(metric, (metric, unit))[0]
+    points = [p for p in series if isinstance(p, dict) and p.get("value") is not None]
     if not points:
         return f'<div class="empty">{_esc(label)} 데이터가 없습니다.</div>'
-    w, h, pad = 320.0, 120.0, 16.0
-    lo = min(points)
-    hi = max(points)
+
+    cfg = _TREND_CHART_CONFIGS.get(metric, {"domain": None, "ticks": None, "bands": [], "lines": [(label, "value", "#2563eb")]})
+    values = [float(p["value"]) for p in points]
+    if cfg["domain"] is not None:
+        lo, hi = cfg["domain"]
+        ticks: list[float] = cfg["ticks"]
+    else:
+        hi = _nice_ceil(max(values) * 1.2)
+        lo = 0.0
+        ticks = [hi * i / 4 for i in range(5)]
+
+    w, h = 680.0, 260.0
+    plot_left, plot_right, plot_top, plot_bottom = 54.0, 668.0, 34.0, 214.0
     span = (hi - lo) or 1.0
     n = len(points)
-    step = (w - 2 * pad) / (n - 1) if n > 1 else 0.0
+    step = (plot_right - plot_left) / (n - 1) if n > 1 else 0.0
 
     def _x(i: int) -> float:
-        return pad + step * i
+        return plot_left + step * i
 
     def _y(v: float) -> float:
-        return h - pad - ((v - lo) / span) * (h - 2 * pad)
+        return plot_bottom - ((v - lo) / span) * (plot_bottom - plot_top)
 
-    if n == 1:
-        coords = f"{_x(0):.1f},{_y(points[0]):.1f} {w - pad:.1f},{_y(points[0]):.1f}"
+    bands_svg = "".join(
+        f'<rect x="{plot_left:.1f}" y="{_y(min(b[1], hi)):.1f}" width="{plot_right - plot_left:.1f}" '
+        f'height="{_y(max(b[0], lo)) - _y(min(b[1], hi)):.1f}" fill="{b[2]}"/>'
+        f'<text x="{plot_right - 4:.1f}" y="{_y(min(b[1], hi)) + 12:.1f}" text-anchor="end" '
+        f'font-size="10" font-weight="600" fill="{b[3]}">{_esc(b[4])}</text>'
+        for b in cfg["bands"]
+        if b[0] < hi and b[1] > lo
+    )
+    grid_svg = "".join(
+        f'<line x1="{plot_left:.1f}" y1="{_y(t):.1f}" x2="{plot_right:.1f}" y2="{_y(t):.1f}" '
+        f'stroke="#f0f0f0" stroke-width="1"/>'
+        f'<text x="{plot_left - 6:.1f}" y="{_y(t) + 3:.1f}" text-anchor="end" '
+        f'font-size="10" fill="#999">{t:g}{_esc(unit)}</text>'
+        for t in ticks
+    )
+    x_labels_svg = "".join(
+        f'<text x="{_x(i):.1f}" y="{plot_bottom + 16:.1f}" text-anchor="middle" '
+        f'font-size="10" fill="#999">{_esc(_fmt_md(str(p.get("date", ""))))}</text>'
+        for i, p in enumerate(points)
+    )
+
+    lines_svg = []
+    legend_items = []
+    for name, key, color in cfg["lines"]:
+        pts = [(i, p[key]) for i, p in enumerate(points) if p.get(key) is not None]
+        if pts:
+            coords = " ".join(f"{_x(i):.1f},{_y(float(v)):.1f}" for i, v in pts)
+            dots = "".join(
+                f'<circle cx="{_x(i):.1f}" cy="{_y(float(v)):.1f}" r="2.5" fill="{color}"/>' for i, v in pts
+            )
+            lines_svg.append(f'<polyline points="{coords}" fill="none" stroke="{color}" stroke-width="2"/>{dots}')
+        legend_items.append(
+            f'<circle cx="0" cy="0" r="4" fill="{color}"/><text x="10" y="4" font-size="11" fill="#333">{_esc(name)}</text>'
+        )
+    legend_svg = "".join(
+        f'<g transform="translate({plot_left + i * 90:.1f},{h - 8:.1f})">{item}</g>'
+        for i, item in enumerate(legend_items)
+    )
+
+    avg = trend.get("avg")
+    secondary_avg = trend.get("secondary_avg")
+    if len(cfg["lines"]) > 1 and secondary_avg is not None:
+        badge_svg = (
+            f'<text x="{plot_right:.1f}" y="14" text-anchor="end" font-size="11" fill="#333">'
+            f"{avg:g}{_esc(unit)} 평균 {cfg['lines'][0][0]}</text>"
+            f'<text x="{plot_right:.1f}" y="28" text-anchor="end" font-size="11" fill="#333">'
+            f"{secondary_avg:g}{_esc(unit)} 평균 {cfg['lines'][1][0]}</text>"
+        )
+    elif avg is not None:
+        badge_svg = (
+            f'<text x="{plot_right:.1f}" y="20" text-anchor="end" font-size="11" fill="#333">'
+            f"{avg:g}{_esc(unit)} 평균</text>"
+        )
     else:
-        coords = " ".join(f"{_x(i):.1f},{_y(v):.1f}" for i, v in enumerate(points))
-    dots = "".join(f'<circle cx="{_x(i):.1f}" cy="{_y(v):.1f}" r="2.5" fill="#2563eb"/>' for i, v in enumerate(points))
+        badge_svg = ""
+
     return (
-        f'<svg width="{w:g}" height="{h:g}" viewBox="0 0 {w:g} {h:g}" '
-        f'xmlns="http://www.w3.org/2000/svg">'
-        f'<polyline points="{coords}" fill="none" stroke="#2563eb" stroke-width="2"/>'
-        f"{dots}</svg>"
+        f'<svg width="100%" height="{h:g}" viewBox="0 0 {w:g} {h:g}" '
+        f'preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">'
+        f"{badge_svg}{bands_svg}{grid_svg}{''.join(lines_svg)}{x_labels_svg}{legend_svg}</svg>"
     )
 
 
@@ -196,13 +308,12 @@ def _trend_section(trends: list[dict[str, Any]]) -> str:
         if not isinstance(t, dict):
             continue
         series = t.get("series") or []
-        nums = [float(p["value"]) for p in series if isinstance(p, dict) and p.get("value") is not None]
-        if not nums:
+        if not any(isinstance(p, dict) and p.get("value") is not None for p in series):
             continue
         label = _METRIC_LABELS.get(t.get("metric", ""), (t.get("metric", ""), ""))[0]
         blocks.append(
             f'<div class="trend-card"><div class="trend-title">{_esc(label)} 추이</div>'
-            f"{_line_chart_svg(nums, label=label)}</div>"
+            f"{_trend_chart_svg(t)}</div>"
         )
     if not blocks:
         return ""
@@ -307,8 +418,10 @@ def build_report_html(report: dict[str, Any]) -> str:
       .stat { flex: 1; background: #f3f4f6; border-radius: 8px; padding: 12px; text-align: center; }
       .stat-num { font-size: 20px; font-weight: 700; color: #2563eb; }
       .stat-cap { font-size: 11px; color: #6b7280; margin-top: 2px; }
-      .gauge-row, .trend-row { display: flex; gap: 16px; flex-wrap: wrap; }
-      .gauge-card, .trend-card { text-align: center; flex: 1; min-width: 180px; }
+      .gauge-row { display: flex; gap: 16px; flex-wrap: wrap; }
+      .gauge-card { text-align: center; flex: 1; min-width: 180px; }
+      .trend-row { display: flex; flex-direction: column; gap: 16px; }
+      .trend-card { text-align: center; width: 100%; }
       .gauge-title, .trend-title { font-weight: 700; margin-bottom: 4px; }
       .gauge-level { color: #6b7280; font-size: 12px; }
       table.stats { width: 100%; border-collapse: collapse; }
