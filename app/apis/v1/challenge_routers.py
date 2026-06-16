@@ -178,6 +178,7 @@ async def list_challenges(
     participant_statuses: dict[int, str] = {}
     group_all_approved: dict[int, int] = {}
     group_active_members: dict[int, int] = {}
+    today_verified_ids: set[int] = set()
     if challenge_ids:
         verif_rows = await ChallengeVerification.filter(
             challenge_id__in=challenge_ids,
@@ -195,6 +196,17 @@ async def list_challenges(
         for row in part_rows:
             missed_counts[row["challenge_id"]] = row["missed_count"] or 0
             participant_statuses[row["challenge_id"]] = row["status"]
+
+        # 오늘 인증 완료 여부 (mine 탭 카드 상태 표시용)
+        if mine:
+            today_rows = await ChallengeVerification.filter(
+                challenge_id__in=challenge_ids,
+                user_id=user.id,
+                verified_date=date.today(),
+                status__in=[VerificationStatus.APPROVED, VerificationStatus.PENDING],
+            ).values("challenge_id")
+            for row in today_rows:
+                today_verified_ids.add(row["challenge_id"])
 
         # 그룹 챌린지 전체 달성률 계산용 배치 조회
         group_ids = [ch.id for ch in items if ch.scope == ChallengeScope.GROUP]
@@ -248,6 +260,7 @@ async def list_challenges(
                 achievement_rate=_achievement_rate(ch),
                 missed_count=missed_counts.get(ch.id, 0),
                 my_participant_status=participant_statuses.get(ch.id),
+                verified_today=ch.id in today_verified_ids,
             )
             for ch in items
         ],
