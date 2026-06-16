@@ -179,7 +179,7 @@ async def list_challenges(
     participant_statuses: dict[int, str] = {}
     group_all_approved: dict[int, int] = {}
     group_active_members: dict[int, int] = {}
-    today_verified_ids: set[int] = set()
+    today_status_map: dict[int, str] = {}
     if challenge_ids:
         verif_rows = await ChallengeVerification.filter(
             challenge_id__in=challenge_ids,
@@ -198,15 +198,23 @@ async def list_challenges(
             missed_counts[row["challenge_id"]] = row["missed_count"] or 0
             participant_statuses[row["challenge_id"]] = row["status"]
 
-        # 오늘 인증 완료 여부 (mine 탭 카드 상태 표시용) — 성공/실패/심사중 모두 포함
+        # 오늘 인증 상태 (mine 탭 카드 상태 표시용) — APPROVED > PENDING > REJECTED 우선순위
         if mine:
+            _priority = {
+                VerificationStatus.APPROVED: 3,
+                VerificationStatus.PENDING: 2,
+                VerificationStatus.REJECTED: 1,
+            }
             today_rows = await ChallengeVerification.filter(
                 challenge_id__in=challenge_ids,
                 user_id=user.id,
                 verified_date=datetime.now(config.TIMEZONE).date(),
-            ).values("challenge_id")
+            ).values("challenge_id", "status")
             for row in today_rows:
-                today_verified_ids.add(row["challenge_id"])
+                cid = row["challenge_id"]
+                st = row["status"]
+                if cid not in today_status_map or _priority.get(st, 0) > _priority.get(today_status_map[cid], 0):
+                    today_status_map[cid] = st
 
         # 그룹 챌린지 전체 달성률 계산용 배치 조회
         group_ids = [ch.id for ch in items if ch.scope == ChallengeScope.GROUP]
@@ -260,7 +268,7 @@ async def list_challenges(
                 achievement_rate=_achievement_rate(ch),
                 missed_count=missed_counts.get(ch.id, 0),
                 my_participant_status=participant_statuses.get(ch.id),
-                verified_today=ch.id in today_verified_ids,
+                today_verification_status=today_status_map.get(ch.id),
             )
             for ch in items
         ],

@@ -154,7 +154,7 @@ class ChallengeListItem(BaseModel):
     achievement_rate: int = 0       # 달성률 % (그룹: 전체 멤버 기준, 개인: 내 기준)
     missed_count: int | None = None  # 누락 횟수
     my_participant_status: str | None = None  # 현재 사용자의 참여 상태 (APPROVED/LEFT 등)
-    verified_today: bool = False  # 오늘 인증 완료 여부
+    today_verification_status: str | None = None  # 오늘 인증 상태 (APPROVED/PENDING/REJECTED/None)
 
 
 class ChallengeListResponse(BaseModel):
