@@ -13,6 +13,7 @@ import QuestionnaireVerify from "@/components/challenges/verify/QuestionnaireVer
 import RewardCelebrationModal from "@/components/challenges/verify/RewardCelebrationModal";
 import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
+import { format } from "@/lib/dateUtils";
 
 /* =========================================
    인증 페이지 (10-C10 / 10-C11)
@@ -37,18 +38,12 @@ export default function VerifyPage({ params }: VerifyPageProps) {
   const [rewardOpen, setRewardOpen] = useState(false);
 
   /* 오늘 날짜 (YYYY-MM-DD, 로컬 기준) */
-  const today = (() => {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  })();
+  const today = format(new Date(), "yyyy-MM-dd");
 
   /* 오늘 이미 인증했는지 확인 (내 인증만, APPROVED/PENDING/REJECTED 모두 포함)
      REJECTED도 포함 — 아니요 선택 후 재제출 시 백엔드 409 방지 */
   const alreadyVerifiedToday = verificationsData?.items.some(
-    (v) => v.verified_at?.split("T")[0] === today &&
+    (v) => v.verified_date === today &&
            (v.status === "APPROVED" || v.status === "PENDING" || v.status === "REJECTED")
   ) ?? false;
 
