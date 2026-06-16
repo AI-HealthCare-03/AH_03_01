@@ -314,13 +314,15 @@ function MascotBanner({ userName }: { userName: string | null }) {
       </div>
       {/* 말풍선 */}
       <div className="summary-chip bg-surface rounded-[12px] px-4 py-3 shadow-sm flex-1 relative">
-        {/* 말풍선 꼬리 */}
+        {/* 말풍선 꼬리 — 색은 className(border-r-white)으로 분리해 다크모드에서
+            말풍선 배경(bg-surface)과 같은 색으로 바뀌도록 함(globals.css) */}
         <div
-          className="absolute left-[-8px] top-1/2 -translate-y-1/2 w-0 h-0"
+          className="absolute left-[-8px] top-1/2 -translate-y-1/2 w-0 h-0 border-r-white"
           style={{
             borderTop: "6px solid transparent",
             borderBottom: "6px solid transparent",
-            borderRight: "8px solid white",
+            borderRightWidth: "8px",
+            borderRightStyle: "solid",
           }}
           aria-hidden="true"
         />
@@ -452,14 +454,16 @@ function ContributingBars({ factors }: ContributingBarsProps) {
         // 파생변수 산출 방법 설명 — 있으면 ⓘ hover 툴팁으로 노출.
         const tooltip = FACTOR_TOOLTIP[f.factor];
 
-        /* 막대 색: 위험 증가→빨강→주황(비중 강도), 감소→파랑 */
+        /* 막대 색: 위험 증가→빨강→주황(비중 강도), 감소→파랑
+           contrib-bar-* 마커 클래스는 다크모드 전용 밝기 보정(globals.css)을
+           다른 컴포넌트의 동일한 bg-red-500 등과 분리해서 적용하기 위함. */
         const barColor = isRisk
           ? pct >= 30
-            ? "bg-red-500"
+            ? "bg-red-500 contrib-bar-high"
             : pct >= 15
-              ? "bg-orange-400"
-              : "bg-yellow-400"
-          : "bg-blue-400";
+              ? "bg-orange-400 contrib-bar-mid"
+              : "bg-yellow-400 contrib-bar-low"
+          : "bg-blue-400 contrib-bar-down";
 
         return (
           <div key={f.factor}>
