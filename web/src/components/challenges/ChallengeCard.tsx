@@ -37,7 +37,14 @@ export default function ChallengeCard({
     challenge.scope === "GROUP"
       ? challenge.status === "ACTIVE" || (challenge.status === "RECRUITING" && calcDDay(challenge.start_date) <= 0)
       : challenge.status === "ACTIVE";
-  const ctaLabel = challenge.scope === "GROUP" ? (canVerify ? "오늘 인증하기" : "소통하기") : "오늘 인증하기";
+  const todayStatus = challenge.today_verification_status ?? null;
+  const ctaLabel =
+    todayStatus === "APPROVED" ? "오늘 인증 완료" :
+    todayStatus === "PENDING"  ? "심사중" :
+    todayStatus === "REJECTED" ? "인증 실패" :
+    challenge.scope === "GROUP"
+      ? canVerify ? "오늘 인증하기" : "소통하기"
+      : "오늘 인증하기";
   const ctaHref =
     challenge.scope === "GROUP"
       ? canVerify
@@ -121,9 +128,15 @@ export default function ChallengeCard({
             onClick={(e) => {
               e.stopPropagation();
               e.preventDefault();
-              router.push(ctaHref);
+              if (!todayStatus) router.push(ctaHref);
             }}
-            className="text-xs font-semibold text-brand-black underline underline-offset-2"
+            disabled={!!todayStatus}
+            className={
+              todayStatus === "APPROVED" ? "text-xs font-semibold text-status-success cursor-default" :
+              todayStatus === "PENDING"  ? "text-xs font-semibold text-text-secondary cursor-default" :
+              todayStatus === "REJECTED" ? "text-xs font-semibold text-status-danger cursor-default" :
+              "text-xs font-semibold text-brand-black underline underline-offset-2"
+            }
             aria-label={`${challenge.title} ${ctaLabel}`}
           >
             {ctaLabel}
