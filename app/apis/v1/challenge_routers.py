@@ -38,11 +38,13 @@ from app.dtos.challenge import (
 )
 from app.models.challenge import (
     ChallengeCategory,
+    ChallengeParticipant,
     ChallengeReaction,
     ChallengeScope,
     ChallengeStatus,
     ChallengeVerification,
     ChallengeVisibility,
+    ParticipantStatus,
     ReactionType,
     VerificationMethod,
     VerificationStatus,
@@ -170,12 +172,12 @@ async def list_challenges(
     )
 
     # 사용자별 달성 현황 일괄 조회
-    from app.models.challenge import ChallengeVerification, VerificationStatus
-
     challenge_ids = [ch.id for ch in items]
     approved_counts: dict[int, int] = {}
     missed_counts: dict[int, int] = {}
     participant_statuses: dict[int, str] = {}
+    group_all_approved: dict[int, int] = {}
+    group_active_members: dict[int, int] = {}
     if challenge_ids:
         verif_rows = await ChallengeVerification.filter(
             challenge_id__in=challenge_ids,
@@ -186,8 +188,6 @@ async def list_challenges(
             cid = row["challenge_id"]
             approved_counts[cid] = approved_counts.get(cid, 0) + 1
 
-        from app.models.challenge import ChallengeParticipant
-
         part_rows = await ChallengeParticipant.filter(
             challenge_id__in=challenge_ids,
             user_id=user.id,
@@ -196,8 +196,36 @@ async def list_challenges(
             missed_counts[row["challenge_id"]] = row["missed_count"] or 0
             participant_statuses[row["challenge_id"]] = row["status"]
 
+        # 그룹 챌린지 전체 달성률 계산용 배치 조회
+        group_ids = [ch.id for ch in items if ch.scope == ChallengeScope.GROUP]
+        if group_ids:
+            all_verif_rows = await ChallengeVerification.filter(
+                challenge_id__in=group_ids,
+                status=VerificationStatus.APPROVED,
+            ).values("challenge_id")
+            for row in all_verif_rows:
+                cid = row["challenge_id"]
+                group_all_approved[cid] = group_all_approved.get(cid, 0) + 1
+
+            active_member_rows = await ChallengeParticipant.filter(
+                challenge_id__in=group_ids,
+                status=ParticipantStatus.APPROVED,
+            ).values("challenge_id")
+            for row in active_member_rows:
+                cid = row["challenge_id"]
+                group_active_members[cid] = group_active_members.get(cid, 0) + 1
+
     def _total_days(ch) -> int:
         return max(1, (ch.end_date - ch.start_date).days + 1)
+
+    def _achievement_rate(ch) -> int:
+        td = _total_days(ch)
+        if ch.scope == ChallengeScope.GROUP:
+            all_approved = group_all_approved.get(ch.id, 0)
+            active_members = max(1, group_active_members.get(ch.id, 0))
+            return round(all_approved / (td * active_members) * 100)
+        else:
+            return round(approved_counts.get(ch.id, 0) / td * 100)
 
     payload = ChallengeListResponse(
         page=page,
@@ -217,6 +245,7 @@ async def list_challenges(
                 end_date=ch.end_date,
                 my_progress=approved_counts.get(ch.id, 0),
                 total_days=_total_days(ch),
+                achievement_rate=_achievement_rate(ch),
                 missed_count=missed_counts.get(ch.id, 0),
                 my_participant_status=participant_statuses.get(ch.id),
             )
@@ -232,8 +261,6 @@ async def get_challenge(
     user: Annotated[User, Depends(get_request_user)],
     service: Annotated[ChallengeService, Depends(ChallengeService)],
 ) -> Response:
-    from app.models.challenge import ChallengeParticipant, ParticipantStatus  # noqa: PLC0415
-
     challenge = await service.get_public(challenge_id)
     is_creator = challenge.creator_id == user.id
     participation = await ChallengeParticipant.filter(
@@ -242,9 +269,35 @@ async def get_challenge(
     is_member = is_creator or (
         participation is not None and participation.status == ParticipantStatus.APPROVED
     )
+    my_progress = await ChallengeVerification.filter(
+        challenge_id=challenge_id,
+        user_id=user.id,
+        status=VerificationStatus.APPROVED,
+    ).count()
+    total_days = max(1, (challenge.end_date - challenge.start_date).days + 1)
+
+    if challenge.scope == ChallengeScope.GROUP:
+        # 그룹 달성률: 전체 멤버 인증 합계 / (기간 × 활성 멤버 수) × 100
+        all_approved = await ChallengeVerification.filter(
+            challenge_id=challenge_id,
+            status=VerificationStatus.APPROVED,
+        ).count()
+        active_members = await ChallengeParticipant.filter(
+            challenge_id=challenge_id,
+            status=ParticipantStatus.APPROVED,
+        ).count()
+        denominator = total_days * max(1, active_members)
+        achievement_rate = round(all_approved / denominator * 100)
+    else:
+        # 개인 달성률: 내 인증 수 / 기간 × 100
+        achievement_rate = round(my_progress / total_days * 100)
+
     payload = ChallengeResponse.model_validate(challenge).model_dump()
     payload["is_member"] = is_member
     payload["status"] = _effective_status(challenge.status, challenge.end_date).value
+    payload["my_progress"] = my_progress
+    payload["total_days"] = total_days
+    payload["achievement_rate"] = achievement_rate
     # 그룹 챌린지의 경우 참여자/방장에게 invite_code 노출 (코드 복사 기능)
     if challenge.scope.value == "GROUP" and is_member:
         invite_code = await service.get_active_invite_code(challenge.id)
@@ -310,7 +363,27 @@ async def list_participants(
     user: Annotated[User, Depends(get_request_user)],
     service: Annotated[ParticipantService, Depends(ParticipantService)],
 ) -> Response:
+    from app.models.challenge import Challenge  # noqa: PLC0415
+
     participants = await service.list_participants(user, challenge_id)
+
+    # 챌린지 기간 조회 (달성률 % 계산용)
+    challenge_obj = await Challenge.get(id=challenge_id)
+    total_days = max(1, (challenge_obj.end_date - challenge_obj.start_date).days + 1)
+
+    # 멤버별 APPROVED 인증 수 일괄 조회
+    participant_user_ids = [p.user_id for p in participants]
+    progress_map: dict[str, int] = {}
+    if participant_user_ids:
+        verif_rows = await ChallengeVerification.filter(
+            challenge_id=challenge_id,
+            user_id__in=participant_user_ids,
+            status=VerificationStatus.APPROVED,
+        ).values("user_id")
+        for row in verif_rows:
+            uid = str(row["user_id"])
+            progress_map[uid] = progress_map.get(uid, 0) + 1
+
     # ParticipantResponse 에는 user 필드가 없으므로, 직렬화한 dict 에 user 메타를 inline 추가
     payload: list[dict[str, Any]] = []
     for p in participants:
@@ -325,6 +398,9 @@ async def list_participants(
             if u is not None
             else None
         )
+        progress_days = progress_map.get(str(p.user_id), 0)
+        item["progress_days"] = progress_days
+        item["achievement_rate"] = round(progress_days / total_days * 100)
         payload.append(item)
     # 프론트(ParticipantListResponse)는 items 키를 기대한다. participants 별칭은 호환용.
     return Response(

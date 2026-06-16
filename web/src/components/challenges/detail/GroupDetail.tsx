@@ -47,10 +47,7 @@ export default function GroupDetail({
   const { data: participantsData } = useChallengeParticipants(challenge.id);
 
   const catConfig = CATEGORY_CONFIG[challenge.category] ?? CATEGORY_CONFIG.EXERCISE;
-  const progressPct =
-    challenge.total_days && challenge.total_days > 0
-      ? Math.round(((challenge.my_progress ?? 0) / challenge.total_days) * 100)
-      : 0;
+  const progressPct = challenge.achievement_rate ?? 0;
 
   const participants = participantsData?.items ?? [];
 
@@ -100,8 +97,6 @@ export default function GroupDetail({
           </div>
           <ChallengeProgressBar
             progress={progressPct}
-            completedDays={challenge.my_progress}
-            totalDays={challenge.total_days}
           />
           {/* 모바일 초대 코드 복사 */}
           {challenge.invite_code && (
@@ -165,7 +160,6 @@ export default function GroupDetail({
           {activeTab === "members" && (
             <GroupMemberTab
               challengeId={challenge.id}
-              totalDays={challenge.total_days}
             />
           )}
         </div>
