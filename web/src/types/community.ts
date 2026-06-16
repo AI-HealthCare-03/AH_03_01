@@ -13,6 +13,7 @@ export interface PostListItem {
   author_id: string;
   author_nickname: string | null;
   created_at: string;
+  thumbnail_url?: string | null;
 }
 
 export interface PostDetail extends PostListItem {
