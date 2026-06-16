@@ -847,7 +847,7 @@ _RECORD_TYPE_KO: dict[str, str] = {
 
 
 def _fmt_records(records: dict[str, Any]) -> list[str]:
-    lines: list[str] = ["**최근 측정값**"]
+    lines: list[str] = []
     for rt, data in records.items():
         pv = data.get("primary_value")
         if pv is None:
@@ -860,7 +860,7 @@ def _fmt_records(records: dict[str, Any]) -> list[str]:
             lines.append(f"- {label}: {pv}/{sv} {unit} ({measured})")
         else:
             lines.append(f"- {label}: {pv} {unit} ({measured})")
-    return lines
+    return ["**최근 측정값**", *lines] if lines else []
 
 
 def _fmt_profile(profile: dict[str, Any]) -> list[str]:
