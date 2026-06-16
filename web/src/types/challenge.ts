@@ -267,6 +267,7 @@ export interface VerificationFeedItem {
   comment_count: number;
   my_like: boolean;
   created_at: string;
+  status: VerificationStatus;
 }
 
 export interface VerificationFeedResponse {

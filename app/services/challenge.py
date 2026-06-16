@@ -775,6 +775,7 @@ class VerificationService:
                     "comment_count": v.comment_count,
                     "my_like": v.id in liked_ids,
                     "created_at": v.created_at,
+                    "status": v.status,
                 }
             )
         return result, total
