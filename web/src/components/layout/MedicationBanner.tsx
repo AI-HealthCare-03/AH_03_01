@@ -14,12 +14,14 @@ interface BannerItem {
   title: string;
   body: string;
   leaving: boolean;
+  index: number;
 }
 
 export default function MedicationBanner() {
   const [queue, setQueue] = useState<BannerItem[]>([]);
   const dismissTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const enteredAtMap = useRef<Map<string, number>>(new Map());
+  const totalAddedRef = useRef(0);
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -28,9 +30,11 @@ export default function MedicationBanner() {
       const { notifId, title, body } = detail ?? {};
       if (typeof notifId !== "string" || !notifId || typeof title !== "string") return;
       enteredAtMap.current.set(notifId, Date.now());
+      totalAddedRef.current += 1;
+      const index = totalAddedRef.current;
       setQueue((prev) => [
         ...prev,
-        { notifId, title, body: typeof body === "string" ? body : "", leaving: false },
+        { notifId, title, body: typeof body === "string" ? body : "", leaving: false, index },
       ]);
     };
     window.addEventListener(MED_BANNER_EVENT, handler);
@@ -85,8 +89,10 @@ export default function MedicationBanner() {
   };
 
   const current = queue[0];
-  if (!current) return null;
-  const activeCount = queue.filter((b) => !b.leaving).length;
+  if (!current) {
+    totalAddedRef.current = 0;
+    return null;
+  }
 
   return (
     <div className="med-banner fixed top-0 left-0 right-0 z-[60] flex justify-center px-4 pt-3 pointer-events-none">
@@ -103,9 +109,9 @@ export default function MedicationBanner() {
             <p className="text-sm font-bold text-text-primary leading-snug">{current.title}</p>
             <p className="text-xs text-text-secondary mt-0.5">{current.body}</p>
           </div>
-          {activeCount > 1 && (
+          {totalAddedRef.current > 1 && (
             <span className="shrink-0 text-[10px] text-text-tertiary font-medium self-start mt-0.5 mr-1">
-              1 / {activeCount}
+              {current.index} / {totalAddedRef.current}
             </span>
           )}
           <button
