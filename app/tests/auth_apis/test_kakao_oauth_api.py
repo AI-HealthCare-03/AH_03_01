@@ -7,7 +7,7 @@ from tortoise.contrib.test import TestCase
 
 from app.core import config
 from app.core.jwt.state import token_backend
-from app.core.utils.security import generate_oauth_state
+from app.core.utils.security import generate_oauth_state, register_oauth_state
 from app.main import app
 from app.models.users import User
 from app.services.kakao_oauth import KakaoProfile
@@ -43,10 +43,17 @@ def _signup_payload(ticket: str, **overrides) -> dict:
 async def _signup_kakao_user(client: AsyncClient, social_id: str, **overrides) -> str:
     """카카오 신규 가입을 끝내고 social_id 를 반환하는 헬퍼(테스트 픽스처용)."""
     with _patch_kakao(social_id=social_id, email=overrides.get("email"), nickname=overrides.get("nickname")):
-        cb = await client.post(f"{BASE}/kakao/callback", json={"code": "authcode", "state": generate_oauth_state()})
+        cb = await client.post(f"{BASE}/kakao/callback", json={"code": "authcode", "state": await _fresh_state()})
     ticket = cb.json()["signup_ticket"]
     await client.post(f"{BASE}/kakao/signup", json=_signup_payload(ticket, **overrides))
     return social_id
+
+
+async def _fresh_state() -> str:
+    """authorize-url 처럼 state 를 발급+Redis 등록한다(콜백의 단일사용 소비 검증 통과용)."""
+    state = generate_oauth_state()
+    await register_oauth_state(state)
+    return state
 
 
 async def _soft_delete(social_id: str, *, deleted_at: datetime | None = None) -> None:
@@ -69,7 +76,7 @@ class TestKakaoOAuthAPI(TestCase):
         assert "prompt=login" in body["authorize_url"]  # 매 로그인 재인증 강제
 
     async def test_callback_new_user_returns_signup_required(self):
-        state = generate_oauth_state()
+        state = await _fresh_state()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             with _patch_kakao(social_id="900001", email="new@kakao.com", nickname="신규"):
                 res = await client.post(f"{BASE}/kakao/callback", json={"code": "authcode", "state": state})
@@ -86,7 +93,7 @@ class TestKakaoOAuthAPI(TestCase):
         assert res.status_code == status.HTTP_400_BAD_REQUEST
 
     async def test_signup_with_valid_ticket_creates_account(self):
-        state = generate_oauth_state()
+        state = await _fresh_state()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             with _patch_kakao(social_id="900003", email="s3@kakao.com", nickname="삼번"):
                 cb = await client.post(f"{BASE}/kakao/callback", json={"code": "authcode", "state": state})
@@ -98,7 +105,7 @@ class TestKakaoOAuthAPI(TestCase):
         assert any("refresh_token" in h for h in res.headers.get_list("set-cookie"))
 
     async def test_existing_social_user_logs_in(self):
-        state = generate_oauth_state()
+        state = await _fresh_state()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # 최초 가입
             with _patch_kakao(social_id="900004", email="s4@kakao.com", nickname="사번"):
@@ -111,7 +118,7 @@ class TestKakaoOAuthAPI(TestCase):
             # 동일 social_id 재방문 → 로그인 분기
             with _patch_kakao(social_id="900004", email="s4@kakao.com", nickname="사번"):
                 res = await client.post(
-                    f"{BASE}/kakao/callback", json={"code": "authcode2", "state": generate_oauth_state()}
+                    f"{BASE}/kakao/callback", json={"code": "authcode2", "state": await _fresh_state()}
                 )
 
         assert res.status_code == status.HTTP_200_OK
@@ -133,7 +140,7 @@ class TestKakaoOAuthAPI(TestCase):
         assert res.status_code == status.HTTP_401_UNAUTHORIZED
 
     async def test_signup_duplicate_email_returns_409(self):
-        state = generate_oauth_state()
+        state = await _fresh_state()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # 기존 로컬 계정 선점
             await client.post(
@@ -165,7 +172,7 @@ class TestKakaoOAuthAPI(TestCase):
             await _soft_delete("910001")
             with _patch_kakao(social_id="910001", email="d1@kakao.com", nickname="탈퇴일"):
                 res = await client.post(
-                    f"{BASE}/kakao/callback", json={"code": "authcode", "state": generate_oauth_state()}
+                    f"{BASE}/kakao/callback", json={"code": "authcode", "state": await _fresh_state()}
                 )
         assert res.status_code == status.HTTP_200_OK
         body = res.json()
@@ -181,7 +188,7 @@ class TestKakaoOAuthAPI(TestCase):
             await _soft_delete("910002")
             with _patch_kakao(social_id="910002", email="d2@kakao.com", nickname="복구이"):
                 cb = await client.post(
-                    f"{BASE}/kakao/callback", json={"code": "authcode", "state": generate_oauth_state()}
+                    f"{BASE}/kakao/callback", json={"code": "authcode", "state": await _fresh_state()}
                 )
             ticket = cb.json()["restore_ticket"]
             res = await client.post(f"{BASE}/kakao/restore", json={"restore_ticket": ticket})
@@ -200,7 +207,7 @@ class TestKakaoOAuthAPI(TestCase):
             await _soft_delete("910003")
             with _patch_kakao(social_id="910003", email="d3@kakao.com", nickname="파기삼"):
                 cb = await client.post(
-                    f"{BASE}/kakao/callback", json={"code": "authcode", "state": generate_oauth_state()}
+                    f"{BASE}/kakao/callback", json={"code": "authcode", "state": await _fresh_state()}
                 )
             ticket = cb.json()["restore_ticket"]
             res = await client.post(f"{BASE}/kakao/destroy", json={"restore_ticket": ticket})
@@ -209,7 +216,7 @@ class TestKakaoOAuthAPI(TestCase):
             # 파기 후 동일 social_id 재방문 → 신규 가입 분기
             with _patch_kakao(social_id="910003", email="d3@kakao.com", nickname="파기삼"):
                 again = await client.post(
-                    f"{BASE}/kakao/callback", json={"code": "authcode", "state": generate_oauth_state()}
+                    f"{BASE}/kakao/callback", json={"code": "authcode", "state": await _fresh_state()}
                 )
         assert again.json()["status"] == "signup_required"
 
@@ -222,7 +229,7 @@ class TestKakaoOAuthAPI(TestCase):
             await _soft_delete("910004", deleted_at=datetime.now(config.TIMEZONE) - timedelta(days=31))
             with _patch_kakao(social_id="910004", email="d4@kakao.com", nickname="만료사"):
                 cb = await client.post(
-                    f"{BASE}/kakao/callback", json={"code": "authcode", "state": generate_oauth_state()}
+                    f"{BASE}/kakao/callback", json={"code": "authcode", "state": await _fresh_state()}
                 )
             ticket = cb.json()["restore_ticket"]
             res = await client.post(f"{BASE}/kakao/restore", json={"restore_ticket": ticket})
@@ -232,3 +239,28 @@ class TestKakaoOAuthAPI(TestCase):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             res = await client.post(f"{BASE}/kakao/restore", json={"restore_ticket": "not-a-valid-jwt"})
         assert res.status_code == status.HTTP_401_UNAUTHORIZED
+
+    async def test_callback_banned_user_returns_403(self):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            await _signup_kakao_user(
+                client, "910005", email="b5@kakao.com", nickname="정지오", phone_number="01010005000"
+            )
+            user = await User.get(social_provider="kakao", social_id="910005")
+            user.is_banned = True
+            await user.save()
+            # 정지 계정은 인가 거부 → 403(앱 전반·복구/파기와 동일 컨벤션)
+            with _patch_kakao(social_id="910005", email="b5@kakao.com", nickname="정지오"):
+                res = await client.post(
+                    f"{BASE}/kakao/callback", json={"code": "authcode", "state": await _fresh_state()}
+                )
+        assert res.status_code == status.HTTP_403_FORBIDDEN
+
+    async def test_callback_state_replay_returns_400(self):
+        # 동일 state 재사용(replay)은 단일사용 소비로 두 번째에 차단되어야 한다.
+        state = await _fresh_state()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            with _patch_kakao(social_id="910007", email="r7@kakao.com", nickname="리플세븐"):
+                first = await client.post(f"{BASE}/kakao/callback", json={"code": "authcode", "state": state})
+                second = await client.post(f"{BASE}/kakao/callback", json={"code": "authcode", "state": state})
+        assert first.status_code == status.HTTP_200_OK
+        assert second.status_code == status.HTTP_400_BAD_REQUEST

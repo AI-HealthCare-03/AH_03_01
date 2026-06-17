@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import SimpleAuthShell from "@/components/layout/SimpleAuthShell";
-import { useToast } from "@/components/ui/Toast";
 import { kakaoCallback } from "@/lib/api/auth";
 import { useAuthStore } from "@/stores/auth";
 import {
@@ -26,7 +25,6 @@ function KakaoCallbackInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setAuth } = useAuthStore();
-  const { showToast } = useToast();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -83,14 +81,9 @@ function KakaoCallbackInner() {
         if (!active) return;
         const status = (err as { response?: { status?: number } }).response?.status;
 
-        if (status === 401) {
+        if (status === 401 || status === 403) {
+          /* 정지(ban)된 계정 — 탈퇴 계정은 restore_required(200)로 위에서 분기됨 */
           setErrorMsg("이용이 제한된 계정입니다. 고객센터에 문의해 주세요.");
-          return;
-        }
-        if (status === 403) {
-          /* 탈퇴 후 복구 가능한 계정 */
-          showToast("탈퇴한 계정입니다. 계정 복구 페이지로 이동합니다.", "info");
-          router.replace(ROUTES.ACCOUNT_RESTORE);
           return;
         }
         setErrorMsg("카카오 로그인에 실패했습니다. 잠시 후 다시 시도해 주세요.");

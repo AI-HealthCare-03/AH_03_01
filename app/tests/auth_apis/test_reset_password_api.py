@@ -2,7 +2,7 @@
 
 이메일 본인 인증 + email/name 일치 후 새 비밀번호 설정(비밀번호 찾기).
 - 해피패스(해시 갱신) / 미인증(400) / 미존재·name 불일치·탈퇴계정(404)
-- 새 비밀번호가 기존과 동일하면 "이미 사용한 번호입니다"(400)
+- 새 비밀번호가 기존과 동일하면 "이미 사용 중인 비밀번호입니다"(400)
 
 Redis(consume)·이메일 인증은 patch/autouse 로 격리.
 """
@@ -67,7 +67,7 @@ class TestResetPassword(TestCase):
                     json={"email": user.email, "name": user.name, "new_password": OLD_PW},
                 )
         assert res.status_code == status.HTTP_400_BAD_REQUEST
-        assert "이미 사용한 번호" in res.json()["detail"]
+        assert "이미 사용 중인 비밀번호" in res.json()["detail"]
         await user.refresh_from_db()
         assert verify_password(OLD_PW, user.hashed_password)  # 변경 안 됨
 
