@@ -82,7 +82,7 @@ export interface AdminNoticeItem {
   created_at: string;
   author_name: string | null;
   is_deleted?: boolean;
-  is_pinned?: boolean;
+  is_pinned: boolean;
 }
 
 const BASE = "/api/v1/admin";
