@@ -200,8 +200,8 @@ export function useNotificationScheduler() {
               const isChallenge = n.target_type === "VERIFICATION";
               const isCommunity = n.target_type === "POST" || n.target_type === "COMMENT";
               if (n.notification_type === "RISK_CHANGE") continue; // 독립 riskPoll에서 처리
-              // KICK/INVITE 는 kickPoll 에서 독립 처리 — 소셜 폴링에서 중복/오표시 방지
-              if (n.notification_type === "CHALLENGE_KICK" || n.notification_type === "CHALLENGE_INVITE") continue;
+              // KICK/INVITE/DELETE 는 kickPoll 에서 독립 처리 — 소셜 폴링에서 중복/오표시 방지
+              if (n.notification_type === "CHALLENGE_KICK" || n.notification_type === "CHALLENGE_INVITE" || n.notification_type === "CHALLENGE_DELETE") continue;
               if (isChallenge && !settings.challengeInteraction) continue;
               if (isCommunity && !settings.community) continue;
 
@@ -261,11 +261,14 @@ export function useNotificationScheduler() {
             } else if (n.notification_type === "CHALLENGE_INVITE") {
               pushNotification({ category: "챌린지", title: "📩 챌린지 초대", body: n.message });
               await sendBrowserNotification("📩 챌린지 초대", n.message);
+            } else if (n.notification_type === "CHALLENGE_DELETE") {
+              pushNotification({ category: "챌린지", title: "🗑️ 챌린지 삭제", body: n.message });
+              await sendBrowserNotification("🗑️ 챌린지 삭제", n.message);
             }
           }
         } catch { /* 무시 */ }
       };
-      kickPollIntervalRef.current = setInterval(kickPoll, 30_000);
+      kickPollIntervalRef.current = setInterval(kickPoll, 10_000);
 
       // ── 챌린지 리마인드 ──────────────────────────
       if (settings.challengeRemind) {

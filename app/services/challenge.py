@@ -224,6 +224,26 @@ class ChallengeService:
         if challenge.creator_id != user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="방장만 삭제할 수 있습니다.")
         await self.repo.soft_delete(challenge)
+        # 그룹 챌린지 삭제 시 방장 제외 APPROVED 멤버 전체에게 알림
+        try:
+            members = await ChallengeParticipant.filter(
+                challenge_id=challenge_id,
+                status=ParticipantStatus.APPROVED,
+            ).exclude(user_id=user.id)
+            title = challenge.title[:40]
+            notif_repo = NotificationRepository()
+            for member in members:
+                await notif_repo.create(
+                    recipient_id=member.user_id,
+                    actor_id=user.id,
+                    notification_type=NotificationType.CHALLENGE_DELETE,
+                    target_type="CHALLENGE",
+                    target_id=challenge_id,
+                    message=f"'{title}' 챌린지가 방장에 의해 삭제되었습니다.",
+                )
+        except Exception:
+            import logging  # noqa: PLC0415
+            logging.getLogger(__name__).warning("챌린지 삭제 알림 전송 실패 challenge_id=%s", challenge_id)
 
     async def list_challenges(
         self,
