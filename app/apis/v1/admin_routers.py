@@ -589,11 +589,10 @@ async def toggle_pin_notice(
     notice_id: int,
     admin: Annotated[User, Depends(get_admin_user)],
 ) -> AdminNoticeItem:
-    post = await Post.get_or_none(id=notice_id, category=PostCategory.NOTICE, is_deleted=False)
-    if not post:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공지사항을 찾을 수 없습니다.")
     async with in_transaction():
         post = await Post.filter(id=notice_id, category=PostCategory.NOTICE, is_deleted=False).select_for_update().first()
+        if not post:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공지사항을 찾을 수 없습니다.")
         if not post.is_pinned:
             pinned_count = await Post.filter(
                 category=PostCategory.NOTICE, is_pinned=True, is_deleted=False
