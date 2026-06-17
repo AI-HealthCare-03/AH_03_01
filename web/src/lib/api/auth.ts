@@ -92,10 +92,15 @@ export async function findId(
  * 이메일 본인 인증 메일 발송
  * POST /api/v1/auth/email/send-verification
  */
-export async function sendEmailVerification(email: string, name?: string): Promise<void> {
+export async function sendEmailVerification(email: string, name?: string, purpose?: string): Promise<void> {
   // name 을 보내면 백엔드가 email+name 일치 활성 계정에만 메일을 발송한다(비번 찾기 본인확인).
   // 회원가입/계정복구는 name 없이 호출(기존 동작 유지).
-  await apiClient.post("/api/v1/auth/email/send-verification", { email, ...(name ? { name } : {}) });
+  // purpose 를 보내면 인증 완료 플래그가 그 네임스페이스로 격리된다(예: 로그인 상태 비번 변경).
+  await apiClient.post("/api/v1/auth/email/send-verification", {
+    email,
+    ...(name ? { name } : {}),
+    ...(purpose ? { purpose } : {}),
+  });
 }
 
 /**
@@ -114,10 +119,10 @@ export async function verifyEmailToken(token: string): Promise<string> {
  * 이메일 인증 완료 여부 조회
  * GET /api/v1/auth/email/verification-status?email=...
  */
-export async function checkEmailVerified(email: string): Promise<boolean> {
+export async function checkEmailVerified(email: string, purpose?: string): Promise<boolean> {
   const res = await apiClient.get<{ email: string; verified: boolean }>(
     "/api/v1/auth/email/verification-status",
-    { params: { email } }
+    { params: { email, ...(purpose ? { purpose } : {}) } }
   );
   return res.data.verified;
 }

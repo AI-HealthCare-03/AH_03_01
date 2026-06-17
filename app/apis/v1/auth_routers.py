@@ -147,7 +147,7 @@ async def send_email_verification(
 
     name 이 함께 오면(비밀번호 찾기) email+name 일치 계정에만 발송한다 — 불일치여도 응답은 동일한 202.
     """
-    await service.send_verification(str(payload.email), payload.name)
+    await service.send_verification(str(payload.email), payload.name, payload.purpose)
     return Response(content={"detail": "인증 메일을 발송했습니다."}, status_code=status.HTTP_202_ACCEPTED)
 
 
@@ -171,9 +171,10 @@ async def email_verification_status(
     request: Request,
     email: Annotated[str, Query(min_length=3, max_length=80)],
     service: Annotated[EmailVerificationService, Depends(EmailVerificationService)],
+    purpose: Annotated[str | None, Query(max_length=40)] = None,
 ) -> Response:
-    """이메일 인증 완료 여부 조회. 가입폼의 '인증 완료 확인' 버튼에서 호출."""
-    verified = await service.is_verified(email)
+    """이메일 인증 완료 여부 조회. 가입폼/비번변경의 '인증 완료 확인' 버튼에서 호출."""
+    verified = await service.is_verified(email, purpose)
     return Response(content={"email": email, "verified": verified}, status_code=status.HTTP_200_OK)
 
 
