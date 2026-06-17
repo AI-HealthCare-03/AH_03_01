@@ -12,6 +12,9 @@ from app.models.users import User
 from app.repositories.user_repository import UserRepository
 from app.services.auth import AuthService
 
+# 로그인 상태 비밀번호 변경 전용 이메일 인증 네임스페이스(프론트 send/check 와 동일 문자열 사용).
+PASSWORD_CHANGE_PURPOSE = "password_change"
+
 
 class UserManageService:
     def __init__(self):
@@ -65,9 +68,18 @@ class UserManageService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="기존과 동일한 비밀번호는 사용할 수 없습니다.",
             )
+        # 로그인 상태라도 비밀번호 변경에는 이메일 본인 인증을 요구한다(세션 탈취 시 비번 변경 방어).
+        # 비번 변경 전용 purpose 네임스페이스로 격리해, 가입·비번찾기 등 다른 흐름에서 남은
+        # verified 플래그로 게이트가 통과되는 교차흐름 재사용을 차단한다.
+        if not await self.auth_service.email_verification.is_verified(user.email, purpose=PASSWORD_CHANGE_PURPOSE):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="이메일 본인 인증이 필요합니다.",
+            )
         user.hashed_password = hash_password(data.new_password)
         async with in_transaction():
             await user.save(update_fields=["hashed_password", "updated_at"])
+        await self.auth_service.email_verification.consume(user.email, purpose=PASSWORD_CHANGE_PURPOSE)
 
     async def withdraw(self, user: User, reason: str | None = None) -> None:
         """회원 탈퇴 (soft delete). is_deleted=true·deleted_at=now 로 표시하고 비활성화.

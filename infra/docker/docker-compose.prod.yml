@@ -40,6 +40,10 @@ services:
     mem_limit: 2G  # 워커당 상한 (SigLIP2 idle ~1GB + 추론 여유). 3×2G=6G, t3.large(8G) 내.
     deploy:
       replicas: 3
+    volumes:
+      # fastapi 가 업로드한 인증 사진(media_volume)을 같은 경로로 공유. 누락 시 워커가
+      # stored_path 를 못 찾아 file_not_found → 전 PHOTO 인증 FAILED→REJECTED→달성률 0%.
+      - media_volume:/app/media
     networks:
       - ws
     depends_on:

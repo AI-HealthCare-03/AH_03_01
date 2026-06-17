@@ -73,29 +73,8 @@ export type ChallengeCategory =
   | "MEDITATION"
   | "WEIGHT_MANAGEMENT";
 
-/* 챌린지 상태 */
-export type ChallengeStatus = "ACTIVE" | "COMPLETED" | "CANCELLED";
-
-/* 챌린지 아이템 */
-export interface ChallengeItem {
-  id: number;
-  title: string;
-  description?: string;
-  category: ChallengeCategory;
-  status: ChallengeStatus;
-  start_date: string;
-  end_date: string;
-  reward_points: number;
-  created_at: string;
-}
-
-/* 챌린지 목록 응답 */
-export interface ChallengeListResponse {
-  items: ChallengeItem[];
-  total: number;
-  page: number;
-  size: number;
-}
+/* 챌린지 목록(Challenge / ChallengeListResponse / ChallengeStatus)은
+   @/types/challenge 가 단일 출처. 중복 정의 시 타입 드리프트로 빌드 실패가 재발. */
 
 /* 질병 타입 */
 export type DiseaseType = "HYPERTENSION" | "DIABETES" | "CARDIOVASCULAR";

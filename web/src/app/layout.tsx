@@ -10,6 +10,15 @@ export const metadata: Metadata = {
   description:
     "혈압·혈당·생활습관 챌린지로 만성질환을 스스로 관리하는 서비스입니다. 본 서비스는 의학적 진단을 대체하지 않습니다.",
   keywords: ["만성질환", "혈압", "혈당", "건강관리", "챌린지"],
+  icons: {
+    icon: [
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  manifest: "/site.webmanifest",
 };
 
 export default function RootLayout({

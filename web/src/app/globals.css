@@ -97,6 +97,7 @@ html.dark #health-records-layout .bg-white.border-b {
    텍스트: 밝은 회색~흰색
    기존 Tailwind 유틸리티 클래스 override
 ──────────────────────────────────────────────────────── */
+
 html.dark body {
   background-color: #1a1a1a !important;
   color: #f0f0f0;
@@ -113,6 +114,15 @@ html.dark .bg-surface {
   background-color: #2e2e2e !important;
 }
 
+/* 위험도 탭 앰버(크림) 하이라이트 — 다크모드 대비.
+   bg-[#fffde7] 카드들은 내부 텍스트가 시맨틱 토큰(다크 시 밝아짐)이라, 크림 배경 그대로면
+   밝은 글자가 안 보였다(추천 챌린지 제목·하단 안내문 등). 어두운 앰버 톤으로 전환한다. */
+html.dark .bg-\[\#fffde7\] { background-color: #2c2718 !important; }
+html.dark .bg-\[\#fff3cd\] { background-color: #3d341a !important; }
+html.dark .hover\:bg-\[\#fff9c4\]:hover { background-color: #3a3320 !important; }
+html.dark .border-\[\#ffe082\] { border-color: #5c4a1f !important; }
+html.dark .text-\[\#856404\] { color: #e8c860 !important; }
+
 /* 테두리 */
 html.dark .border-border {
   border-color: #3a3a3a !important;
@@ -122,6 +132,9 @@ html.dark .border-border {
 html.dark .text-text-primary   { color: #f0f0f0 !important; }
 html.dark .text-text-secondary  { color: #b0b0b0 !important; }
 html.dark .text-text-tertiary   { color: #7a7a7a !important; }
+/* 마크다운 박스(AI 분석 요약 등)의 [&_strong]:text-text-primary 는 CSS 변수(var(--color-text-primary))를
+   직접 참조해 위 유틸 오버라이드가 닿지 않는다 → 다크모드에서 strong 이 #111 로 깔려 안 보였다. 직접 밝게. */
+html.dark .\[\&_strong\]\:text-text-primary strong { color: #f0f0f0 !important; }
 /* text-brand-black → 다크모드에서 밝게 */
 html.dark .text-brand-black { color: #f0f0f0 !important; }
 
@@ -167,7 +180,9 @@ html.dark .factor-tier-low  { background-color: #ffd43b !important; }
 html.dark .factor-tier-down { background-color: #74c0fc !important; }
 
 /* overflow-hidden 카드 내부 border */
-html.dark .divide-border > * + * { border-color: #3a3a3a !important; }
+/* divide-border 구분선 — Tailwind v4는 :where(& > :not(:last-child)) 셀렉터로 생성하므로
+   이전 > * + * 는 실제로 다른 요소에 적용돼 override가 무효했음. 정확한 셀렉터로 수정. */
+html.dark .divide-border > :not(:last-child) { border-color: #3a3a3a !important; }
 
 /* 호버 */
 html.dark .hover\:bg-surface:hover { background-color: #2e2e2e !important; }
@@ -258,6 +273,16 @@ html.dark .border-gray-400 { border-color: #606060 !important; }
    동일 specificity 충돌을 source-order 로 이기도록 파일 맨 끝에 재선언. */
 html.dark .bg-brand *,
 html.dark .\!bg-brand * { color: #111111 !important; }
+
+/* ── 리더보드 1~3위 파스텔 배경 다크 오버라이드 ──────────────
+   text-text-primary/tertiary 가 다크모드에서 밝은 색으로 바뀌는데
+   배경은 라이트 파스텔 그대로 남아 글씨가 안 보임 → 배경을 어둡게 고정.
+   bg-yellow-50/bg-gray-50/bg-orange-50 원본 클래스를 직접 타겟하면
+   챌린지 카테고리 아이콘 등 무관한 다른 컴포넌트에도 영향이 가므로
+   LeaderboardCard 전용 마커 클래스(.rank-card-*)로 스코프 한정. */
+html.dark .rank-card-gold   { background-color: #332b10 !important; }
+html.dark .rank-card-silver { background-color: #2a2a2a !important; }
+html.dark .rank-card-bronze { background-color: #332010 !important; }
 
 /* ── 로그인 왼쪽 브랜드 패널 다크 오버라이드 ─────────────────
    bg-[#FFFBEB] 크림 배경을 라이트모드와 동일하게 유지.

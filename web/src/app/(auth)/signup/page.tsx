@@ -533,7 +533,7 @@ export default function SignupPage() {
             <Checkbox
               label={
                 <span>
-                  <Link href="/terms" className="underline">이용약관</Link>에 동의합니다 (필수)
+                  <Link href="/terms" target="_blank" rel="noopener noreferrer" className="underline">이용약관</Link>에 동의합니다 (필수)
                 </span>
               }
               required
@@ -543,7 +543,7 @@ export default function SignupPage() {
             <Checkbox
               label={
                 <span>
-                  <Link href="/privacy" className="underline">개인정보 처리방침</Link>에 동의합니다 (필수)
+                  <Link href="/privacy" target="_blank" rel="noopener noreferrer" className="underline">개인정보 처리방침</Link>에 동의합니다 (필수)
                 </span>
               }
               required

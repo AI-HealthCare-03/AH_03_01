@@ -7,7 +7,8 @@
    ========================================= */
 
 import Link from "next/link";
-import type { MyPet, ChallengeItem, ChallengeCategory } from "@/types/api";
+import type { MyPet, ChallengeCategory } from "@/types/api";
+import type { Challenge } from "@/types/challenge";
 import { dDayLabel } from "@/lib/dateUtils";
 
 /* 카테고리별 이모지 */
@@ -25,7 +26,7 @@ const CATEGORY_EMOJI: Record<ChallengeCategory, string> = {
 
 interface MyStatusCardProps {
   pet: MyPet | null | undefined;
-  challenges: ChallengeItem[];
+  challenges: Challenge[];
   isLoading: boolean;
 }
 

@@ -56,6 +56,7 @@ export default function QuizCard({
     if (!result) {
       return [
         base,
+        "dark-keep-color",
         selected === key
           ? "border-green-500 bg-white text-gray-900 font-medium"
           : "border-gray-200 bg-white text-gray-700 hover:border-gray-400",
@@ -63,12 +64,12 @@ export default function QuizCard({
     }
 
     if (key === result.correct_option) {
-      return `${base} border-green-500 bg-green-50 text-green-800 font-semibold`;
+      return `${base} dark-keep-color border-green-500 bg-green-50 text-green-800 font-semibold`;
     }
     if (key === selected && !result.is_correct) {
-      return `${base} border-red-400 bg-red-50 text-red-700`;
+      return `${base} dark-keep-color border-red-400 bg-red-50 text-red-700`;
     }
-    return `${base} border-gray-200 bg-white text-gray-400`;
+    return `${base} dark-keep-color border-gray-200 bg-white text-gray-400`;
   }
 
   async function handleSubmit() {
@@ -123,7 +124,7 @@ export default function QuizCard({
       {/* 제출 / 다음 문제 버튼 */}
       {!submitted && (
         <button
-          className="w-full py-4 rounded-2xl bg-gray-900 text-white font-bold text-base disabled:opacity-40 transition-opacity"
+          className="w-full py-4 rounded-2xl bg-gray-900 text-white font-bold text-base disabled:opacity-40 transition-opacity dark-keep-color"
           onClick={handleSubmit}
           disabled={!selected || loading}
         >
@@ -133,7 +134,7 @@ export default function QuizCard({
 
       {result && (
         <button
-          className="w-full py-4 rounded-2xl bg-gray-900 text-white font-bold text-base"
+          className="w-full py-4 rounded-2xl bg-gray-900 text-white font-bold text-base dark-keep-color"
           onClick={onNext}
         >
           {hasNext ? "다음 문제 →" : "오늘 퀴즈 완료!"}
@@ -146,7 +147,7 @@ export default function QuizCard({
       {result && (
         <div
           className={[
-            "rounded-2xl px-5 py-4 text-sm leading-relaxed",
+            "rounded-2xl px-5 py-4 text-sm leading-relaxed dark-keep-color",
             result.is_correct
               ? "bg-green-50 border border-green-200 text-green-800"
               : "bg-red-50 border border-red-200 text-red-800",
