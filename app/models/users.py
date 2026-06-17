@@ -24,6 +24,7 @@ class User(models.Model):
     social_id = fields.CharField(max_length=128, null=True)
     login_fail_count = fields.IntField(default=0)
     device_id = fields.CharField(max_length=128, null=True)
+    fcm_token = fields.CharField(max_length=256, null=True)
     refresh_token_hash = fields.CharField(max_length=255, null=True)
     last_login = fields.DatetimeField(null=True)
     password_changed_at = fields.DatetimeField(null=True)

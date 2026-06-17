@@ -42,6 +42,7 @@ envs/.local.env
 # Virtual Environment
 venv/
 .venv/
+.venv-*/
 
 
 # GitHub
@@ -110,6 +111,7 @@ out/
 *.keystore
 credentials*.json
 service-account*.json
+*service-account*.json
 secrets*.json
 secrets*.yaml
 secrets*.yml

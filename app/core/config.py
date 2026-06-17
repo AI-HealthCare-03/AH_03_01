@@ -101,3 +101,8 @@ class Config(BaseSettings):
     FRONTEND_BASE_URL: str = "http://localhost:3000"
     # 추가 CORS 허용 도메인 (운영 도메인 등, 빈 문자열이면 미적용)
     EXTRA_CORS_ORIGIN: str = ""
+
+    # FCM (Firebase Cloud Messaging) — 복약 알림 서버 푸시
+    # envs/ 폴더에 넣은 서비스 계정 JSON 파일의 경로 (프로젝트 루트 기준).
+    # 비어 있으면 FCM 발송 없이 silently skip.
+    FIREBASE_CREDENTIALS_PATH: str = "envs/carelog-firebase-service-account.json"
