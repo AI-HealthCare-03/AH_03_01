@@ -3,6 +3,11 @@
 import { useEffect, useState } from "react";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { upsertHealthProfile } from "@/lib/api/health";
+import {
+  fetchMedicationReminders,
+  createMedicationReminder,
+  deleteMedicationReminder,
+} from "@/lib/api/medicationReminder";
 import { HEALTH_PROFILE_KEY } from "@/hooks/queries/useHealthProfile";
 import { medSnapshotKey } from "@/lib/notifKeys";
 
@@ -23,6 +28,7 @@ export interface Medication {
   active: boolean;
   scheduleType: "everyday" | "specific_days"; // 복용 주기
   scheduleDays: number[];                     // 0=일, 1=월, ..., 6=토 (specific_days 일 때만 사용)
+  serverReminderIds?: number[];               // 서버 medication_reminders.id (times 순서 대응)
 }
 
 const DISEASE_OPTIONS = ["고혈압", "당뇨", "고지혈증", "기타"];
@@ -360,16 +366,35 @@ export default function MedicationManager() {
   const [list, setList] = useState<Medication[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
     const saved = loadMedications();
     setList(saved);
-    // localStorage에 데이터가 있으면 최초 1회 백엔드 동기화 + 오늘 스냅샷 저장
     if (saved.length > 0) {
       const activeNames = saved.filter((m) => m.active).map((m) => m.name);
       void syncToBackend(activeNames, queryClient);
     }
+
+    // 서버 알림 목록을 받아 serverReminderIds 동기화
+    fetchMedicationReminders().then((serverReminders) => {
+      if (serverReminders.length === 0) return;
+      setList((prev) => {
+        const next = prev.map((med) => {
+          const ids = med.times.map((t) => {
+            const hhmm = t.slice(0, 5);
+            const match = serverReminders.find(
+              (r) => r.medicine_name === med.name && r.reminder_time.slice(0, 5) === hhmm
+            );
+            return match?.id ?? null;
+          }).filter((id): id is number => id !== null);
+          return ids.length > 0 ? { ...med, serverReminderIds: ids } : med;
+        });
+        saveMedications(next);
+        return next;
+      });
+    }).catch(() => { /* 서버 연동 실패 시 로컬만 사용 */ });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -380,17 +405,49 @@ export default function MedicationManager() {
     void syncToBackend(activeNames, queryClient);
   };
 
-  const handleAdd = (data: Omit<Medication, "id" | "active">) => {
-    persist([...list, { id: genId(), active: true, ...data }]);
+  const handleAdd = async (data: Omit<Medication, "id" | "active">) => {
+    setServerError(null);
+    const serverReminderIds: number[] = [];
+    let failed = false;
+    for (const t of data.times) {
+      try {
+        const res = await createMedicationReminder(data.name, t);
+        serverReminderIds.push(res.id);
+      } catch {
+        failed = true;
+      }
+    }
+    if (failed) setServerError("일부 알림 시간을 서버에 저장하지 못했어요. 알림 설정을 다시 확인해 주세요.");
+    persist([...list, { id: genId(), active: true, ...data, serverReminderIds }]);
     setShowForm(false);
   };
 
-  const handleEdit = (id: string, data: Omit<Medication, "id" | "active">) => {
-    persist(list.map((m) => (m.id === id ? { ...m, ...data } : m)));
+  const handleEdit = async (id: string, data: Omit<Medication, "id" | "active">) => {
+    setServerError(null);
+    const prev = list.find((m) => m.id === id);
+    for (const sid of prev?.serverReminderIds ?? []) {
+      try { await deleteMedicationReminder(sid); } catch { /* 무시 */ }
+    }
+    const serverReminderIds: number[] = [];
+    let failed = false;
+    for (const t of data.times) {
+      try {
+        const res = await createMedicationReminder(data.name, t);
+        serverReminderIds.push(res.id);
+      } catch {
+        failed = true;
+      }
+    }
+    if (failed) setServerError("일부 알림 시간을 서버에 저장하지 못했어요. 알림 설정을 다시 확인해 주세요.");
+    persist(list.map((m) => (m.id === id ? { ...m, ...data, serverReminderIds } : m)));
     setEditId(null);
   };
 
-  const handleStop = (id: string) => {
+  const handleStop = async (id: string) => {
+    const med = list.find((m) => m.id === id);
+    for (const sid of med?.serverReminderIds ?? []) {
+      try { await deleteMedicationReminder(sid); } catch { /* 무시 */ }
+    }
     persist(list.filter((m) => m.id !== id));
   };
 
@@ -411,6 +468,13 @@ export default function MedicationManager() {
         )}
       </div>
 
+      {/* 서버 저장 오류 */}
+      {serverError && (
+        <p className="text-xs text-status-danger bg-status-danger-bg border border-status-danger rounded-[10px] px-3 py-2">
+          {serverError}
+        </p>
+      )}
+
       {/* 약 목록 */}
       {active.length === 0 && !showForm && (
         <p className="text-sm text-text-tertiary py-2">등록된 복약 일정이 없어요.</p>
@@ -420,7 +484,7 @@ export default function MedicationManager() {
           <MedicationForm
             key={med.id}
             initial={med}
-            onSave={(data) => handleEdit(med.id, data)}
+            onSave={(data) => { void handleEdit(med.id, data); }}
             onCancel={() => setEditId(null)}
           />
         ) : (
@@ -428,7 +492,7 @@ export default function MedicationManager() {
             key={med.id}
             med={med}
             onEdit={() => { setShowForm(false); setEditId(med.id); }}
-            onStop={() => handleStop(med.id)}
+            onStop={() => { void handleStop(med.id); }}
           />
         )
       )}
@@ -436,7 +500,7 @@ export default function MedicationManager() {
       {/* 새 약 추가 폼 */}
       {showForm && (
         <MedicationForm
-          onSave={handleAdd}
+          onSave={(data) => { void handleAdd(data); }}
           onCancel={() => setShowForm(false)}
         />
       )}
