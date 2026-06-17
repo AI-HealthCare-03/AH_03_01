@@ -78,7 +78,7 @@ class Comment(models.Model):
 
 class Report(models.Model):
     id = fields.BigIntField(primary_key=True)
-    target_type = fields.CharEnumField(ReportTargetType, max_length=20)
+    target_type = fields.CharEnumField(ReportTargetType, max_length=30)
     target_id = fields.BigIntField()
     reason = fields.CharEnumField(ReportReason, max_length=20)
     reporter: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(
