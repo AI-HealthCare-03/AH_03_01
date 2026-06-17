@@ -231,7 +231,9 @@ async def kakao_authorize_url(request: Request) -> Response:
             "client_id": config.KAKAO_REST_API_KEY,
             "redirect_uri": config.KAKAO_REDIRECT_URI,
             "response_type": "code",
-            "scope": "account_email profile_nickname",
+            # 닉네임만 요청. 이메일(account_email)은 비즈앱 권한이 필요해 기본 "권한 없음" 이고,
+            # 권한 없는 scope 를 요청하면 인가 단계에서 에러(KOE006)가 난다. 이메일은 가입 폼에서 직접 수집.
+            "scope": "profile_nickname",
             "state": state,
         }
     )
