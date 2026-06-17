@@ -297,7 +297,7 @@ function MascotBanner({ userName }: { userName: string | null }) {
   const name = userName ?? "회원";
 
   return (
-    <div className="bg-[#fffde7] rounded-[16px] p-4 flex items-center gap-4 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+    <div className="bg-brand-light rounded-[16px] p-4 flex items-center gap-4 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
       {/* 마스코트 이미지 */}
       <div className="shrink-0">
         <Image
@@ -314,14 +314,16 @@ function MascotBanner({ userName }: { userName: string | null }) {
         />
       </div>
       {/* 말풍선 */}
-      <div className="bg-white rounded-[12px] px-4 py-3 shadow-sm flex-1 relative">
-        {/* 말풍선 꼬리 */}
+      <div className="summary-chip bg-surface rounded-[12px] px-4 py-3 shadow-sm flex-1 relative">
+        {/* 말풍선 꼬리 — 색은 className(border-r-white)으로 분리해 다크모드에서
+            말풍선 배경(bg-surface)과 같은 색으로 바뀌도록 함(globals.css) */}
         <div
-          className="absolute left-[-8px] top-1/2 -translate-y-1/2 w-0 h-0"
+          className="absolute left-[-8px] top-1/2 -translate-y-1/2 w-0 h-0 border-r-white"
           style={{
             borderTop: "6px solid transparent",
             borderBottom: "6px solid transparent",
-            borderRight: "8px solid white",
+            borderRightWidth: "8px",
+            borderRightStyle: "solid",
           }}
           aria-hidden="true"
         />
@@ -377,7 +379,7 @@ function SummaryStrip({
   ];
 
   return (
-    <div className="bg-[#fffde7] rounded-[16px] p-4 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+    <div className="bg-brand-light rounded-[16px] p-4 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
       <p className="text-sm font-black text-text-primary mb-3">
         한눈에 보는 맞춤 요약
       </p>
@@ -385,7 +387,7 @@ function SummaryStrip({
         {chips.map((chip) => (
           <div
             key={chip.icon}
-            className="bg-white rounded-[12px] p-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
+            className="summary-chip bg-surface rounded-[12px] p-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
           >
             <p className="text-base mb-1" aria-hidden="true">
               {chip.icon}
@@ -453,14 +455,16 @@ function ContributingBars({ factors }: ContributingBarsProps) {
         // 파생변수 산출 방법 설명 — 있으면 ⓘ hover 툴팁으로 노출.
         const tooltip = FACTOR_TOOLTIP[f.factor];
 
-        /* 막대 색: 위험 증가→빨강→주황(비중 강도), 감소→파랑 */
+        /* 막대 색: 위험 증가→빨강→주황(비중 강도), 감소→파랑
+           contrib-bar-* 마커 클래스는 다크모드 전용 밝기 보정(globals.css)을
+           다른 컴포넌트의 동일한 bg-red-500 등과 분리해서 적용하기 위함. */
         const barColor = isRisk
           ? pct >= 30
-            ? "bg-red-500"
+            ? "bg-red-500 contrib-bar-high"
             : pct >= 15
-              ? "bg-orange-400"
-              : "bg-yellow-400"
-          : "bg-blue-400";
+              ? "bg-orange-400 contrib-bar-mid"
+              : "bg-yellow-400 contrib-bar-low"
+          : "bg-blue-400 contrib-bar-down";
 
         return (
           <div key={f.factor}>
@@ -823,14 +827,23 @@ function DisclaimerBar({ text }: { text?: string }) {
   const content =
     text ??
     "본 위험도 결과는 입력하신 데이터를 기반으로 AI가 산출한 참고 정보입니다. 의학적 진단이나 처방을 대체하지 않으며, 정확한 진단·치료는 반드시 의료 전문가에게 문의하세요. 출처: KSH 2022 / KDA 2023 / KSoLA 2022 / KSSO 2022";
+  const sourceIdx = content.indexOf("출처:");
+  const mainText = sourceIdx === -1 ? content : content.slice(0, sourceIdx).trim();
+  const sourceText = sourceIdx === -1 ? null : content.slice(sourceIdx);
 
   return (
-    <div className="bg-[#fffde7] rounded-[14px] border border-[#ffe082] p-4 flex items-start gap-3">
+    <div className="bg-surface rounded-[14px] p-4 flex items-start gap-3">
       <span className="text-lg shrink-0 mt-0.5" aria-hidden="true">
         🛡️
       </span>
-      <p className="text-[11px] text-text-secondary leading-relaxed">
-        {content}
+      <p className="text-xs text-text-tertiary leading-relaxed">
+        {mainText}
+        {sourceText && (
+          <>
+            <br />
+            {sourceText}
+          </>
+        )}
       </p>
     </div>
   );

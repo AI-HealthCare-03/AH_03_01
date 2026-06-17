@@ -323,11 +323,20 @@ const DISEASE_TABS = [
   { key: "CARDIOVASCULAR", label: "이상지질혈증" },
 ] as const;
 
-function FactorBar({ pct }: { pct: number }) {
+function FactorBar({ pct, direction }: { pct: number; direction: string | null }) {
+  // pct 는 호출부에서 절댓값 정규화한 값(0~100). 방향(direction)으로 위험 증감 tier 색을 결정.
+  const isRisk = direction?.includes("위험 증가") ?? false;
+  const tier = isRisk
+    ? pct >= 30
+      ? "factor-tier-high"
+      : pct >= 15
+        ? "factor-tier-mid"
+        : "factor-tier-low"
+    : "factor-tier-down";
   return (
     <div className="mt-1 h-1.5 bg-surface rounded-full overflow-hidden">
       <div
-        className="h-full bg-brand-black rounded-full transition-all duration-500"
+        className={`h-full bg-brand-black ${tier} rounded-full transition-all duration-500`}
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -395,7 +404,7 @@ function TopFactorsSection({ risks }: { risks: ReportDiseaseRisk[] }) {
                       </span>
                     )}
                   </div>
-                  <FactorBar pct={pct} />
+                  <FactorBar pct={pct} direction={f.direction} />
                   {/* 변수 산출 방법 설명 — 의료진이 파생 지표를 이해하기 쉽도록 노출. */}
                   {FACTOR_TOOLTIP[f.factor] && (
                     <p className="mt-1 text-[11px] leading-snug text-text-tertiary">
