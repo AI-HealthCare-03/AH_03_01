@@ -10,7 +10,22 @@ interface Props {
   placeholder?: string;
 }
 
-/** 마크다운 → HTML 변환 (XSS 방지: &<> 이스케이프 선처리) */
+/** 링크/이미지 URL 안전화: javascript:/data: 등 위험 스킴 차단(허용: http(s)·mailto·상대경로·앵커).
+ *  허용 목록 방식이라 java\tscript: 같은 우회도 막힌다. 그 외는 "#" 로 무력화. */
+function sanitizeUrl(url: string): string {
+  const trimmed = url.trim();
+  if (/^(https?:\/\/|mailto:)/i.test(trimmed)) return trimmed; // 절대 URL
+  if (/^(\/|#|\.\.?\/)/.test(trimmed)) return trimmed; // 절대/상대 경로·앵커
+  if (/^[\w.?=&%/-]+$/.test(trimmed)) return trimmed; // 스킴 없는 단순 경로(콜론 없음)
+  return "#"; // javascript:, data:, vbscript: 등 차단
+}
+
+/** HTML 속성값에 들어갈 문자열의 따옴표를 이스케이프(속성 탈출 방지). */
+function escapeAttr(value: string): string {
+  return value.replace(/"/g, "&quot;");
+}
+
+/** 마크다운 → HTML 변환 (XSS 방지: &<> 이스케이프 선처리 + href/src 스킴 검증) */
 export function renderMarkdown(text: string): string {
   return text
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -26,10 +41,17 @@ export function renderMarkdown(text: string): string {
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
     .replace(/`(.+?)`/g, '<code class="bg-surface px-1 rounded text-xs font-mono">$1</code>')
     .replace(/!\[(.+?)\]\((.+?)\)/g, (_, alt, src) => {
-      const fullSrc = /^https?:\/\//i.test(src) ? src : `${API_BASE_URL}${src.startsWith("/") ? "" : "/"}${src}`;
-      return `<img src="${fullSrc}" alt="${alt}" class="max-w-full rounded my-2" />`;
+      const cleaned = sanitizeUrl(src);
+      const fullSrc = /^https?:\/\//i.test(cleaned)
+        ? cleaned
+        : `${API_BASE_URL}${cleaned.startsWith("/") ? "" : "/"}${cleaned}`;
+      return `<img src="${escapeAttr(fullSrc)}" alt="${escapeAttr(alt)}" class="max-w-full rounded my-2" />`;
     })
-    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" class="text-blue-600 underline" target="_blank" rel="noopener">$1</a>')
+    .replace(
+      /\[(.+?)\]\((.+?)\)/g,
+      (_, label, href) =>
+        `<a href="${escapeAttr(sanitizeUrl(href))}" class="text-blue-600 underline" target="_blank" rel="noopener">${label}</a>`,
+    )
     .replace(/\n/g, "<br />");
 }
 
