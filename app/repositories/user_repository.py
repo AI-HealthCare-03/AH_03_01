@@ -55,7 +55,11 @@ class UserRepository:
         return await self._model.get_or_none(email=email)
 
     async def get_user_by_social(self, social_provider: str, social_id: str) -> User | None:
-        """소셜 (provider, social_id) 로 계정을 조회. (카카오 등 소셜 로그인 식별)"""
+        """소셜 (provider, social_id) 로 계정을 조회. (카카오 등 소셜 로그인 식별)
+
+        주의: is_deleted 필터 없음 — 탈퇴(soft delete) 계정도 반환한다. 콜백이 탈퇴 계정을
+        감지해 복구/파기로 분기하는 데 의존한다. 활성 계정만 필요한 호출부는 is_deleted 를 직접 확인할 것.
+        """
         return await self._model.get_or_none(social_provider=social_provider, social_id=social_id)
 
     async def get_user_by_name_and_phone(self, name: str, phone_number: str) -> User | None:

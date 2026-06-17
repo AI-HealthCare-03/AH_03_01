@@ -15,6 +15,7 @@ from app.core.jwt.state import token_backend
 from app.core.jwt.tokens import AccessToken, RefreshToken
 from app.core.utils.common import normalize_phone_number
 from app.core.utils.security import (
+    consume_oauth_state,
     generate_unusable_password,
     hash_password,
     verify_oauth_state,
@@ -243,7 +244,7 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="일치하는 계정을 찾을 수 없습니다.")
 
         if verify_password(new_password, user.hashed_password):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 사용한 번호입니다.")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 사용 중인 비밀번호입니다.")
 
         user.hashed_password = hash_password(new_password)
         async with in_transaction():
@@ -302,6 +303,9 @@ class AuthService:
         """
         if not verify_oauth_state(state):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="유효하지 않은 인증 요청입니다.")
+        # state 단일 사용 — 동일 state 재사용(replay) 차단. Redis 장애 시 fail-open(위 HMAC/TTL 검증 유지).
+        if not await consume_oauth_state(state):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="유효하지 않은 인증 요청입니다.")
 
         kakao_access_token = await self.kakao_oauth.exchange_code(code)
         profile = await self.kakao_oauth.fetch_profile(kakao_access_token)
@@ -309,7 +313,8 @@ class AuthService:
         user = await self.user_repo.get_user_by_social(KAKAO_PROVIDER, profile.social_id)
         if user is not None:
             if user.is_banned:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="정지된 계정입니다.")
+                # 정지(ban)는 인가 거부이므로 403 — 앱 전반(dependencies/security.py)·복구/파기와 동일.
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="정지된 계정입니다.")
             if user.is_deleted:
                 # 일반 로그인과 동일하게 복구/파기를 사용자가 선택하게 한다. 단, 카카오는 방금 OAuth 로
                 # 본인 확인을 마쳤으므로 이메일 인증 대신 단기 복구 티켓(신원 증명)으로 처리한다.
@@ -402,6 +407,8 @@ class AuthService:
         복구 티켓에 social_id 를 담아 후속 복구/파기 요청의 신원 증명으로 쓴다(보관 기간 무관 발급 —
         복구는 마감 검사, 파기는 마감 무관이라 일반 흐름과 동일).
         """
+        if not user.social_id:  # 카카오 콜백 경로상 항상 존재하나, 필드가 null=True 라 방어적으로 가드.
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="소셜 계정 정보 오류입니다.")
         restore_ticket = token_backend.encode(
             {
                 "type": KAKAO_RESTORE_TICKET_TYPE,
