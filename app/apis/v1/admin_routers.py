@@ -589,20 +589,21 @@ async def toggle_pin_notice(
     notice_id: int,
     admin: Annotated[User, Depends(get_admin_user)],
 ) -> AdminNoticeItem:
-    post = await Post.get_or_none(id=notice_id, category=PostCategory.NOTICE, is_deleted=False)
-    if not post:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공지사항을 찾을 수 없습니다.")
-    if not post.is_pinned:
-        pinned_count = await Post.filter(
-            category=PostCategory.NOTICE, is_pinned=True, is_deleted=False
-        ).count()
-        if pinned_count >= _MAX_PINNED:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"고정 게시글은 최대 {_MAX_PINNED}개까지 설정할 수 있습니다.",
-            )
-    post.is_pinned = not post.is_pinned
-    await post.save(update_fields=["is_pinned"])
+    async with in_transaction():
+        post = await Post.filter(id=notice_id, category=PostCategory.NOTICE, is_deleted=False).select_for_update().first()
+        if not post:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공지사항을 찾을 수 없습니다.")
+        if not post.is_pinned:
+            pinned_count = await Post.filter(
+                category=PostCategory.NOTICE, is_pinned=True, is_deleted=False
+            ).count()
+            if pinned_count >= _MAX_PINNED:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"고정 게시글은 최대 {_MAX_PINNED}개까지 설정할 수 있습니다.",
+                )
+        post.is_pinned = not post.is_pinned
+        await post.save(update_fields=["is_pinned"])
     author = await post.author
     return AdminNoticeItem(
         id=post.id,
@@ -611,4 +612,5 @@ async def toggle_pin_notice(
         created_at=post.created_at.isoformat(),
         author_name=author.nickname or author.name if author else None,
         is_pinned=post.is_pinned,
+        is_deleted=post.is_deleted,
     )

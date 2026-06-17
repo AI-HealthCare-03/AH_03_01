@@ -98,7 +98,7 @@ export default function AdminNoticesPage() {
                   <button
                     type="button"
                     onClick={() => pinMutation.mutate(n.id)}
-                    disabled={pinMutation.isPending}
+                    disabled={pinMutation.isPending && pinMutation.variables === n.id}
                     className={`text-xs transition-colors ${n.is_pinned ? "text-brand hover:text-brand/70" : "text-white/50 hover:text-white"}`}
                   >
                     {n.is_pinned ? "고정 해제" : "고정"}
