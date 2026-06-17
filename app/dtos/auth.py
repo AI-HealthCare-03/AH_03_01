@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, EmailStr, Field
 
@@ -98,3 +98,42 @@ class LoginResponse(BaseModel):
 
 
 class TokenRefreshResponse(LoginResponse): ...
+
+
+# ─── 카카오 소셜 로그인/가입 ────────────────────────────────────────
+
+
+class KakaoAuthorizeUrlResponse(BaseModel):
+    authorize_url: str
+    state: str
+
+
+class KakaoCallbackRequest(BaseModel):
+    code: Annotated[str, Field(min_length=1)]
+    state: Annotated[str, Field(min_length=1)]
+
+
+class KakaoPrefill(BaseModel):
+    nickname: str | None = None
+    email: str | None = None
+
+
+class KakaoCallbackResponse(BaseModel):
+    """콜백 결과. status=login 이면 access_token, signup_required 면 signup_ticket+prefill 이 채워진다."""
+
+    status: Literal["login", "signup_required"]
+    access_token: str | None = None
+    signup_ticket: str | None = None
+    prefill: KakaoPrefill | None = None
+
+
+class KakaoSignupRequest(BaseModel):
+    signup_ticket: Annotated[str, Field(min_length=1)]
+    email: Annotated[EmailStr, Field(max_length=40)]
+    name: Annotated[str, Field(max_length=20)]
+    nickname: Annotated[str, Field(min_length=2, max_length=10)]
+    gender: Gender
+    birth_date: Annotated[date, AfterValidator(validate_birthday)]
+    phone_number: Annotated[str, AfterValidator(validate_phone_number)]
+    terms_agreed: bool
+    privacy_agreed: bool

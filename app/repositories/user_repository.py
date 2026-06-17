@@ -34,6 +34,8 @@ class UserRepository:
         *,
         is_active: bool = True,
         is_admin: bool = False,
+        social_provider: str | None = None,
+        social_id: str | None = None,
     ) -> User:
         return await self._model.create(
             email=email,
@@ -45,10 +47,16 @@ class UserRepository:
             birthday=birthday,
             is_active=is_active,
             is_admin=is_admin,
+            social_provider=social_provider,
+            social_id=social_id,
         )
 
     async def get_user_by_email(self, email: str) -> User | None:
         return await self._model.get_or_none(email=email)
+
+    async def get_user_by_social(self, social_provider: str, social_id: str) -> User | None:
+        """소셜 (provider, social_id) 로 계정을 조회. (카카오 등 소셜 로그인 식별)"""
+        return await self._model.get_or_none(social_provider=social_provider, social_id=social_id)
 
     async def get_user_by_name_and_phone(self, name: str, phone_number: str) -> User | None:
         return await self._model.filter(name=name, phone_number=phone_number, is_deleted=False).first()
