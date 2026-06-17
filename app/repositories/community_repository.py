@@ -60,7 +60,7 @@ class PostRepository:
         info_category: InfoCategory | None = None,
     ) -> tuple[list[Post], int]:
         qs = (
-            Post.all()
+            Post.filter(is_deleted=False)
             .prefetch_related("author")
             .annotate(
                 comment_count=Count("comments", distinct=True),
@@ -77,7 +77,7 @@ class PostRepository:
     async def list_popular_posts(self, limit: int = 3) -> list[Post]:
         since = datetime.now(timezone.utc) - timedelta(days=7)
         return list(
-            await Post.filter(created_at__gte=since)
+            await Post.filter(created_at__gte=since, is_deleted=False)
             .prefetch_related("author")
             .annotate(
                 comment_count=Count("comments", distinct=True),
@@ -89,7 +89,7 @@ class PostRepository:
 
     async def get_post(self, post_id: int) -> Post | None:
         return (
-            await Post.get_or_none(id=post_id)
+            await Post.get_or_none(id=post_id, is_deleted=False)
             .prefetch_related("author")
             .annotate(comment_count=Count("comments", distinct=True), like_count=Count("likes", distinct=True))
         )
