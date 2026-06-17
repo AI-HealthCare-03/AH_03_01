@@ -25,9 +25,10 @@ import {
   checkEmailVerified,
   getPreviousAccount,
   signup,
+  getKakaoAuthorizeUrl,
 } from "@/lib/api/auth";
 import { extractErrorMessage } from "@/lib/api/client";
-import { ROUTES } from "@/constants";
+import { ROUTES, KAKAO_STATE_KEY } from "@/constants";
 
 type DuplStatus = "idle" | "checking" | "available" | "taken";
 
@@ -40,6 +41,19 @@ type DuplStatus = "idle" | "checking" | "available" | "taken";
 export default function SignupPage() {
   const router = useRouter();
   const { showToast } = useToast();
+  const [kakaoLoading, setKakaoLoading] = useState(false);
+
+  const handleKakaoSignup = async () => {
+    setKakaoLoading(true);
+    try {
+      const { authorize_url, state } = await getKakaoAuthorizeUrl();
+      sessionStorage.setItem(KAKAO_STATE_KEY, state);
+      window.location.href = authorize_url;
+    } catch (err) {
+      setKakaoLoading(false);
+      showToast(extractErrorMessage(err), 'error');
+    }
+  };
 
   const {
     register,
@@ -569,6 +583,37 @@ export default function SignupPage() {
             </p>
           )}
         </form>
+
+        {/* 구분선 */}
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-border" />
+          </div>
+          <div className="relative flex justify-center">
+            <span className="px-3 bg-white text-xs text-text-tertiary font-medium">또는</span>
+          </div>
+        </div>
+
+        {/* 카카오로 시작하기 */}
+        <Button
+          variant="kakao"
+          size="lg"
+          fullWidth
+          loading={kakaoLoading}
+          onClick={handleKakaoSignup}
+          leftIcon={
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path
+                fillRule="evenodd"
+                clipRule="evenodd"
+                d="M10 2C5.582 2 2 4.923 2 8.5c0 2.228 1.336 4.19 3.37 5.365L4.5 18l4.09-2.728C8.854 15.423 9.42 15.5 10 15.5c4.418 0 8-2.923 8-6.5S14.418 2 10 2z"
+                fill="#191919"
+              />
+            </svg>
+          }
+        >
+          카카오로 시작하기
+        </Button>
 
         <p className="mt-5 text-center text-sm text-text-secondary">
           이미 계정이 있으신가요?{" "}
