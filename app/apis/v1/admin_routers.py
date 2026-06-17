@@ -430,8 +430,7 @@ async def list_faqs_admin(
     show_deleted: bool = Query(False),  # noqa: B008
 ) -> list[AdminFAQResponse]:
     qs = FAQ.all()
-    if not show_deleted:
-        qs = qs.filter(is_deleted=False)
+    qs = qs.filter(is_deleted=show_deleted)
     faqs = await qs.order_by("order", "id")
     return [AdminFAQResponse.model_validate(f) for f in faqs]
 
