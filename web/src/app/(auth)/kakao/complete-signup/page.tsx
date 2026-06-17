@@ -258,7 +258,7 @@ export default function KakaoCompleteSignupPage() {
           <Checkbox
             label={
               <span>
-                <Link href="/terms" className="underline">이용약관</Link>에 동의합니다 (필수)
+                <Link href="/terms" target="_blank" rel="noreferrer" className="underline">이용약관</Link>에 동의합니다 (필수)
               </span>
             }
             required
@@ -268,7 +268,7 @@ export default function KakaoCompleteSignupPage() {
           <Checkbox
             label={
               <span>
-                <Link href="/privacy" className="underline">개인정보 처리방침</Link>에 동의합니다 (필수)
+                <Link href="/privacy" target="_blank" rel="noreferrer" className="underline">개인정보 처리방침</Link>에 동의합니다 (필수)
               </span>
             }
             required
