@@ -48,6 +48,13 @@ app = FastAPI(
     default_response_class=ORJSONResponse, docs_url="/api/docs", redoc_url="/api/redoc", openapi_url="/api/openapi.json"
 )
 
+
+@app.get("/api/health", include_in_schema=False)
+async def health_check() -> dict[str, str]:
+    """경량 헬스체크 — DB/외부의존 없이 즉시 200. 배포 readiness 체크·모니터링용."""
+    return {"status": "ok"}
+
+
 # 레이트리밋(slowapi): 라우터의 @limiter.limit 데코레이터가 app.state.limiter 를 참조.
 app.state.limiter = limiter
 # slowapi 핸들러 시그니처가 Starlette 의 (Request, Exception) 와 정확히 일치하지 않음(알려진 타입 이슈).

@@ -169,9 +169,12 @@ ssh -i ~/.ssh/${ssh_key_file} ${ssh_user}@${ec2_ip} \
   if echo " $DEPLOY_SERVICES " | grep -q " fastapi " ; then
     echo "Waiting for fastapi to serve on :8000 (max ~120s) ..."
     fastapi_ready=0
+    # 경량 /api/health 로 확인(Swagger /api/docs 보다 가벼움). 컨테이너에 curl 이 없어
+    # python(stdlib urllib) 사용. 시스템 python 우선, 경로 변경 대비 venv python 폴백.
+    health_py="import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health',timeout=3).status==200 else 1)"
     for _ in $(seq 1 60) ; do
-      # fastapi 컨테이너엔 curl 이 없어 venv python 으로 200 응답을 확인한다.
-      if docker exec fastapi /app/.venv/bin/python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/docs',timeout=3).status==200 else 1)" 2>/dev/null ; then
+      if docker exec fastapi python -c "$health_py" 2>/dev/null \
+         || docker exec fastapi /app/.venv/bin/python -c "$health_py" 2>/dev/null ; then
         fastapi_ready=1
         break
       fi
