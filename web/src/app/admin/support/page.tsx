@@ -21,6 +21,7 @@ export default function AdminSupportPage() {
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("");
   const [target, setTarget] = useState<AdminInquiryItem | null>(null);
+  const [fetchingId, setFetchingId] = useState<number | null>(null);
   const [answer, setAnswer] = useState("");
 
   const { data: inquiries = [], isLoading } = useQuery({
@@ -104,10 +105,21 @@ export default function AdminSupportPage() {
                       {inq.status === "PENDING" && (
                         <button
                           type="button"
-                          onClick={() => setTarget(inq)}
-                          className="text-xs text-brand hover:text-brand/80 transition-colors"
+                          disabled={fetchingId === inq.id}
+                          onClick={async () => {
+                            setFetchingId(inq.id);
+                            try {
+                              const detail = await adminApi.getInquiry(inq.id);
+                              setTarget(detail);
+                            } catch {
+                              alert("문의를 불러오지 못했습니다. 다시 시도해 주세요.");
+                            } finally {
+                              setFetchingId(null);
+                            }
+                          }}
+                          className="text-xs text-brand hover:text-brand/80 transition-colors disabled:opacity-40"
                         >
-                          답변 작성
+                          {fetchingId === inq.id ? "로딩…" : "답변 작성"}
                         </button>
                       )}
                     </td>
@@ -125,6 +137,24 @@ export default function AdminSupportPage() {
           <div className="bg-[#1a1a1a] border border-white/10 rounded-[16px] w-full max-w-lg p-6 space-y-4">
             <h2 className="text-base font-bold text-white">답변 작성</h2>
             <p className="text-sm text-white/60 line-clamp-2">{target.title}</p>
+            {target.content && (
+              <div className="space-y-1.5">
+                <label className="text-xs text-white/50">문의 내용</label>
+                <div className="max-h-40 overflow-y-auto px-3 py-2 bg-[#111] border border-white/10 rounded-[10px] text-sm text-white/70 whitespace-pre-wrap">
+                  {target.content}
+                </div>
+              </div>
+            )}
+            {target.attachment_url && (
+              <a
+                href={target.attachment_url}
+                target="_blank"
+                rel="noreferrer"
+                className="block text-xs text-brand hover:underline truncate"
+              >
+                첨부파일 보기
+              </a>
+            )}
             <div className="space-y-1.5">
               <label className="text-xs text-white/50">답변 내용</label>
               <textarea

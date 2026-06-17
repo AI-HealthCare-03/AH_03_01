@@ -62,6 +62,8 @@ export interface AdminInquiryItem {
   category: string;
   status: string;
   created_at: string;
+  content?: string;
+  attachment_url?: string | null;
 }
 
 export interface FAQItem {
@@ -115,6 +117,8 @@ export const adminApi = {
   // 문의
   listInquiries: (params?: { offset?: number; limit?: number; status?: string }) =>
     apiClient.get<AdminInquiryItem[]>(`${BASE}/inquiries`, { params }).then((r) => r.data),
+  getInquiry: (id: number) =>
+    apiClient.get<AdminInquiryItem>(`${BASE}/inquiries/${id}`).then((r) => r.data),
   answerInquiry: (id: number, content: string) =>
     apiClient.post(`${BASE}/inquiries/${id}/answer`, { content }),
 
