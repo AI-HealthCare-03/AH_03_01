@@ -357,7 +357,14 @@ class ParticipantService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="참여 정보를 찾을 수 없습니다.")
         if participant.role == ParticipantRole.OWNER:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="방장은 챌린지를 삭제해야 합니다.")
-        await self.repo.update_status(participant, ParticipantStatus.LEFT, leaving=True)
+        challenge = await self.challenge_repo.get(challenge_id)
+        async with in_transaction():
+            await self.repo.update_status(participant, ParticipantStatus.LEFT, leaving=True)
+            # 탈퇴로 빈자리 생기면 ACTIVE → RECRUITING 재오픈
+            if challenge is not None and challenge.status == ChallengeStatus.ACTIVE:
+                active_count = await self.repo.count_active(challenge_id)
+                if active_count < (challenge.max_participants or 0):
+                    await self.challenge_repo.update_instance(challenge, {"status": ChallengeStatus.RECRUITING})
 
     async def kick_participant(self, owner: User, challenge_id: int, target_user_id: UUID) -> ChallengeParticipant:
         """방장이 멤버를 강제 탈퇴시킴."""
