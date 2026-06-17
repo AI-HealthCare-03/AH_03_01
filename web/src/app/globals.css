@@ -97,6 +97,7 @@ html.dark #health-records-layout .bg-white.border-b {
    텍스트: 밝은 회색~흰색
    기존 Tailwind 유틸리티 클래스 override
 ──────────────────────────────────────────────────────── */
+
 html.dark body {
   background-color: #1a1a1a !important;
   color: #f0f0f0;
@@ -156,8 +157,9 @@ html.dark select {
 html.dark input::placeholder,
 html.dark textarea::placeholder { color: #666666 !important; }
 
-/* overflow-hidden 카드 내부 border */
-html.dark .divide-border > * + * { border-color: #3a3a3a !important; }
+/* divide-border 구분선 — Tailwind v4는 :where(& > :not(:last-child)) 셀렉터로 생성하므로
+   이전 > * + * 는 실제로 다른 요소에 적용돼 override가 무효했음. 정확한 셀렉터로 수정. */
+html.dark .divide-border > :not(:last-child) { border-color: #3a3a3a !important; }
 
 /* 호버 */
 html.dark .hover\:bg-surface:hover { background-color: #2e2e2e !important; }
