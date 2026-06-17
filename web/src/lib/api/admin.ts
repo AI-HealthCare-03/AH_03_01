@@ -82,6 +82,7 @@ export interface AdminNoticeItem {
   created_at: string;
   author_name: string | null;
   is_deleted?: boolean;
+  is_pinned?: boolean;
 }
 
 const BASE = "/api/v1/admin";
@@ -141,4 +142,6 @@ export const adminApi = {
     apiClient.patch<AdminNoticeItem>(`${BASE}/notices/${id}`, data).then((r) => r.data),
   deleteNotice: (id: number) =>
     apiClient.delete(`${BASE}/notices/${id}`),
+  pinNotice: (id: number) =>
+    apiClient.patch<AdminNoticeItem>(`${BASE}/notices/${id}/pin`).then((r) => r.data),
 };

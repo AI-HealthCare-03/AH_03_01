@@ -1,4 +1,4 @@
-export type NotificationType = "COMMENT" | "REPLY" | "LIKE" | "CHALLENGE_KICK" | "CHALLENGE_INVITE" | "RISK_CHANGE";
+export type NotificationType = "COMMENT" | "REPLY" | "LIKE" | "CHALLENGE_KICK" | "CHALLENGE_INVITE" | "CHALLENGE_DELETE" | "RISK_CHANGE";
 
 export interface Notification {
   id: number;

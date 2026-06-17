@@ -36,6 +36,15 @@ export default function AdminNoticesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "notices"] }),
   });
 
+  const pinMutation = useMutation({
+    mutationFn: adminApi.pinNotice,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "notices"] }),
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      alert(msg ?? "고정 설정에 실패했습니다.");
+    },
+  });
+
   function openCreate() { setForm(EMPTY); setCreating(true); setEditing(null); }
   function openEdit(n: AdminNoticeItem) { setForm({ title: n.title, content: n.content ?? "" }); setEditing(n); setCreating(false); }
 
@@ -72,9 +81,10 @@ export default function AdminNoticesPage() {
           <p className="py-10 text-center text-white/30 text-sm">등록된 공지사항이 없습니다.</p>
         ) : (
           notices.map((n) => (
-            <div key={n.id} className={`bg-[#1a1a1a] border rounded-[12px] px-4 py-3 flex items-center gap-3 ${n.is_deleted ? "border-red-500/20 opacity-60" : "border-white/10"}`}>
+            <div key={n.id} className={`bg-[#1a1a1a] border rounded-[12px] px-4 py-3 flex items-center gap-3 ${n.is_deleted ? "border-red-500/20 opacity-60" : n.is_pinned ? "border-brand/40" : "border-white/10"}`}>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
+                  {n.is_pinned && <span className="shrink-0 text-[10px] px-1.5 py-0.5 bg-brand/20 text-brand rounded-full">📌 고정</span>}
                   <p className="text-sm font-semibold text-white/90 truncate">{n.title}</p>
                   {n.is_deleted && <span className="shrink-0 text-[10px] px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded-full">삭제됨</span>}
                 </div>
@@ -85,6 +95,14 @@ export default function AdminNoticesPage() {
               </div>
               {!n.is_deleted && (
                 <div className="flex gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => pinMutation.mutate(n.id)}
+                    disabled={pinMutation.isPending}
+                    className={`text-xs transition-colors ${n.is_pinned ? "text-brand hover:text-brand/70" : "text-white/50 hover:text-white"}`}
+                  >
+                    {n.is_pinned ? "고정 해제" : "고정"}
+                  </button>
                   <button type="button" onClick={() => openEdit(n)} className="text-xs text-white/50 hover:text-white">수정</button>
                   <button
                     type="button"
