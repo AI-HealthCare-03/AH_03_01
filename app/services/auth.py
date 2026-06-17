@@ -1,18 +1,31 @@
 import logging
+import time
 from datetime import datetime, timedelta
+from uuid import uuid4
 
 from fastapi.exceptions import HTTPException
 from pydantic import EmailStr
 from starlette import status
+from tortoise.exceptions import IntegrityError
 from tortoise.transactions import in_transaction
 
 from app.core import config
+from app.core.jwt.exceptions import TokenBackendError, TokenBackendExpiredError
+from app.core.jwt.state import token_backend
 from app.core.jwt.tokens import AccessToken, RefreshToken
 from app.core.utils.common import normalize_phone_number
-from app.core.utils.security import hash_password, verify_password
+from app.core.utils.security import (
+    generate_unusable_password,
+    hash_password,
+    verify_oauth_state,
+    verify_password,
+)
 from app.dtos.auth import (
     FindIdRequest,
     FindIdResponse,
+    KakaoCallbackResponse,
+    KakaoPrefill,
+    KakaoSignupRequest,
     LoginRequest,
     PreviousAccountResponse,
     RestoredAccountResponse,
@@ -22,6 +35,7 @@ from app.models.users import User
 from app.repositories.user_repository import UserRepository
 from app.services.email_verification import EmailVerificationService
 from app.services.jwt import JwtService
+from app.services.kakao_oauth import KakaoOAuthService
 
 # 탈퇴(soft delete) 후 개인정보 보관 기간. 이 기간 내에는 복구 가능, 경과 시 파기(개인정보처리방침 기준).
 ACCOUNT_RETENTION_DAYS = 30
@@ -33,6 +47,11 @@ ACCOUNT_LOCKED_DETAIL = "로그인 5회 실패로 계정이 잠겼습니다. 이
 # (평소·미존재 이메일은 일반 메시지 유지 → 계정 열거 노출을 잠금 임박 구간으로 한정)
 LOGIN_FAIL_WARN_REMAINING = 2
 
+# 카카오 신규 가입 티켓(JWT) 유효 시간(초). 콜백→가입 폼 작성→제출까지의 짧은 단계 전용.
+KAKAO_SIGNUP_TICKET_TTL_SECONDS = 15 * 60
+KAKAO_SIGNUP_TICKET_TYPE = "kakao_signup"
+KAKAO_PROVIDER = "kakao"
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,6 +60,7 @@ class AuthService:
         self.user_repo = UserRepository()
         self.jwt_service = JwtService()
         self.email_verification = EmailVerificationService()
+        self.kakao_oauth = KakaoOAuthService()
 
     async def signup(self, data: SignUpRequest) -> User:
         # 이메일 중복 체크
@@ -267,6 +287,111 @@ class AuthService:
             return f"{local[0]}*@{domain}"
         masked = local[0] + "*" * (len(local) - 2) + local[-1]
         return f"{masked}@{domain}"
+
+    async def kakao_callback(
+        self, code: str, state: str
+    ) -> tuple[KakaoCallbackResponse, dict[str, AccessToken | RefreshToken] | None]:
+        """카카오 콜백 처리.
+
+        기존 소셜 계정이면 로그인(access/refresh 토큰 dict 함께 반환), 신규면 가입 티켓을 발급한다.
+        반환: (응답 DTO, 토큰 dict | None). 라우터가 None 이 아닐 때만 쿠키를 심는다.
+        """
+        if not verify_oauth_state(state):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="유효하지 않은 인증 요청입니다.")
+
+        kakao_access_token = await self.kakao_oauth.exchange_code(code)
+        profile = await self.kakao_oauth.fetch_profile(kakao_access_token)
+
+        user = await self.user_repo.get_user_by_social(KAKAO_PROVIDER, profile.social_id)
+        if user is not None:
+            if user.is_banned:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="정지된 계정입니다.")
+            if user.is_deleted:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="탈퇴한 계정입니다. 계정 복구 후 이용해 주세요.",
+                )
+            tokens = await self.login(user)
+            response = KakaoCallbackResponse(status="login", access_token=str(tokens["access_token"]))
+            return response, tokens
+
+        # 신규 사용자 — 추가 정보 입력을 위한 단기 가입 티켓 발급.
+        signup_ticket = token_backend.encode(
+            {
+                "type": KAKAO_SIGNUP_TICKET_TYPE,
+                "provider": KAKAO_PROVIDER,
+                "social_id": profile.social_id,
+                "prefill": {"nickname": profile.nickname, "email": profile.email},
+                "exp": int(time.time()) + KAKAO_SIGNUP_TICKET_TTL_SECONDS,
+                "jti": uuid4().hex,
+            }
+        )
+        response = KakaoCallbackResponse(
+            status="signup_required",
+            signup_ticket=signup_ticket,
+            prefill=KakaoPrefill(nickname=profile.nickname, email=profile.email),
+        )
+        return response, None
+
+    async def kakao_signup(self, data: KakaoSignupRequest) -> dict[str, AccessToken | RefreshToken]:
+        """카카오 가입 티켓 + 추가 입력으로 신규 소셜 계정을 생성하고 로그인 토큰을 발급한다."""
+        if not (data.terms_agreed and data.privacy_agreed):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="약관 및 개인정보 처리방침 동의가 필요합니다."
+            )
+
+        social_id = self._decode_kakao_signup_ticket(data.signup_ticket)
+
+        # 티켓 재사용/경합 방지 + 일반 가입 중복 검증(기존 헬퍼 재사용).
+        if await self.user_repo.get_user_by_social(KAKAO_PROVIDER, social_id) is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 가입된 카카오 계정입니다.")
+        await self.check_email_exists(data.email)
+        await self.check_nickname_exists(data.nickname)
+
+        normalized_phone_number = normalize_phone_number(data.phone_number)
+        await self.check_phone_number_exists(normalized_phone_number)
+
+        now = datetime.now(config.TIMEZONE)
+        try:
+            async with in_transaction():
+                user = await self.user_repo.create_user(
+                    email=data.email,
+                    hashed_password=generate_unusable_password(),  # 비번 로그인 불가(소셜 전용)
+                    name=data.name,
+                    nickname=data.nickname,
+                    phone_number=normalized_phone_number,
+                    gender=data.gender,
+                    birthday=data.birth_date,
+                    social_provider=KAKAO_PROVIDER,
+                    social_id=social_id,
+                )
+                user.terms_agreed_at = now
+                user.privacy_agreed_at = now
+                await user.save(update_fields=["terms_agreed_at", "privacy_agreed_at", "updated_at"])
+        except IntegrityError as err:
+            # 코드레벨 중복검사~INSERT 사이 동시 가입(TOCTOU)은 (social_provider, social_id)
+            # 유니크 인덱스가 막는다. 500 대신 409 로 정리한다.
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 가입된 계정입니다.") from err
+
+        return await self.login(user)
+
+    @staticmethod
+    def _decode_kakao_signup_ticket(ticket: str) -> str:
+        """가입 티켓을 검증하고 social_id 를 반환. 만료/위조/타입불일치는 401."""
+        try:
+            payload = token_backend.decode(ticket)
+        except TokenBackendExpiredError as err:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="가입 세션이 만료되었습니다. 다시 시도해 주세요."
+            ) from err
+        except TokenBackendError as err:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 가입 요청입니다."
+            ) from err
+
+        if payload.get("type") != KAKAO_SIGNUP_TICKET_TYPE or not payload.get("social_id"):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 가입 요청입니다.")
+        return str(payload["social_id"])
 
     async def login(self, user: User) -> dict[str, AccessToken | RefreshToken]:
         await self.user_repo.update_last_login(user.id)
