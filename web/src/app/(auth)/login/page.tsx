@@ -1,5 +1,6 @@
 "use client";
 
+import axios from "axios";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -40,8 +41,13 @@ export default function LoginPage() {
       setAuth(res.access_token);
       router.push(ROUTES.HOME);
     } catch (err) {
-      const msg = extractErrorMessage(err);
-      showToast(msg, "error");
+      // 5회 실패 잠금(423) → 이메일 인증 잠금 해제 화면으로 안내(이메일 prefill).
+      if (axios.isAxiosError(err) && err.response?.status === 423) {
+        sessionStorage.setItem("lockout_email", data.email);
+        router.push(ROUTES.LOGIN_BLOCKED);
+        return;
+      }
+      showToast(extractErrorMessage(err), "error");
     }
   };
 

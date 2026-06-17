@@ -15,6 +15,7 @@ export const ROUTES = {
   FORGOT_PASSWORD: "/forgot-password",
   SMS_VERIFY: "/sms-verify",
   ACCOUNT_RESTORE: "/account-restore",
+  LOGIN_BLOCKED: "/login/blocked",
 } as const;
 
 /* 로그인 실패 잠금 임계값 */
