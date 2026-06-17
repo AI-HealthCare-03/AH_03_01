@@ -29,6 +29,9 @@ ACCOUNT_RETENTION_DAYS = 30
 # 로그인 연속 실패 잠금 정책 — 임계 도달 시 이메일 인증으로만 해제.
 LOGIN_FAIL_LOCK_THRESHOLD = 5
 ACCOUNT_LOCKED_DETAIL = "로그인 5회 실패로 계정이 잠겼습니다. 이메일 인증으로 잠금을 해제해 주세요."
+# 잠금 임박 경고 노출 임계: 남은 시도가 이 값 이하일 때만 잔여 횟수를 안내한다.
+# (평소·미존재 이메일은 일반 메시지 유지 → 계정 열거 노출을 잠금 임박 구간으로 한정)
+LOGIN_FAIL_WARN_REMAINING = 2
 
 logger = logging.getLogger(__name__)
 
@@ -88,9 +91,17 @@ class AuthService:
         # 비밀번호 검증
         if not verify_password(data.password, user.hashed_password):
             await self.user_repo.increment_login_fail(user.id)
-            # 이번 실패로 임계 도달 시 잠금 안내(아니면 기존과 동일한 일반 메시지 — 잔여 횟수 비노출).
-            if user.login_fail_count + 1 >= LOGIN_FAIL_LOCK_THRESHOLD:
+            new_fail_count = user.login_fail_count + 1
+            # 이번 실패로 임계 도달 시 잠금 안내.
+            if new_fail_count >= LOGIN_FAIL_LOCK_THRESHOLD:
                 raise HTTPException(status_code=status.HTTP_423_LOCKED, detail=ACCOUNT_LOCKED_DETAIL)
+            # 잠금 임박(남은 시도 ≤ 임계) 시에만 잔여 횟수 경고. 그 외엔 일반 메시지로 계정 열거 방지.
+            remaining = LOGIN_FAIL_LOCK_THRESHOLD - new_fail_count
+            if remaining <= LOGIN_FAIL_WARN_REMAINING:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"비밀번호가 올바르지 않습니다. {remaining}회 더 실패하면 계정이 잠깁니다.",
+                )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="이메일 또는 비밀번호가 올바르지 않습니다."
             )

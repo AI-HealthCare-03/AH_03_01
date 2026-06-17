@@ -141,6 +141,15 @@ export async function resetPassword(
 }
 
 /**
+ * 로그인 잠금 해제
+ * POST /api/v1/auth/unlock — 이메일 본인 인증 + email/name 일치 필수.
+ * 400: 이메일 인증 미완료 / 404: email+name 불일치
+ */
+export async function unlockAccount(email: string, name: string): Promise<void> {
+  await apiClient.post("/api/v1/auth/unlock", { email, name });
+}
+
+/**
  * SMS 인증번호 발송
  * TODO(backend): /api/v1/auth/sms/send 엔드포인트 추가 필요
  */
