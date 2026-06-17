@@ -43,5 +43,6 @@ async def send_medication_push(fcm_token: str, medicine_name: str) -> None:
             token=fcm_token,
         )
         await asyncio.to_thread(messaging.send, message)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         _logger.warning("FCM 발송 실패 (token=%.20s...): %s", fcm_token, e)
+        raise

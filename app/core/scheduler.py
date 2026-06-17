@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
