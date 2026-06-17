@@ -76,9 +76,7 @@ class TestLoginLockout(TestCase):
         user = await _create_user(email="unlock@example.com", login_fail_count=5)
         with patch.object(EmailVerificationService, "consume", AsyncMock()):
             async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE_URL) as client:
-                res = await client.post(
-                    "/api/v1/auth/unlock", json={"email": user.email, "name": user.name}
-                )
+                res = await client.post("/api/v1/auth/unlock", json={"email": user.email, "name": user.name})
                 assert res.status_code == status.HTTP_200_OK
                 await user.refresh_from_db()
                 assert user.login_fail_count == 0
@@ -90,9 +88,7 @@ class TestLoginLockout(TestCase):
         user = await _create_user(email="unlock_noverify@example.com", login_fail_count=5)
         with patch.object(EmailVerificationService, "is_verified", AsyncMock(return_value=False)):
             async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE_URL) as client:
-                res = await client.post(
-                    "/api/v1/auth/unlock", json={"email": user.email, "name": user.name}
-                )
+                res = await client.post("/api/v1/auth/unlock", json={"email": user.email, "name": user.name})
         assert res.status_code == status.HTTP_400_BAD_REQUEST
         await user.refresh_from_db()
         assert user.login_fail_count == 5  # 변경 안 됨
@@ -100,9 +96,23 @@ class TestLoginLockout(TestCase):
     async def test_unlock_not_found_when_name_mismatch(self):
         user = await _create_user(email="unlock_mismatch@example.com", name="홍길동", login_fail_count=5)
         async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE_URL) as client:
-            res = await client.post(
-                "/api/v1/auth/unlock", json={"email": user.email, "name": "김철수"}
-            )
+            res = await client.post("/api/v1/auth/unlock", json={"email": user.email, "name": "김철수"})
         assert res.status_code == status.HTTP_404_NOT_FOUND
         await user.refresh_from_db()
         assert user.login_fail_count == 5
+
+    async def test_near_threshold_failure_warns_remaining(self):
+        # 2회 실패한 계정의 3회째 실패 → 남은 시도 2회(≤임계) → 잔여 횟수 경고 메시지.
+        user = await _create_user(email="warn@example.com", login_fail_count=2)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE_URL) as client:
+            res = await client.post("/api/v1/auth/login", json={"email": user.email, "password": "Wrong999!"})
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        assert "2회" in res.json()["detail"]
+
+    async def test_early_failure_stays_generic(self):
+        # 첫 실패(남은 시도 4회)는 잔여 횟수 비노출 — 일반 메시지 유지(계정 열거 방지).
+        user = await _create_user(email="generic@example.com", login_fail_count=0)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE_URL) as client:
+            res = await client.post("/api/v1/auth/login", json={"email": user.email, "password": "Wrong999!"})
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        assert res.json()["detail"] == "이메일 또는 비밀번호가 올바르지 않습니다."
