@@ -111,6 +111,8 @@ export default function AdminSupportPage() {
                             try {
                               const detail = await adminApi.getInquiry(inq.id);
                               setTarget(detail);
+                            } catch {
+                              alert("문의를 불러오지 못했습니다. 다시 시도해 주세요.");
                             } finally {
                               setFetchingId(null);
                             }
