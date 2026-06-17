@@ -22,7 +22,7 @@ export default function TodayQuizWidget() {
           <p className="text-xs text-text-primary line-clamp-2 leading-snug">{quiz.question}</p>
           <button
             onClick={() => router.push("/community/quiz")}
-            className="w-full py-2.5 rounded-[10px] bg-brand-black text-white text-sm font-bold hover:opacity-80 transition-opacity"
+            className="w-full py-2.5 rounded-[10px] bg-brand-black text-white text-sm font-bold hover:opacity-80 transition-opacity dark-keep-color"
           >
             풀기 (+50P)
           </button>

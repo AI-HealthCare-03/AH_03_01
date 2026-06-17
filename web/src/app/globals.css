@@ -240,6 +240,16 @@ html.dark .border-gray-400 { border-color: #606060 !important; }
 html.dark .bg-brand *,
 html.dark .\!bg-brand * { color: #111111 !important; }
 
+/* ── 리더보드 1~3위 파스텔 배경 다크 오버라이드 ──────────────
+   text-text-primary/tertiary 가 다크모드에서 밝은 색으로 바뀌는데
+   배경은 라이트 파스텔 그대로 남아 글씨가 안 보임 → 배경을 어둡게 고정.
+   bg-yellow-50/bg-gray-50/bg-orange-50 원본 클래스를 직접 타겟하면
+   챌린지 카테고리 아이콘 등 무관한 다른 컴포넌트에도 영향이 가므로
+   LeaderboardCard 전용 마커 클래스(.rank-card-*)로 스코프 한정. */
+html.dark .rank-card-gold   { background-color: #332b10 !important; }
+html.dark .rank-card-silver { background-color: #2a2a2a !important; }
+html.dark .rank-card-bronze { background-color: #332010 !important; }
+
 /* ── 로그인 왼쪽 브랜드 패널 다크 오버라이드 ─────────────────
    bg-[#FFFBEB] 크림 배경을 라이트모드와 동일하게 유지.
    전역 dark 텍스트 오버라이드를 패널 내에서 라이트모드 색으로 재고정. */

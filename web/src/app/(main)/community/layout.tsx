@@ -71,7 +71,7 @@ export default function CommunityLayout({ children }: { children: ReactNode }) {
             </Link>
           ))}
 
-          <p className="mt-4 px-3 text-xs font-semibold text-text-disabled uppercase tracking-wide">
+          <p className="mt-4 pt-3 px-3 border-t border-border text-base font-bold text-text-primary">
             카테고리
           </p>
           <Suspense fallback={null}>
