@@ -323,9 +323,9 @@ const DISEASE_TABS = [
   { key: "CARDIOVASCULAR", label: "이상지질혈증" },
 ] as const;
 
-function FactorBar({ weight, direction }: { weight: number; direction: string | null }) {
-  const pct = Math.max(0, Math.min(Math.round(weight * 100), 100));
-  const isRisk = direction?.includes("위험 증가") ?? weight > 0;
+function FactorBar({ pct, direction }: { pct: number; direction: string | null }) {
+  // pct 는 호출부에서 절댓값 정규화한 값(0~100). 방향(direction)으로 위험 증감 tier 색을 결정.
+  const isRisk = direction?.includes("위험 증가") ?? false;
   const tier = isRisk
     ? pct >= 30
       ? "factor-tier-high"
@@ -348,10 +348,14 @@ function TopFactorsSection({ risks }: { risks: ReportDiseaseRisk[] }) {
   const [activeTab, setActiveTab] = useState<string>(initialTab);
 
   const activeRisk = risks.find((r) => r.disease_type === activeTab);
+  // 기여도 크기(절댓값) 순으로 TOP 5. 증감 방향은 f.direction 으로 별도 표기.
   const factors: ReportTopFactor[] = (activeRisk?.top_factors ?? [])
     .slice()
-    .sort((a, b) => b.weight - a.weight)
+    .sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight))
     .slice(0, 5);
+  // 기여도(%)는 표시 인자들의 절댓값 합으로 정규화 — 위험도 탭(RiskTab)과 동일.
+  // (raw weight 는 SHAP 스케일이라 그대로 *100 하면 100% 를 초과한다.)
+  const totalWeight = factors.reduce((sum, f) => sum + Math.abs(f.weight), 0) || 1;
 
   return (
     <SectionCard title="판단 근거 TOP 5">
@@ -383,6 +387,7 @@ function TopFactorsSection({ risks }: { risks: ReportDiseaseRisk[] }) {
           {factors.map((f, i) => {
             const label = f.name_kor ?? f.factor;
             const dirColor = directionColor(f.direction);
+            const pct = Math.round((Math.abs(f.weight) / totalWeight) * 100);
             return (
               <li key={f.factor} className="flex items-start gap-3">
                 <span className="w-6 h-6 rounded-full bg-brand text-brand-black text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
@@ -399,7 +404,7 @@ function TopFactorsSection({ risks }: { risks: ReportDiseaseRisk[] }) {
                       </span>
                     )}
                   </div>
-                  <FactorBar weight={f.weight} direction={f.direction} />
+                  <FactorBar pct={pct} direction={f.direction} />
                   {/* 변수 산출 방법 설명 — 의료진이 파생 지표를 이해하기 쉽도록 노출. */}
                   {FACTOR_TOOLTIP[f.factor] && (
                     <p className="mt-1 text-[11px] leading-snug text-text-tertiary">
@@ -408,7 +413,7 @@ function TopFactorsSection({ risks }: { risks: ReportDiseaseRisk[] }) {
                   )}
                 </div>
                 <span className="text-xs font-bold text-text-secondary shrink-0 mt-0.5">
-                  {(f.weight * 100).toFixed(0)}%
+                  {pct}%
                 </span>
               </li>
             );
