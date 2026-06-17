@@ -54,6 +54,8 @@ app = [
     "catboost>=1.2.0",
     "shap>=0.43.0",
     "scipy>=1.11.0",
+    "firebase-admin>=6.5.0",              # FCM 푸시 알림 발송
+    "apscheduler>=3.10.0",                # 복약 알림 주기적 스케줄링
 ]
 dev = [
     "coverage>=7.13.2",

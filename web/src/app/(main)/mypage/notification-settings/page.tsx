@@ -8,6 +8,8 @@ import {
 } from "@/components/health/MedicationManager";
 import { pushNotification } from "@/components/layout/NotificationDropdown";
 import { notifSettingsKey } from "@/lib/notifKeys";
+import { requestFcmToken } from "@/lib/firebase";
+import apiClient from "@/lib/api/client";
 
 /* ─────────────────────────────────────────────────────
    알림 설정 페이지 — localStorage 저장 + 웹 알림
@@ -255,6 +257,16 @@ export default function NotificationSettingsPage() {
         setTimeout(() => setPermissionDenied(false), 4000);
         return;
       }
+    }
+
+    // 복약 알림 ON 시 FCM 토큰 발급 → 서버 저장
+    if (key === "medication" && value === true) {
+      try {
+        const token = await requestFcmToken();
+        if (token) {
+          await apiClient.post("/api/v1/users/fcm-token", { fcm_token: token });
+        }
+      } catch { /* FCM 실패해도 로컬 알림은 유지 */ }
     }
 
     setSettings((prev) => {

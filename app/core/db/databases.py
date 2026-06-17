@@ -24,6 +24,7 @@ TORTOISE_APP_MODELS = [
     "app.models.support",
     "app.models.notifications",
     "app.models.risk_recommendation_result",
+    "app.models.medication_reminder",
 ]
 
 
