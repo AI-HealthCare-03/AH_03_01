@@ -50,6 +50,10 @@ LOGIN_FAIL_WARN_REMAINING = 2
 # 카카오 신규 가입 티켓(JWT) 유효 시간(초). 콜백→가입 폼 작성→제출까지의 짧은 단계 전용.
 KAKAO_SIGNUP_TICKET_TTL_SECONDS = 15 * 60
 KAKAO_SIGNUP_TICKET_TYPE = "kakao_signup"
+# 카카오 탈퇴 계정 복구/파기 티켓(JWT). 콜백에서 탈퇴 계정 발견 시 발급 — 복구/파기 선택 단계 전용.
+# 카카오 OAuth 로 방금 본인 확인을 마쳤으므로 이 티켓이 신원 증명을 대신한다(이메일 인증 불필요).
+KAKAO_RESTORE_TICKET_TTL_SECONDS = 15 * 60
+KAKAO_RESTORE_TICKET_TYPE = "kakao_restore"
 KAKAO_PROVIDER = "kakao"
 
 logger = logging.getLogger(__name__)
@@ -307,10 +311,9 @@ class AuthService:
             if user.is_banned:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="정지된 계정입니다.")
             if user.is_deleted:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="탈퇴한 계정입니다. 계정 복구 후 이용해 주세요.",
-                )
+                # 일반 로그인과 동일하게 복구/파기를 사용자가 선택하게 한다. 단, 카카오는 방금 OAuth 로
+                # 본인 확인을 마쳤으므로 이메일 인증 대신 단기 복구 티켓(신원 증명)으로 처리한다.
+                return self._kakao_deleted_response(user), None
             tokens = await self.login(user)
             response = KakaoCallbackResponse(status="login", access_token=str(tokens["access_token"]))
             return response, tokens
@@ -391,6 +394,93 @@ class AuthService:
 
         if payload.get("type") != KAKAO_SIGNUP_TICKET_TYPE or not payload.get("social_id"):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 가입 요청입니다.")
+        return str(payload["social_id"])
+
+    def _kakao_deleted_response(self, user: User) -> KakaoCallbackResponse:
+        """탈퇴한 카카오 계정 발견 시 복구/파기 선택 화면용 응답을 만든다.
+
+        복구 티켓에 social_id 를 담아 후속 복구/파기 요청의 신원 증명으로 쓴다(보관 기간 무관 발급 —
+        복구는 마감 검사, 파기는 마감 무관이라 일반 흐름과 동일).
+        """
+        restore_ticket = token_backend.encode(
+            {
+                "type": KAKAO_RESTORE_TICKET_TYPE,
+                "provider": KAKAO_PROVIDER,
+                "social_id": user.social_id,
+                "exp": int(time.time()) + KAKAO_RESTORE_TICKET_TTL_SECONDS,
+                "jti": uuid4().hex,
+            }
+        )
+        deadline = user.deleted_at + timedelta(days=ACCOUNT_RETENTION_DAYS) if user.deleted_at else None
+        return KakaoCallbackResponse(
+            status="restore_required",
+            restore_ticket=restore_ticket,
+            masked_email=self._mask_email(user.email),
+            deleted_at=user.deleted_at,
+            restore_deadline=deadline,
+        )
+
+    async def kakao_restore(self, restore_ticket: str) -> dict[str, AccessToken | RefreshToken]:
+        """카카오 복구 티켓으로 탈퇴 계정을 복구(is_deleted=false)하고 바로 로그인 토큰을 발급한다.
+
+        티켓 자체가 카카오 신원 증명이므로 이메일 인증을 요구하지 않는다. 보관 기간 내 계정만 복구 가능.
+        """
+        user = await self._find_deleted_kakao_user(restore_ticket)
+        if user.deleted_at is None or user.deleted_at + timedelta(days=ACCOUNT_RETENTION_DAYS) <= datetime.now(
+            config.TIMEZONE
+        ):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="복구 가능한 탈퇴 계정이 없습니다.")
+        if user.is_banned:  # 운영자 제재(ban) 우회 방지 — 일반 복구와 동일하게 정지 계정은 하드 차단
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="정지된 계정은 복구할 수 없습니다.")
+
+        user.is_deleted = False
+        user.is_active = True
+        user.deleted_at = None  # type: ignore[assignment]  # null=True 필드(스텁은 datetime)
+        user.withdrawal_reason = None  # type: ignore[assignment]  # null=True 필드(스텁은 str)
+        async with in_transaction():
+            await user.save(update_fields=["is_deleted", "is_active", "deleted_at", "withdrawal_reason", "updated_at"])
+        # 감사 추적: 카카오 신원 기반 복구 — PII 마스킹(이메일)하여 기록.
+        logger.info("카카오 탈퇴 계정 복구 user_id=%s email=%s", user.id, self._mask_email(user.email))
+        return await self.login(user)
+
+    async def kakao_destroy(self, restore_ticket: str) -> None:
+        """카카오 복구 티켓으로 탈퇴 계정을 즉시 영구 파기(하드 삭제)한다 — '새로 시작하기'.
+
+        보관 기간을 기다리지 않고 본인 요청으로 파기. DB cascade 로 PII/PHI 동반 삭제.
+        """
+        user = await self._find_deleted_kakao_user(restore_ticket)
+        if user.is_banned:  # 정지 계정은 본인 파기로 자료 인멸 못 하게 차단(운영/조사 보존)
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="정지된 계정은 파기할 수 없습니다.")
+
+        user_id = user.id
+        email = user.email
+        async with in_transaction():
+            await user.delete()
+        # 감사 추적: 비가역 영구 파기 — PII 마스킹(이메일)하여 기록.
+        logger.info("카카오 탈퇴 계정 영구 파기 user_id=%s email=%s", user_id, self._mask_email(email))
+
+    async def _find_deleted_kakao_user(self, restore_ticket: str) -> User:
+        """복구 티켓을 검증하고 그 social_id 의 탈퇴 카카오 계정을 반환한다. 미존재/미탈퇴는 404."""
+        social_id = self._decode_kakao_restore_ticket(restore_ticket)
+        user = await self.user_repo.get_user_by_social(KAKAO_PROVIDER, social_id)
+        if user is None or not user.is_deleted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="복구 가능한 탈퇴 계정이 없습니다.")
+        return user
+
+    @staticmethod
+    def _decode_kakao_restore_ticket(ticket: str) -> str:
+        """복구 티켓을 검증하고 social_id 를 반환. 만료/위조/타입불일치는 401."""
+        try:
+            payload = token_backend.decode(ticket)
+        except TokenBackendExpiredError as err:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="세션이 만료되었습니다. 다시 로그인해 주세요."
+            ) from err
+        except TokenBackendError as err:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 요청입니다.") from err
+
+        if payload.get("type") != KAKAO_RESTORE_TICKET_TYPE or not payload.get("social_id"):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 요청입니다.")
         return str(payload["social_id"])
 
     async def login(self, user: User) -> dict[str, AccessToken | RefreshToken]:

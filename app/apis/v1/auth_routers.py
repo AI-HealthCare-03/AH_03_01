@@ -15,6 +15,7 @@ from app.dtos.auth import (
     FindIdResponse,
     KakaoAuthorizeUrlResponse,
     KakaoCallbackRequest,
+    KakaoRestoreTicketRequest,
     KakaoSignupRequest,
     LoginRequest,
     LoginResponse,
@@ -234,6 +235,9 @@ async def kakao_authorize_url(request: Request) -> Response:
             # 닉네임만 요청. 이메일(account_email)은 비즈앱 권한이 필요해 기본 "권한 없음" 이고,
             # 권한 없는 scope 를 요청하면 인가 단계에서 에러(KOE006)가 난다. 이메일은 가입 폼에서 직접 수집.
             "scope": "profile_nickname",
+            # 매 로그인마다 카카오 로그인/동의 화면을 강제로 다시 띄운다(SSO 세션 무시).
+            # 이전 인증 캐시로 silent 하게 code 만 받아오는 것을 막아 본인 재확인을 보장한다.
+            "prompt": "login",
             "state": state,
         }
     )
@@ -253,7 +257,7 @@ async def kakao_callback(
 ) -> Response:
     """카카오 콜백. 기존 계정이면 로그인(refresh 쿠키 설정), 신규면 가입 티켓을 반환한다."""
     result, tokens = await auth_service.kakao_callback(payload.code, payload.state)
-    resp = Response(content=result.model_dump(), status_code=status.HTTP_200_OK)
+    resp = Response(content=result.model_dump(mode="json"), status_code=status.HTTP_200_OK)
     if tokens is not None:
         _set_refresh_cookie(resp, tokens)
     return resp
@@ -274,6 +278,35 @@ async def kakao_signup(
     )
     _set_refresh_cookie(resp, tokens)
     return resp
+
+
+@auth_router.post("/kakao/restore", response_model=LoginResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("10/minute")
+async def kakao_restore(
+    request: Request,
+    payload: KakaoRestoreTicketRequest,
+    auth_service: Annotated[AuthService, Depends(AuthService)],
+) -> Response:
+    """카카오 복구 티켓으로 탈퇴 계정을 복구하고 바로 로그인(refresh 쿠키 설정)한다."""
+    tokens = await auth_service.kakao_restore(payload.restore_ticket)
+    resp = Response(
+        content=LoginResponse(access_token=str(tokens["access_token"])).model_dump(),
+        status_code=status.HTTP_200_OK,
+    )
+    _set_refresh_cookie(resp, tokens)
+    return resp
+
+
+@auth_router.post("/kakao/destroy", status_code=status.HTTP_200_OK)
+@limiter.limit("10/minute")
+async def kakao_destroy(
+    request: Request,
+    payload: KakaoRestoreTicketRequest,
+    auth_service: Annotated[AuthService, Depends(AuthService)],
+) -> Response:
+    """카카오 복구 티켓으로 탈퇴 계정을 영구 파기('새로 시작하기')한다."""
+    await auth_service.kakao_destroy(payload.restore_ticket)
+    return Response(content={"detail": "이전 계정이 파기되었습니다."}, status_code=status.HTTP_200_OK)
 
 
 @auth_router.get("/token/refresh", response_model=TokenRefreshResponse, status_code=status.HTTP_200_OK)

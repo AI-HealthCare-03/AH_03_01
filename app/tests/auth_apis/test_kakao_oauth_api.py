@@ -1,12 +1,15 @@
+from datetime import datetime, timedelta
 from unittest import mock
 
 from httpx import ASGITransport, AsyncClient
 from starlette import status
 from tortoise.contrib.test import TestCase
 
+from app.core import config
 from app.core.jwt.state import token_backend
 from app.core.utils.security import generate_oauth_state
 from app.main import app
+from app.models.users import User
 from app.services.kakao_oauth import KakaoProfile
 
 BASE = "/api/v1/auth"
@@ -37,6 +40,24 @@ def _signup_payload(ticket: str, **overrides) -> dict:
     return payload
 
 
+async def _signup_kakao_user(client: AsyncClient, social_id: str, **overrides) -> str:
+    """카카오 신규 가입을 끝내고 social_id 를 반환하는 헬퍼(테스트 픽스처용)."""
+    with _patch_kakao(social_id=social_id, email=overrides.get("email"), nickname=overrides.get("nickname")):
+        cb = await client.post(f"{BASE}/kakao/callback", json={"code": "authcode", "state": generate_oauth_state()})
+    ticket = cb.json()["signup_ticket"]
+    await client.post(f"{BASE}/kakao/signup", json=_signup_payload(ticket, **overrides))
+    return social_id
+
+
+async def _soft_delete(social_id: str, *, deleted_at: datetime | None = None) -> None:
+    """가입된 카카오 계정을 탈퇴(soft delete) 상태로 만든다."""
+    user = await User.get(social_provider="kakao", social_id=social_id)
+    user.is_deleted = True
+    user.is_active = False
+    user.deleted_at = deleted_at or datetime.now(config.TIMEZONE)
+    await user.save()
+
+
 class TestKakaoOAuthAPI(TestCase):
     async def test_authorize_url_returns_url_and_state(self):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -45,6 +66,7 @@ class TestKakaoOAuthAPI(TestCase):
         body = res.json()
         assert "authorize_url" in body
         assert body["state"] in body["authorize_url"]
+        assert "prompt=login" in body["authorize_url"]  # 매 로그인 재인증 강제
 
     async def test_callback_new_user_returns_signup_required(self):
         state = generate_oauth_state()
@@ -134,3 +156,79 @@ class TestKakaoOAuthAPI(TestCase):
                 json=_signup_payload(ticket, email="taken@example.com", nickname="다른닉", phone_number="01099990000"),
             )
         assert res.status_code == status.HTTP_409_CONFLICT
+
+    async def test_callback_deleted_user_returns_restore_required(self):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            await _signup_kakao_user(
+                client, "910001", email="d1@kakao.com", nickname="탈퇴일", phone_number="01010001000"
+            )
+            await _soft_delete("910001")
+            with _patch_kakao(social_id="910001", email="d1@kakao.com", nickname="탈퇴일"):
+                res = await client.post(
+                    f"{BASE}/kakao/callback", json={"code": "authcode", "state": generate_oauth_state()}
+                )
+        assert res.status_code == status.HTTP_200_OK
+        body = res.json()
+        assert body["status"] == "restore_required"
+        assert body["restore_ticket"]
+        assert body["masked_email"] and body["deleted_at"] and body["restore_deadline"]
+
+    async def test_kakao_restore_restores_and_logs_in(self):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            await _signup_kakao_user(
+                client, "910002", email="d2@kakao.com", nickname="복구이", phone_number="01010002000"
+            )
+            await _soft_delete("910002")
+            with _patch_kakao(social_id="910002", email="d2@kakao.com", nickname="복구이"):
+                cb = await client.post(
+                    f"{BASE}/kakao/callback", json={"code": "authcode", "state": generate_oauth_state()}
+                )
+            ticket = cb.json()["restore_ticket"]
+            res = await client.post(f"{BASE}/kakao/restore", json={"restore_ticket": ticket})
+
+        assert res.status_code == status.HTTP_200_OK
+        assert res.json()["access_token"]
+        assert any("refresh_token" in h for h in res.headers.get_list("set-cookie"))
+        user = await User.get(social_provider="kakao", social_id="910002")
+        assert user.is_deleted is False and user.deleted_at is None
+
+    async def test_kakao_destroy_hard_deletes_and_allows_resignup(self):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            await _signup_kakao_user(
+                client, "910003", email="d3@kakao.com", nickname="파기삼", phone_number="01010003000"
+            )
+            await _soft_delete("910003")
+            with _patch_kakao(social_id="910003", email="d3@kakao.com", nickname="파기삼"):
+                cb = await client.post(
+                    f"{BASE}/kakao/callback", json={"code": "authcode", "state": generate_oauth_state()}
+                )
+            ticket = cb.json()["restore_ticket"]
+            res = await client.post(f"{BASE}/kakao/destroy", json={"restore_ticket": ticket})
+            assert res.status_code == status.HTTP_200_OK
+            assert await User.filter(social_provider="kakao", social_id="910003").count() == 0
+            # 파기 후 동일 social_id 재방문 → 신규 가입 분기
+            with _patch_kakao(social_id="910003", email="d3@kakao.com", nickname="파기삼"):
+                again = await client.post(
+                    f"{BASE}/kakao/callback", json={"code": "authcode", "state": generate_oauth_state()}
+                )
+        assert again.json()["status"] == "signup_required"
+
+    async def test_kakao_restore_after_retention_window_returns_404(self):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            await _signup_kakao_user(
+                client, "910004", email="d4@kakao.com", nickname="만료사", phone_number="01010004000"
+            )
+            # 보관 기간(30일) 경과한 탈퇴 — 복구 불가
+            await _soft_delete("910004", deleted_at=datetime.now(config.TIMEZONE) - timedelta(days=31))
+            with _patch_kakao(social_id="910004", email="d4@kakao.com", nickname="만료사"):
+                cb = await client.post(
+                    f"{BASE}/kakao/callback", json={"code": "authcode", "state": generate_oauth_state()}
+                )
+            ticket = cb.json()["restore_ticket"]
+            res = await client.post(f"{BASE}/kakao/restore", json={"restore_ticket": ticket})
+        assert res.status_code == status.HTTP_404_NOT_FOUND
+
+    async def test_kakao_restore_invalid_ticket_returns_401(self):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            res = await client.post(f"{BASE}/kakao/restore", json={"restore_ticket": "not-a-valid-jwt"})
+        assert res.status_code == status.HTTP_401_UNAUTHORIZED
