@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Bell } from "lucide-react";
-import { notifHistoryKey } from "@/lib/notifKeys";
+import { notifHistoryKey, updateNotifChecked } from "@/lib/notifKeys";
 
 /* ─────────────────────────────────────────────────────
    알림 드롭다운 컴포넌트
@@ -27,7 +27,7 @@ export interface NotifItem {
 const CATEGORIES: Array<"전체" | NotifCategory> = ["전체", "복약", "챌린지", "커뮤니티", "위험도"];
 
 /* ── 알림 저장 유틸 (외부에서도 사용 가능) ──────────── */
-export function pushNotification(item: Omit<NotifItem, "id" | "timestamp" | "read">, ts?: number) {
+export function pushNotification(item: Omit<NotifItem, "id" | "timestamp" | "read">, ts?: number): string | undefined {
   try {
     const raw = localStorage.getItem(notifHistoryKey());
     const list: NotifItem[] = raw ? JSON.parse(raw) : [];
@@ -41,6 +41,7 @@ export function pushNotification(item: Omit<NotifItem, "id" | "timestamp" | "rea
     localStorage.setItem(notifHistoryKey(), JSON.stringify([next, ...list].slice(0, 100)));
     // 드롭다운에 갱신 신호 전송
     window.dispatchEvent(new CustomEvent("notif-updated"));
+    return next.id;
   } catch { /* 무시 */ }
 }
 
@@ -110,11 +111,10 @@ export default function NotificationDropdown() {
     try { localStorage.setItem(notifHistoryKey(), JSON.stringify(next)); } catch { /* 무시 */ }
   };
 
-  // 복약 완료 체크 토글
+  // 복약 완료 체크 토글 — updateNotifChecked가 저장 + notif-updated 발송 처리
   const toggleMedCheck = (id: string) => {
-    const next = list.map((n) => n.id === id ? { ...n, checked: !n.checked, read: true } : n);
-    setList(next);
-    try { localStorage.setItem(notifHistoryKey(), JSON.stringify(next)); } catch { /* 무시 */ }
+    const checked = !list.find((n) => n.id === id)?.checked;
+    try { updateNotifChecked(id, checked); } catch { /* 무시 */ }
   };
 
   return (

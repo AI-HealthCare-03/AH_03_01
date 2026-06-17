@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { MEDICATION_STORAGE_KEY, type Medication } from "@/components/health/MedicationManager";
 import { pushNotification } from "@/components/layout/NotificationDropdown";
+import { MED_BANNER_EVENT } from "@/components/layout/MedicationBanner";
 import { notifKickPollKey, notifLastSeenKey, notifRiskPollKey, notifSettingsKey, notifSocialPollKey } from "@/lib/notifKeys";
 import { listNotifications } from "@/lib/api/notifications";
 import { useAuthStore } from "@/stores/auth";
@@ -51,6 +52,8 @@ function replayMissed(settings: Settings) {
               med.scheduleType !== "specific_days" ||
               med.scheduleDays.includes(dayOfWeek);
             if (shouldNotify) {
+              // 소급 알림은 알림탭 내역에만 추가. 상단 배너(MED_BANNER_EVENT)는 발송하지 않는다.
+              // 과거 복용 시간에 대한 배너는 사용자에게 혼란을 줄 수 있으므로 의도적으로 제외.
               pushNotification(
                 { category: "복약", title: "💊 복약 알림", body: `${label} 복용 시간이었어요.` },
                 dt.getTime(),
@@ -170,7 +173,13 @@ export function useNotificationScheduler() {
                 const title = "💊 복약 알림";
                 const body = `${label} 복용 시간이에요!`;
                 // 알림 내역에는 항상 저장
-                pushNotification({ category: "복약", title, body });
+                const notifId = pushNotification({ category: "복약", title, body });
+                // 상단 배너 표시
+                if (notifId) {
+                  window.dispatchEvent(
+                    new CustomEvent(MED_BANNER_EVENT, { detail: { notifId, title, body } })
+                  );
+                }
                 // 브라우저 알림은 권한 있을 때만
                 await sendBrowserNotification(title, body, `med-${med.id}-${t}`);
                 scheduleAll();

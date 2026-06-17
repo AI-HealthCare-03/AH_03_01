@@ -315,3 +315,24 @@ html.dark .auth-bottom-bar .bg-green-50,
 html.dark .auth-bottom-bar .bg-purple-50 {
   background-color: rgba(255, 255, 255, 0.08) !important;
 }
+
+/* ── 복약 알림 배너 다크 모드 ────────────────────────────────
+   .med-banner 마커로 스코프 한정 — bg-gray-50/bg-blue-50/border-* 전역 오버라이드가
+   없는 색상을 배너 전용으로 처리. bg-white(카드)는 전역 #242424 오버라이드로 커버됨. */
+html.dark .med-banner .border-blue-200     { border-color: #1e3a5f !important; }
+html.dark .med-banner .border-gray-100     { border-color: #3a3a3a !important; }
+html.dark .med-banner .bg-gray-100         { background-color: #3a3a3a !important; }
+html.dark .med-banner .hover\:bg-gray-50:hover  { background-color: #2e2e2e !important; }
+html.dark .med-banner .hover\:bg-blue-50:hover  { background-color: #0d2a4a !important; }
+
+/* ── 복약 알림 배너 슬라이드 애니메이션 ───────────────────── */
+@keyframes med-banner-in {
+  from { transform: translateY(-110%); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+@keyframes med-banner-out {
+  from { transform: translateY(0);     opacity: 1; }
+  to   { transform: translateY(-110%); opacity: 0; }
+}
+.med-banner-enter { animation: med-banner-in  0.3s ease-out; }
+.med-banner-leave { animation: med-banner-out 0.25s ease-in  forwards; }
