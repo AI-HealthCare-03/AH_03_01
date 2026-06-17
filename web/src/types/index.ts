@@ -75,3 +75,58 @@ export type RestoreDataKey =
 
 /* 폼 검증 상태 */
 export type PasswordStrength = "weak" | "fair" | "strong";
+
+/* ── 카카오 OAuth ── */
+
+/** GET /api/v1/auth/kakao/authorize-url */
+export interface KakaoAuthorizeUrlResponse {
+  authorize_url: string;
+  state: string;
+}
+
+/** POST /api/v1/auth/kakao/callback — 기존 회원 로그인 */
+export interface KakaoCallbackLoginResponse {
+  status: "login";
+  access_token: string;
+}
+
+/** POST /api/v1/auth/kakao/callback — 신규 회원, 추가 정보 입력 필요 */
+export interface KakaoCallbackSignupRequiredResponse {
+  status: "signup_required";
+  signup_ticket: string;
+  prefill: {
+    nickname: string | null;
+    email: string | null;
+  };
+}
+
+/** POST /api/v1/auth/kakao/callback — 탈퇴 계정 발견, 복구/파기 선택 필요 */
+export interface KakaoCallbackRestoreRequiredResponse {
+  status: "restore_required";
+  restore_ticket: string;
+  masked_email: string;
+  deleted_at: string;
+  restore_deadline: string;
+}
+
+export type KakaoCallbackResponse =
+  | KakaoCallbackLoginResponse
+  | KakaoCallbackSignupRequiredResponse
+  | KakaoCallbackRestoreRequiredResponse;
+
+/** POST /api/v1/auth/kakao/signup */
+export interface KakaoSignupRequest {
+  signup_ticket: string;
+  email: string;
+  name: string;
+  nickname: string;
+  gender: "MALE" | "FEMALE";
+  birth_date: string; /* YYYY-MM-DD */
+  phone_number: string;
+  terms_agreed: boolean;
+  privacy_agreed: boolean;
+}
+
+export interface KakaoSignupResponse {
+  access_token: string;
+}

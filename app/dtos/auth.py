@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, EmailStr, Field
 
@@ -98,3 +98,58 @@ class LoginResponse(BaseModel):
 
 
 class TokenRefreshResponse(LoginResponse): ...
+
+
+# ─── 카카오 소셜 로그인/가입 ────────────────────────────────────────
+
+
+class KakaoAuthorizeUrlResponse(BaseModel):
+    authorize_url: str
+    state: str
+
+
+class KakaoCallbackRequest(BaseModel):
+    code: Annotated[str, Field(min_length=1)]
+    state: Annotated[str, Field(min_length=1)]
+
+
+class KakaoPrefill(BaseModel):
+    nickname: str | None = None
+    email: str | None = None
+
+
+class KakaoCallbackResponse(BaseModel):
+    """콜백 결과.
+
+    - status=login: access_token
+    - status=signup_required: signup_ticket + prefill
+    - status=restore_required: 탈퇴 계정 발견 — restore_ticket + 마스킹 이메일·탈퇴일·복구마감
+      (카카오 신원으로 이미 본인 확인을 마쳤으므로 별도 이메일 인증 없이 복구/파기를 선택한다)
+    """
+
+    status: Literal["login", "signup_required", "restore_required"]
+    access_token: str | None = None
+    signup_ticket: str | None = None
+    prefill: KakaoPrefill | None = None
+    restore_ticket: str | None = None
+    masked_email: str | None = None
+    deleted_at: datetime | None = None
+    restore_deadline: datetime | None = None
+
+
+class KakaoRestoreTicketRequest(BaseModel):
+    """카카오 탈퇴 계정 복구/파기 요청. restore_ticket 은 콜백에서 발급한 단기 티켓(카카오 신원 증명)."""
+
+    restore_ticket: Annotated[str, Field(min_length=1)]
+
+
+class KakaoSignupRequest(BaseModel):
+    signup_ticket: Annotated[str, Field(min_length=1)]
+    email: Annotated[EmailStr, Field(max_length=40)]
+    name: Annotated[str, Field(max_length=20)]
+    nickname: Annotated[str, Field(min_length=2, max_length=10)]
+    gender: Gender
+    birth_date: Annotated[date, AfterValidator(validate_birthday)]
+    phone_number: Annotated[str, AfterValidator(validate_phone_number)]
+    terms_agreed: bool
+    privacy_agreed: bool

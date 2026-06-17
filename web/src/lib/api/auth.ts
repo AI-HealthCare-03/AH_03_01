@@ -216,3 +216,67 @@ export async function destroyPreviousAccount(email: string): Promise<void> {
 export async function deleteAccount(reason: string): Promise<void> {
   await apiClient.delete("/api/v1/users/me", { data: { reason } });
 }
+
+/* ── 카카오 OAuth ── */
+
+/**
+ * 카카오 로그인 URL 조회
+ * GET /api/v1/auth/kakao/authorize-url
+ */
+export async function getKakaoAuthorizeUrl(): Promise<import("@/types").KakaoAuthorizeUrlResponse> {
+  const res = await apiClient.get<import("@/types").KakaoAuthorizeUrlResponse>(
+    "/api/v1/auth/kakao/authorize-url"
+  );
+  return res.data;
+}
+
+/**
+ * 카카오 콜백 처리
+ * POST /api/v1/auth/kakao/callback
+ */
+export async function kakaoCallback(
+  code: string,
+  state: string
+): Promise<import("@/types").KakaoCallbackResponse> {
+  const res = await apiClient.post<import("@/types").KakaoCallbackResponse>(
+    "/api/v1/auth/kakao/callback",
+    { code, state }
+  );
+  return res.data;
+}
+
+/**
+ * 카카오 소셜 회원가입
+ * POST /api/v1/auth/kakao/signup
+ */
+export async function kakaoSignup(
+  data: import("@/types").KakaoSignupRequest
+): Promise<import("@/types").KakaoSignupResponse> {
+  const res = await apiClient.post<import("@/types").KakaoSignupResponse>(
+    "/api/v1/auth/kakao/signup",
+    data
+  );
+  return res.data;
+}
+
+/**
+ * 카카오 탈퇴 계정 복구 (복구 후 바로 로그인)
+ * POST /api/v1/auth/kakao/restore
+ */
+export async function kakaoRestore(
+  restoreTicket: string
+): Promise<import("@/types").KakaoSignupResponse> {
+  const res = await apiClient.post<import("@/types").KakaoSignupResponse>(
+    "/api/v1/auth/kakao/restore",
+    { restore_ticket: restoreTicket }
+  );
+  return res.data;
+}
+
+/**
+ * 카카오 탈퇴 계정 영구 파기 ('새로 시작하기')
+ * POST /api/v1/auth/kakao/destroy
+ */
+export async function kakaoDestroy(restoreTicket: string): Promise<void> {
+  await apiClient.post("/api/v1/auth/kakao/destroy", { restore_ticket: restoreTicket });
+}

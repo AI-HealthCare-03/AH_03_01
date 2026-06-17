@@ -1,6 +1,7 @@
 "use client";
 
 import axios from "axios";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -11,10 +12,10 @@ import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
 import { useToast } from "@/components/ui/Toast";
 import { loginSchema, type LoginFormValues } from "@/lib/validators";
-import { login } from "@/lib/api/auth";
+import { login, getKakaoAuthorizeUrl } from "@/lib/api/auth";
 import { useAuthStore } from "@/stores/auth";
 import { extractErrorMessage } from "@/lib/api/client";
-import { ROUTES } from "@/constants";
+import { ROUTES, KAKAO_STATE_KEY } from "@/constants";
 
 /* =========================================
    로그인 페이지
@@ -51,9 +52,18 @@ export default function LoginPage() {
     }
   };
 
-  const handleKakaoLogin = () => {
-    // TODO(backend): 카카오 OAuth /api/v1/auth/kakao 엔드포인트 추가 필요
-    showToast("카카오 로그인은 준비 중입니다", "info");
+  const [kakaoLoading, setKakaoLoading] = useState(false);
+
+  const handleKakaoLogin = async () => {
+    setKakaoLoading(true);
+    try {
+      const { authorize_url, state } = await getKakaoAuthorizeUrl();
+      sessionStorage.setItem(KAKAO_STATE_KEY, state);
+      window.location.href = authorize_url;
+    } catch (err) {
+      setKakaoLoading(false);
+      showToast(extractErrorMessage(err), "error");
+    }
   };
 
   const BOTTOM_FEATURES = [
@@ -186,6 +196,7 @@ export default function LoginPage() {
             variant="kakao"
             size="lg"
             fullWidth
+            loading={kakaoLoading}
             onClick={handleKakaoLogin}
             leftIcon={
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none">

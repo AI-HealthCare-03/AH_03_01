@@ -106,3 +106,12 @@ class Config(BaseSettings):
     # envs/ 폴더에 넣은 서비스 계정 JSON 파일의 경로 (프로젝트 루트 기준).
     # 비어 있으면 FCM 발송 없이 silently skip.
     FIREBASE_CREDENTIALS_PATH: str = "envs/carelog-firebase-service-account.json"
+
+    # 카카오 소셜 로그인/가입 (OAuth2 Authorization Code)
+    # 미설정("")이면 authorize-url/callback 호출 시 미설정 에러를 던진다(실키는 .env 로 주입).
+    KAKAO_REST_API_KEY: str = ""
+    KAKAO_CLIENT_SECRET: str = ""
+    KAKAO_REDIRECT_URI: str = ""
+    KAKAO_AUTHORIZE_URL: str = "https://kauth.kakao.com/oauth/authorize"
+    KAKAO_TOKEN_URL: str = "https://kauth.kakao.com/oauth/token"
+    KAKAO_USER_INFO_URL: str = "https://kapi.kakao.com/v2/user/me"

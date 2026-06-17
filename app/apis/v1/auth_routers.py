@@ -1,15 +1,22 @@
 from typing import Annotated
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse as Response
 
 from app.core import config
 from app.core.config import Env
+from app.core.jwt.tokens import AccessToken, RefreshToken
 from app.core.limiter import limiter
+from app.core.utils.security import generate_oauth_state, register_oauth_state
 from app.dtos.auth import (
     DestroyRequest,
     FindIdRequest,
     FindIdResponse,
+    KakaoAuthorizeUrlResponse,
+    KakaoCallbackRequest,
+    KakaoRestoreTicketRequest,
+    KakaoSignupRequest,
     LoginRequest,
     LoginResponse,
     PreviousAccountResponse,
@@ -29,6 +36,21 @@ from app.services.email_verification import EmailVerificationService
 from app.services.jwt import JwtService
 
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _set_refresh_cookie(resp: Response, tokens: dict[str, AccessToken | RefreshToken]) -> None:
+    """로그인/가입 응답에 refresh_token httponly 쿠키를 심는다. (/login 과 동일 정책)"""
+    resp.set_cookie(
+        key="refresh_token",
+        value=str(tokens["refresh_token"]),
+        httponly=True,
+        secure=True if config.ENV == Env.PROD else False,
+        samesite="lax",  # api.↔apex 는 same-site 서브도메인 → lax 로 쿠키 정상 전달
+        domain=config.COOKIE_DOMAIN or None,
+        # 쿠키 만료는 refresh_token TTL 기준 — access TTL(15분)로 잡으면 refresh 가 유효해도
+        # 브라우저가 쿠키를 먼저 삭제해 재로그인이 강제된다.
+        expires=tokens["refresh_token"].payload["exp"],
+    )
 
 
 @auth_router.post("/signup", status_code=status.HTTP_201_CREATED)
@@ -197,9 +219,99 @@ async def login(
         secure=True if config.ENV == Env.PROD else False,
         samesite="lax",  # api.↔apex 는 same-site 서브도메인 → lax 로 쿠키 정상 전달
         domain=config.COOKIE_DOMAIN or None,
-        expires=tokens["access_token"].payload["exp"],
+        # 쿠키 만료는 refresh_token TTL 기준 — access TTL(15분)로 잡으면 refresh 가 유효해도
+        # 브라우저가 쿠키를 먼저 삭제해 재로그인이 강제된다.
+        expires=tokens["refresh_token"].payload["exp"],
     )
     return resp
+
+
+@auth_router.get("/kakao/authorize-url", response_model=KakaoAuthorizeUrlResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
+async def kakao_authorize_url(request: Request) -> Response:
+    """카카오 인가 페이지로 보낼 authorize URL + CSRF state 를 발급한다. 프론트가 이 URL 로 리다이렉트."""
+    state = generate_oauth_state()
+    await register_oauth_state(state)  # 단일사용 마커 등록 — 콜백에서 1회만 소비 가능(replay 차단)
+    query = urlencode(
+        {
+            "client_id": config.KAKAO_REST_API_KEY,
+            "redirect_uri": config.KAKAO_REDIRECT_URI,
+            "response_type": "code",
+            # 닉네임만 요청. 이메일(account_email)은 비즈앱 권한이 필요해 기본 "권한 없음" 이고,
+            # 권한 없는 scope 를 요청하면 인가 단계에서 에러(KOE006)가 난다. 이메일은 가입 폼에서 직접 수집.
+            "scope": "profile_nickname",
+            # 매 로그인마다 카카오 로그인/동의 화면을 강제로 다시 띄운다(SSO 세션 무시).
+            # 이전 인증 캐시로 silent 하게 code 만 받아오는 것을 막아 본인 재확인을 보장한다.
+            "prompt": "login",
+            "state": state,
+        }
+    )
+    authorize_url = f"{config.KAKAO_AUTHORIZE_URL}?{query}"
+    return Response(
+        content=KakaoAuthorizeUrlResponse(authorize_url=authorize_url, state=state).model_dump(),
+        status_code=status.HTTP_200_OK,
+    )
+
+
+@auth_router.post("/kakao/callback", status_code=status.HTTP_200_OK)
+@limiter.limit("10/minute")
+async def kakao_callback(
+    request: Request,
+    payload: KakaoCallbackRequest,
+    auth_service: Annotated[AuthService, Depends(AuthService)],
+) -> Response:
+    """카카오 콜백. 기존 계정이면 로그인(refresh 쿠키 설정), 신규면 가입 티켓을 반환한다."""
+    result, tokens = await auth_service.kakao_callback(payload.code, payload.state)
+    resp = Response(content=result.model_dump(mode="json"), status_code=status.HTTP_200_OK)
+    if tokens is not None:
+        _set_refresh_cookie(resp, tokens)
+    return resp
+
+
+@auth_router.post("/kakao/signup", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
+async def kakao_signup(
+    request: Request,
+    payload: KakaoSignupRequest,
+    auth_service: Annotated[AuthService, Depends(AuthService)],
+) -> Response:
+    """카카오 가입 티켓 + 추가 입력으로 신규 소셜 계정을 생성하고 로그인 토큰을 발급한다."""
+    tokens = await auth_service.kakao_signup(payload)
+    resp = Response(
+        content=LoginResponse(access_token=str(tokens["access_token"])).model_dump(),
+        status_code=status.HTTP_201_CREATED,
+    )
+    _set_refresh_cookie(resp, tokens)
+    return resp
+
+
+@auth_router.post("/kakao/restore", response_model=LoginResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("10/minute")
+async def kakao_restore(
+    request: Request,
+    payload: KakaoRestoreTicketRequest,
+    auth_service: Annotated[AuthService, Depends(AuthService)],
+) -> Response:
+    """카카오 복구 티켓으로 탈퇴 계정을 복구하고 바로 로그인(refresh 쿠키 설정)한다."""
+    tokens = await auth_service.kakao_restore(payload.restore_ticket)
+    resp = Response(
+        content=LoginResponse(access_token=str(tokens["access_token"])).model_dump(),
+        status_code=status.HTTP_200_OK,
+    )
+    _set_refresh_cookie(resp, tokens)
+    return resp
+
+
+@auth_router.post("/kakao/destroy", status_code=status.HTTP_200_OK)
+@limiter.limit("10/minute")
+async def kakao_destroy(
+    request: Request,
+    payload: KakaoRestoreTicketRequest,
+    auth_service: Annotated[AuthService, Depends(AuthService)],
+) -> Response:
+    """카카오 복구 티켓으로 탈퇴 계정을 영구 파기('새로 시작하기')한다."""
+    await auth_service.kakao_destroy(payload.restore_ticket)
+    return Response(content={"detail": "이전 계정이 파기되었습니다."}, status_code=status.HTTP_200_OK)
 
 
 @auth_router.get("/token/refresh", response_model=TokenRefreshResponse, status_code=status.HTTP_200_OK)
