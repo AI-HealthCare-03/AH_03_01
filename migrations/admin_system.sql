@@ -40,10 +40,13 @@ CREATE TABLE IF NOT EXISTS support_inquiry_answers (
 -- 5. community_reports 테이블 생성
 CREATE TABLE IF NOT EXISTS community_reports (
     id BIGSERIAL PRIMARY KEY,
-    target_type VARCHAR(20) NOT NULL,
+    target_type VARCHAR(30) NOT NULL,
     target_id BIGINT NOT NULL,
     reason VARCHAR(20) NOT NULL,
     reporter_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(reporter_id, target_type, target_id)
 );
+
+-- 6. community_reports.target_type 컬럼 크기 확장 (CHALLENGE_PARTICIPANT = 21자)
+ALTER TABLE community_reports ALTER COLUMN target_type TYPE VARCHAR(30);
