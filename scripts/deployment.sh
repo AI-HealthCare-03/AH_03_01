@@ -161,6 +161,14 @@ ssh -i ~/.ssh/${ssh_key_file} ${ssh_user}@${ec2_ip} \
   echo "Deploying services: $DEPLOY_SERVICES"
   docker compose up -d --pull always --no-deps $DEPLOY_SERVICES
 
+  # fastapi 가 recreate 되면 컨테이너 IP 가 바뀌는데 nginx 는 static upstream
+  # (proxy_pass http://fastapi) 의 IP 를 시작 시점에 캐싱 → 옛 IP 로 보내 502.
+  # fastapi 배포 시에만 nginx 를 재시작해 upstream DNS 를 재해석시킨다.
+  if echo " $DEPLOY_SERVICES " | grep -q " fastapi " ; then
+    echo "Restarting nginx (fastapi recreated → upstream IP 갱신)"
+    docker restart nginx
+  fi
+
   docker image prune -af
 EOF
 
