@@ -258,3 +258,25 @@ export async function kakaoSignup(
   );
   return res.data;
 }
+
+/**
+ * 카카오 탈퇴 계정 복구 (복구 후 바로 로그인)
+ * POST /api/v1/auth/kakao/restore
+ */
+export async function kakaoRestore(
+  restoreTicket: string
+): Promise<import("@/types").KakaoSignupResponse> {
+  const res = await apiClient.post<import("@/types").KakaoSignupResponse>(
+    "/api/v1/auth/kakao/restore",
+    { restore_ticket: restoreTicket }
+  );
+  return res.data;
+}
+
+/**
+ * 카카오 탈퇴 계정 영구 파기 ('새로 시작하기')
+ * POST /api/v1/auth/kakao/destroy
+ */
+export async function kakaoDestroy(restoreTicket: string): Promise<void> {
+  await apiClient.post("/api/v1/auth/kakao/destroy", { restore_ticket: restoreTicket });
+}

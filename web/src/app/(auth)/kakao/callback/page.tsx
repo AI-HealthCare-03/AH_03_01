@@ -7,7 +7,14 @@ import SimpleAuthShell from "@/components/layout/SimpleAuthShell";
 import { useToast } from "@/components/ui/Toast";
 import { kakaoCallback } from "@/lib/api/auth";
 import { useAuthStore } from "@/stores/auth";
-import { ROUTES, KAKAO_STATE_KEY, KAKAO_TICKET_KEY, KAKAO_PREFILL_KEY } from "@/constants";
+import {
+  ROUTES,
+  KAKAO_STATE_KEY,
+  KAKAO_TICKET_KEY,
+  KAKAO_PREFILL_KEY,
+  KAKAO_RESTORE_TICKET_KEY,
+  KAKAO_RESTORE_INFO_KEY,
+} from "@/constants";
 
 /* =========================================
    카카오 OAuth 콜백 페이지
@@ -47,6 +54,22 @@ function KakaoCallbackInner() {
           sessionStorage.removeItem(KAKAO_STATE_KEY);
           setAuth(res.access_token);
           router.replace(ROUTES.HOME);
+          return;
+        }
+
+        if (res.status === "restore_required") {
+          /* 탈퇴 계정 — 카카오 신원 기반 복구/파기 선택 화면으로 이동 */
+          sessionStorage.removeItem(KAKAO_STATE_KEY);
+          sessionStorage.setItem(KAKAO_RESTORE_TICKET_KEY, res.restore_ticket);
+          sessionStorage.setItem(
+            KAKAO_RESTORE_INFO_KEY,
+            JSON.stringify({
+              masked_email: res.masked_email,
+              deleted_at: res.deleted_at,
+              restore_deadline: res.restore_deadline,
+            }),
+          );
+          router.replace(ROUTES.KAKAO_ACCOUNT_RESTORE);
           return;
         }
 

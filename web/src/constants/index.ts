@@ -18,12 +18,15 @@ export const ROUTES = {
   LOGIN_BLOCKED: "/login/blocked",
   KAKAO_CALLBACK: "/kakao/callback",
   KAKAO_COMPLETE_SIGNUP: "/kakao/complete-signup",
+  KAKAO_ACCOUNT_RESTORE: "/kakao/account-restore",
 } as const;
 
 /* 카카오 OAuth sessionStorage 키 */
 export const KAKAO_STATE_KEY = "kakao_oauth_state";
 export const KAKAO_TICKET_KEY = "kakao_signup_ticket";
 export const KAKAO_PREFILL_KEY = "kakao_signup_prefill";
+export const KAKAO_RESTORE_TICKET_KEY = "kakao_restore_ticket";
+export const KAKAO_RESTORE_INFO_KEY = "kakao_restore_info";
 
 /* 로그인 실패 잠금 임계값 */
 export const MAX_LOGIN_ATTEMPTS = 5;

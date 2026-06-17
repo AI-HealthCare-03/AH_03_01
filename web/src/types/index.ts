@@ -100,9 +100,19 @@ export interface KakaoCallbackSignupRequiredResponse {
   };
 }
 
+/** POST /api/v1/auth/kakao/callback — 탈퇴 계정 발견, 복구/파기 선택 필요 */
+export interface KakaoCallbackRestoreRequiredResponse {
+  status: "restore_required";
+  restore_ticket: string;
+  masked_email: string;
+  deleted_at: string;
+  restore_deadline: string;
+}
+
 export type KakaoCallbackResponse =
   | KakaoCallbackLoginResponse
-  | KakaoCallbackSignupRequiredResponse;
+  | KakaoCallbackSignupRequiredResponse
+  | KakaoCallbackRestoreRequiredResponse;
 
 /** POST /api/v1/auth/kakao/signup */
 export interface KakaoSignupRequest {
