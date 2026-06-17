@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { ToastProvider } from "@/components/ui/Toast";
 import { useNotificationScheduler } from "@/hooks/useNotificationScheduler";
+import MedicationBanner from "@/components/layout/MedicationBanner";
 
 /* =========================================
    Providers — 클라이언트 컴포넌트 전용
@@ -38,6 +39,7 @@ export default function Providers({ children }: ProvidersProps) {
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <NotificationSchedulerProvider />
+        <MedicationBanner />
         {children}
       </ToastProvider>
     </QueryClientProvider>
