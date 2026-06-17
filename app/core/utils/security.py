@@ -2,13 +2,17 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import secrets
 import time
 import uuid
 
+import redis.asyncio as redis_async
 from passlib.context import CryptContext
 
 from app.core import config
+
+logger = logging.getLogger(__name__)
 
 pwd_context = CryptContext(
     schemes=["bcrypt"],
@@ -64,3 +68,60 @@ def verify_oauth_state(state: str) -> bool:
         return False
 
     return time.time() - ts <= OAUTH_STATE_MAX_AGE_SECONDS
+
+
+_OAUTH_STATE_KEY = "oauth_state:{nonce}"
+_redis: redis_async.Redis | None = None
+
+
+def _state_client() -> redis_async.Redis:
+    global _redis
+    if _redis is None:
+        _redis = redis_async.Redis(
+            host=config.REDIS_HOST,
+            port=config.REDIS_PORT,
+            db=config.REDIS_DB,
+            decode_responses=True,
+        )
+    return _redis
+
+
+def _extract_nonce(state: str) -> str | None:
+    """서명 검증과 무관하게 state payload 에서 nonce 만 추출한다(단일사용 키 식별용)."""
+    try:
+        payload_b64 = state.split(".", 1)[0]
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64.encode()).decode())
+        nonce = payload.get("nonce")
+        return str(nonce) if nonce else None
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return None
+
+
+async def register_oauth_state(state: str) -> None:
+    """발급한 state 의 nonce 를 Redis 에 단일사용 마커로 저장한다(TTL = state 유효시간).
+
+    Redis 장애 시 조용히 통과(fail-open) — HMAC 서명+발급시각 검증이 1차 방어로 남는다.
+    """
+    nonce = _extract_nonce(state)
+    if nonce is None:
+        return
+    try:
+        await _state_client().setex(_OAUTH_STATE_KEY.format(nonce=nonce), OAUTH_STATE_MAX_AGE_SECONDS, "1")
+    except Exception as err:  # noqa: BLE001 — Redis 장애가 로그인 발급 자체를 막지 않도록
+        logger.warning("OAuth state 등록 실패(Redis), 단일사용 검증 생략: %s", err)
+
+
+async def consume_oauth_state(state: str) -> bool:
+    """state 를 1회 소비한다. 처음 소비면 True, 이미 쓰였거나 만료면 False(replay 차단).
+
+    Redis 장애 시 True(fail-open) — 단일사용만 건너뛰고 HMAC/TTL 검증은 verify_oauth_state 가 담당.
+    """
+    nonce = _extract_nonce(state)
+    if nonce is None:
+        return False
+    try:
+        deleted = await _state_client().delete(_OAUTH_STATE_KEY.format(nonce=nonce))
+        return bool(deleted)
+    except Exception as err:  # noqa: BLE001 — Redis 장애 시 단일사용 검증만 포기, 로그인은 막지 않음
+        logger.warning("OAuth state 소비 실패(Redis), replay 검증 생략: %s", err)
+        return True

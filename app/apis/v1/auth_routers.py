@@ -8,7 +8,7 @@ from app.core import config
 from app.core.config import Env
 from app.core.jwt.tokens import AccessToken, RefreshToken
 from app.core.limiter import limiter
-from app.core.utils.security import generate_oauth_state
+from app.core.utils.security import generate_oauth_state, register_oauth_state
 from app.dtos.auth import (
     DestroyRequest,
     FindIdRequest,
@@ -47,7 +47,9 @@ def _set_refresh_cookie(resp: Response, tokens: dict[str, AccessToken | RefreshT
         secure=True if config.ENV == Env.PROD else False,
         samesite="lax",  # api.↔apex 는 same-site 서브도메인 → lax 로 쿠키 정상 전달
         domain=config.COOKIE_DOMAIN or None,
-        expires=tokens["access_token"].payload["exp"],
+        # 쿠키 만료는 refresh_token TTL 기준 — access TTL(15분)로 잡으면 refresh 가 유효해도
+        # 브라우저가 쿠키를 먼저 삭제해 재로그인이 강제된다.
+        expires=tokens["refresh_token"].payload["exp"],
     )
 
 
@@ -217,7 +219,9 @@ async def login(
         secure=True if config.ENV == Env.PROD else False,
         samesite="lax",  # api.↔apex 는 same-site 서브도메인 → lax 로 쿠키 정상 전달
         domain=config.COOKIE_DOMAIN or None,
-        expires=tokens["access_token"].payload["exp"],
+        # 쿠키 만료는 refresh_token TTL 기준 — access TTL(15분)로 잡으면 refresh 가 유효해도
+        # 브라우저가 쿠키를 먼저 삭제해 재로그인이 강제된다.
+        expires=tokens["refresh_token"].payload["exp"],
     )
     return resp
 
@@ -227,6 +231,7 @@ async def login(
 async def kakao_authorize_url(request: Request) -> Response:
     """카카오 인가 페이지로 보낼 authorize URL + CSRF state 를 발급한다. 프론트가 이 URL 로 리다이렉트."""
     state = generate_oauth_state()
+    await register_oauth_state(state)  # 단일사용 마커 등록 — 콜백에서 1회만 소비 가능(replay 차단)
     query = urlencode(
         {
             "client_id": config.KAKAO_REST_API_KEY,

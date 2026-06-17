@@ -14,15 +14,13 @@ from app.core import config
 def _client_ip(request: Request) -> str:
     """프록시(nginx) 뒤에서 실제 클라이언트 IP 추출.
 
-    nginx 가 X-Real-IP / X-Forwarded-For 를 설정한다(infra/nginx). 헤더가 없으면(직접 접속)
-    소켓 주소로 폴백. 신뢰 프록시 전제 — 외부 직노출 시 헤더 스푸핑 가능성에 유의.
+    nginx 가 `X-Real-IP $remote_addr` 로 매 요청 덮어쓰므로(infra/nginx) 이 값은 클라이언트가
+    위조할 수 없다 — 이것만 신뢰한다. 없으면(nginx 미경유 직접 접속) 소켓 주소로 폴백.
+    클라이언트가 임의로 채울 수 있는 X-Forwarded-For 의 first-hop 은 신뢰하지 않는다(rate limit 우회 방지).
     """
     real_ip = request.headers.get("X-Real-IP")
     if real_ip:
         return real_ip.strip()
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
     return get_remote_address(request)
 
 
