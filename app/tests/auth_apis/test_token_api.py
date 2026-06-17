@@ -45,3 +45,33 @@ class TestJWTTokenRefreshAPI(TestCase):
             response = await client.get("/api/v1/auth/token/refresh")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         assert response.json()["detail"] == "Refresh token is missing."
+
+    async def test_refresh_token_rejected_as_access_token(self):
+        """토큰 혼동 방지(C-1): refresh 토큰을 access 로 검증하면 type 불일치로 거부돼야 한다."""
+        from datetime import date
+
+        from fastapi import HTTPException
+
+        from app.models.users import Gender
+        from app.repositories.user_repository import UserRepository
+        from app.services.jwt import JwtService
+
+        user = await UserRepository().create_user(
+            email="confusion@example.com",
+            hashed_password="x",
+            name="혼동테스터",
+            nickname="혼동",
+            phone_number="01012341234",
+            gender=Gender.MALE,
+            birthday=date(1990, 1, 1),
+        )
+        jwt_service = JwtService()
+        refresh_token = str(jwt_service.create_refresh_token(user))
+
+        # refresh 토큰 문자열을 access 로 검증 → 거부(HTTPException)
+        with self.assertRaises(HTTPException):
+            jwt_service.verify_jwt(token=refresh_token, token_type="access")
+
+        # access 로는 정상 검증돼야 회귀가 아님을 보장
+        access_token = str(jwt_service.create_access_token(user))
+        assert jwt_service.verify_jwt(token=access_token, token_type="access")

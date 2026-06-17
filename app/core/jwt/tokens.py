@@ -34,6 +34,10 @@ class Token:
                 raise ExpiredTokenError("Token is expired") from err
             except TokenBackendError as err:
                 raise TokenError("Token is invalid") from err
+            # 토큰 종류 검증: 모든 토큰이 같은 SECRET_KEY 로 서명되므로 type 을 확인하지 않으면
+            # refresh 토큰을 access 로 쓰는 등의 토큰 혼동(token confusion)이 가능하다.
+            if verify and self.payload.get("type") != self.token_type:
+                raise TokenError("Token has wrong type")
         else:
             self.payload = {"type": self.token_type}
             self.set_exp(from_time=self.current_time, lifetime=self.lifetime)
