@@ -487,6 +487,7 @@ class AdminNoticeItem(BaseModel):
     created_at: str
     author_name: str | None
     is_deleted: bool = False
+    is_pinned: bool = False
 
 
 class AdminNoticeCreateRequest(BaseModel):
@@ -518,6 +519,7 @@ async def list_notices(
             created_at=p.created_at.isoformat(),
             author_name=p.author.nickname or p.author.name if p.author else None,
             is_deleted=p.is_deleted,
+            is_pinned=p.is_pinned,
         )
         for p in posts
     ]
@@ -540,6 +542,7 @@ async def create_notice(
         content=post.content,
         created_at=post.created_at.isoformat(),
         author_name=admin.nickname or admin.name,
+        is_pinned=post.is_pinned,
     )
 
 
@@ -562,6 +565,7 @@ async def update_notice(
         content=post.content,
         created_at=post.created_at.isoformat(),
         author_name=admin.nickname or admin.name,
+        is_pinned=post.is_pinned,
     )
 
 
@@ -575,3 +579,38 @@ async def delete_notice(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공지사항을 찾을 수 없습니다.")
     post.is_deleted = True
     await post.save()
+
+
+_MAX_PINNED = 3
+
+
+@admin_router.patch("/notices/{notice_id}/pin", response_model=AdminNoticeItem)
+async def toggle_pin_notice(
+    notice_id: int,
+    admin: Annotated[User, Depends(get_admin_user)],
+) -> AdminNoticeItem:
+    async with in_transaction():
+        post = await Post.filter(id=notice_id, category=PostCategory.NOTICE, is_deleted=False).select_for_update().first()
+        if not post:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공지사항을 찾을 수 없습니다.")
+        if not post.is_pinned:
+            pinned_count = await Post.filter(
+                category=PostCategory.NOTICE, is_pinned=True, is_deleted=False
+            ).count()
+            if pinned_count >= _MAX_PINNED:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"고정 게시글은 최대 {_MAX_PINNED}개까지 설정할 수 있습니다.",
+                )
+        post.is_pinned = not post.is_pinned
+        await post.save(update_fields=["is_pinned"])
+    author = await post.author
+    return AdminNoticeItem(
+        id=post.id,
+        title=post.title,
+        content=post.content,
+        created_at=post.created_at.isoformat(),
+        author_name=author.nickname or author.name if author else None,
+        is_pinned=post.is_pinned,
+        is_deleted=post.is_deleted,
+    )
