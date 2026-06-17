@@ -122,6 +122,15 @@ echo ""
 # ---------- EC2 내에 배포 준비 파일 복사  ----------
 scp -i ~/.ssh/${ssh_key_file} envs/.prod.env ${ssh_user}@${ec2_ip}:~/project/.env
 scp -i ~/.ssh/${ssh_key_file} infra/docker/docker-compose.prod.yml ${ssh_user}@${ec2_ip}:~/project/docker-compose.yml
+
+# ---------- FCM(복약 알림) Firebase 서비스 계정 키 전송 (있을 때만; 없으면 FCM 비활성) ----------
+if [[ -f envs/carelog-firebase-service-account.json ]] ; then
+  ssh -i ~/.ssh/${ssh_key_file} ${ssh_user}@${ec2_ip} "mkdir -p ~/project/envs"
+  scp -i ~/.ssh/${ssh_key_file} envs/carelog-firebase-service-account.json ${ssh_user}@${ec2_ip}:~/project/envs/carelog-firebase-service-account.json
+  echo "${COLOR_BLUE}✅ Firebase 서비스 계정 키 전송 완료 (FCM 활성)${COLOR_NC}"
+else
+  echo "${COLOR_BLUE}⚠️  envs/carelog-firebase-service-account.json 없음 — FCM 비활성 상태로 배포됩니다.${COLOR_NC}"
+fi
 if [[ "$is_https" == "1" ]] ; then
   # ---------- prod_http.conf 파일의 server_name 자동 수정 ----------
   sed -i '' "s/server_name .*/server_name ${ec2_ip};/g" infra/nginx/prod_http.conf
