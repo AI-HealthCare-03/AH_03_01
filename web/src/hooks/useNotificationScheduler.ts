@@ -261,11 +261,14 @@ export function useNotificationScheduler() {
             } else if (n.notification_type === "CHALLENGE_INVITE") {
               pushNotification({ category: "챌린지", title: "📩 챌린지 초대", body: n.message });
               await sendBrowserNotification("📩 챌린지 초대", n.message);
+            } else if (n.notification_type === "CHALLENGE_DELETE") {
+              pushNotification({ category: "챌린지", title: "🗑️ 챌린지 삭제", body: n.message });
+              await sendBrowserNotification("🗑️ 챌린지 삭제", n.message);
             }
           }
         } catch { /* 무시 */ }
       };
-      kickPollIntervalRef.current = setInterval(kickPoll, 30_000);
+      kickPollIntervalRef.current = setInterval(kickPoll, 10_000);
 
       // ── 챌린지 리마인드 ──────────────────────────
       if (settings.challengeRemind) {
