@@ -113,6 +113,15 @@ html.dark .bg-surface {
   background-color: #2e2e2e !important;
 }
 
+/* 위험도 탭 앰버(크림) 하이라이트 — 다크모드 대비.
+   bg-[#fffde7] 카드들은 내부 텍스트가 시맨틱 토큰(다크 시 밝아짐)이라, 크림 배경 그대로면
+   밝은 글자가 안 보였다(추천 챌린지 제목·하단 안내문 등). 어두운 앰버 톤으로 전환한다. */
+html.dark .bg-\[\#fffde7\] { background-color: #2c2718 !important; }
+html.dark .bg-\[\#fff3cd\] { background-color: #3d341a !important; }
+html.dark .hover\:bg-\[\#fff9c4\]:hover { background-color: #3a3320 !important; }
+html.dark .border-\[\#ffe082\] { border-color: #5c4a1f !important; }
+html.dark .text-\[\#856404\] { color: #e8c860 !important; }
+
 /* 테두리 */
 html.dark .border-border {
   border-color: #3a3a3a !important;
@@ -122,6 +131,9 @@ html.dark .border-border {
 html.dark .text-text-primary   { color: #f0f0f0 !important; }
 html.dark .text-text-secondary  { color: #b0b0b0 !important; }
 html.dark .text-text-tertiary   { color: #7a7a7a !important; }
+/* 마크다운 박스(AI 분석 요약 등)의 [&_strong]:text-text-primary 는 CSS 변수(var(--color-text-primary))를
+   직접 참조해 위 유틸 오버라이드가 닿지 않는다 → 다크모드에서 strong 이 #111 로 깔려 안 보였다. 직접 밝게. */
+html.dark .\[\&_strong\]\:text-text-primary strong { color: #f0f0f0 !important; }
 /* text-brand-black → 다크모드에서 밝게 */
 html.dark .text-brand-black { color: #f0f0f0 !important; }
 
