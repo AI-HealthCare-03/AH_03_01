@@ -10,6 +10,7 @@ from app.models.challenge import (
     VerificationType,
 )
 from app.tests.health_apis.helpers import make_client, signup_and_login
+from app.tests.health_apis.test_predictions_api import _FULL_MALE_PROFILE_PAYLOAD
 
 
 class TestChallengeRecommendationsApi(TestCase):
@@ -28,15 +29,11 @@ class TestChallengeRecommendationsApi(TestCase):
         )
 
     async def _seed_profile_and_bp(self, client, headers):
+        # 예측 게이트(완성도 100%) 통과를 위해 모델입력 필수 필드를 모두 채운다.
         await client.post(
             "/api/v1/health-records?recordType=profile",
             headers=headers,
-            json={
-                "height_cm": 170,
-                "weight_kg": 78,
-                "current_smoker": 1,
-                "family_hp": 1,
-            },
+            json=_FULL_MALE_PROFILE_PAYLOAD,
         )
         await client.post(
             "/api/v1/health-records",
