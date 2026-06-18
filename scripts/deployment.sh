@@ -161,6 +161,33 @@ ssh -i ~/.ssh/${ssh_key_file} ${ssh_user}@${ec2_ip} \
   echo "Deploying services: $DEPLOY_SERVICES"
   docker compose up -d --pull always --no-deps $DEPLOY_SERVICES
 
+  # fastapi 가 recreate 되면 컨테이너 IP 가 바뀌는데 nginx 는 static upstream
+  # (proxy_pass http://fastapi) 의 IP 를 시작 시점에 캐싱 → 옛 IP 로 보내 502.
+  # fastapi 배포 시에만: (1) fastapi 가 실제 서빙할 때까지 대기 후 (2) nginx 를
+  # graceful reload(-s reload) 해 upstream DNS 를 재해석. restart 가 아니라 reload 라
+  # 인플라이트 요청을 유지하며 무중단으로 교체된다.
+  if echo " $DEPLOY_SERVICES " | grep -q " fastapi " ; then
+    echo "Waiting for fastapi to serve on :8000 (max ~120s) ..."
+    fastapi_ready=0
+    # 경량 /api/health 로 확인(Swagger /api/docs 보다 가벼움). 컨테이너에 curl 이 없어
+    # python(stdlib urllib) 사용. 시스템 python 우선, 경로 변경 대비 venv python 폴백.
+    health_py="import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health',timeout=3).status==200 else 1)"
+    for _ in $(seq 1 60) ; do
+      if docker exec fastapi python -c "$health_py" 2>/dev/null \
+         || docker exec fastapi /app/.venv/bin/python -c "$health_py" 2>/dev/null ; then
+        fastapi_ready=1
+        break
+      fi
+      sleep 2
+    done
+    if [ "$fastapi_ready" = "1" ] ; then
+      echo "fastapi ready → reloading nginx (upstream IP 갱신, 무중단)"
+      docker exec nginx nginx -s reload || echo "⚠️ nginx reload 실패 — 수동 확인 필요"
+    else
+      echo "⚠️ fastapi 가 제때 응답하지 않음 — nginx reload 생략, 수동 확인 필요"
+    fi
+  fi
+
   docker image prune -af
 EOF
 
