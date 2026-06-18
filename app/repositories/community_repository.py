@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import random
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
 from tortoise.functions import Count
-
-QUIZ_COOLDOWN_DAYS = 3
 
 from app.models.community import (
     Comment,
@@ -23,6 +21,8 @@ from app.models.community import (
     ReportReason,
     ReportTargetType,
 )
+
+QUIZ_COOLDOWN_DAYS = 3
 
 
 class LikeRepository:
@@ -75,7 +75,7 @@ class PostRepository:
         return list(await qs.offset((page - 1) * size).limit(size)), total
 
     async def list_popular_posts(self, limit: int = 3) -> list[Post]:
-        since = datetime.now(timezone.utc) - timedelta(days=7)
+        since = datetime.now(UTC) - timedelta(days=7)
         return list(
             await Post.filter(created_at__gte=since, is_deleted=False)
             .prefetch_related("author")
@@ -197,7 +197,7 @@ class QuizRepository:
 
     async def list_unanswered_quizzes(self, user_id: UUID, limit: int) -> list[HealthQuiz]:
         # 쿨다운 기간 내 푼 퀴즈만 제외 — 기간 초과 시 재출제 가능
-        cooldown_cutoff = datetime.now(timezone.utc) - timedelta(days=QUIZ_COOLDOWN_DAYS)
+        cooldown_cutoff = datetime.now(UTC) - timedelta(days=QUIZ_COOLDOWN_DAYS)
         recent_ids = list(
             await QuizAttempt.filter(user_id=user_id, attempted_at__gte=cooldown_cutoff).values_list(
                 "quiz_id", flat=True

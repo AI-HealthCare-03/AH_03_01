@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.apis.v1.admin_routers import admin_router
 from app.apis.v1.auth_routers import auth_router
 from app.apis.v1.challenge_routers import (
     challenge_categories_router,
@@ -18,6 +19,7 @@ from app.apis.v1.health_routers import (
     health_reports_router,
     predictions_router,
 )
+from app.apis.v1.medication_reminder_routers import fcm_router, medication_reminders_router
 from app.apis.v1.notification_routers import notifications_router
 from app.apis.v1.pet_routers import (
     attendance_router,
@@ -28,8 +30,6 @@ from app.apis.v1.pet_routers import (
     store_router,
 )
 from app.apis.v1.risk_recommendation_routers import risk_recommendations_router
-from app.apis.v1.admin_routers import admin_router
-from app.apis.v1.medication_reminder_routers import fcm_router, medication_reminders_router
 from app.apis.v1.support_routers import support_router
 from app.apis.v1.user_routers import user_router
 

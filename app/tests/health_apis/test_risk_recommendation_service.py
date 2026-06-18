@@ -164,7 +164,12 @@ def test_to_challenge_item_accepts_dataclass_and_dict() -> None:
     c.template_id AttributeError 없이 동작해야 한다.
     """
     fresh = RecommendedChallenge(
-        template_id=12, title="하루 8천보", category="EXERCISE", difficulty="LEVEL_2", reason="혈압 관리", priority="TOP"
+        template_id=12,
+        title="하루 8천보",
+        category="EXERCISE",
+        difficulty="LEVEL_2",
+        reason="혈압 관리",
+        priority="TOP",
     )
     from_dataclass = _to_challenge_item(fresh)
     from_dict = _to_challenge_item(

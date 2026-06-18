@@ -30,7 +30,7 @@ GROUP_SUM_TABLE = [
     (35, "LEVEL_4"),
     (30, "LEVEL_3"),
     (15, "LEVEL_2"),
-    (6,  "LEVEL_1"),
+    (6, "LEVEL_1"),
 ]
 
 # GROUP_MEMBERS: group_target_members 기준

@@ -86,9 +86,7 @@ class ChallengeRepository:
             # left_only=True: 탈퇴(LEFT)한 챌린지만 조회 (완료 탭 노출용)
             # 기본: PENDING 상태도 포함 — 초대 코드로 참가 신청 후 승인 대기 중인 챌린지도 목록에 표시
             participant_statuses = (
-                [ParticipantStatus.LEFT]
-                if left_only
-                else [ParticipantStatus.APPROVED, ParticipantStatus.PENDING]
+                [ParticipantStatus.LEFT] if left_only else [ParticipantStatus.APPROVED, ParticipantStatus.PENDING]
             )
             participating_ids = await ChallengeParticipant.filter(
                 user_id=user_id,

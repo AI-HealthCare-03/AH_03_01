@@ -24,7 +24,6 @@ from app.dtos.pet import (
     PointTransactionResponse,
     PurchaseRequest,
     PurchaseResponse,
-
     StoreItemsResponse,
 )
 from app.models.pet import ItemCategory, PointSource, PointTransactionType
@@ -34,7 +33,6 @@ from app.services.pet import (
     InventoryService,
     PetService,
     PointService,
-
     StoreService,
     equipped_items_payload,
     equipped_slots_payload,
@@ -262,7 +260,6 @@ async def check_attendance(
 ) -> Response:
     payload = await service.check_in(user)
     return Response(payload, status_code=status.HTTP_201_CREATED)
-
 
 
 def _next_bonus_at(current_streak: int) -> int | None:

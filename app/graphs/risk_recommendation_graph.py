@@ -631,9 +631,11 @@ async def persist_disease_risk(state: RiskState) -> dict[str, Any]:
     # 트랜잭션 안에서 읽어도 동일한 결과이나, 예측은 단일 사용자의 순차 흐름이므로
     # race condition 가능성이 없어 외부에서 미리 읽는 것으로 충분하다.
     disease_types = [dt for _, dt, _ in valid_preds]
-    all_prev = await DiseaseRisk.filter(
-        user_id=user_id, disease_type__in=disease_types
-    ).order_by("-calculated_at").limit(len(disease_types) * 10)
+    all_prev = (
+        await DiseaseRisk.filter(user_id=user_id, disease_type__in=disease_types)
+        .order_by("-calculated_at")
+        .limit(len(disease_types) * 10)
+    )
     prev_levels: dict[DiseaseType, RiskLevel | None] = {}
     for row in all_prev:
         if row.disease_type not in prev_levels:

@@ -83,8 +83,7 @@ async def run() -> None:
         )
         if not new_exists:
             await conn.execute(
-                f'ALTER TABLE quiz_attempts ADD CONSTRAINT "{NEW_CONSTRAINT}"'
-                " UNIQUE (user_id, quiz_id, attempted_date)"
+                f'ALTER TABLE quiz_attempts ADD CONSTRAINT "{NEW_CONSTRAINT}" UNIQUE (user_id, quiz_id, attempted_date)'
             )
             print(f"[migrate] 신규 일일 UNIQUE 제약 추가 완료: {NEW_CONSTRAINT}")
         else:

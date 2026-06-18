@@ -4,15 +4,16 @@ RAG 파싱 & 청킹 파이프라인
 
 import json
 import re
+import sys as _sys
 from collections import Counter
 from pathlib import Path
 
 import frontmatter
 
-import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from scripts.rag.topic_mapping import _get_topics
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+from scripts.rag.topic_mapping import _get_topics
 
 # ─────────────────────────────────────────────
 # 경로 설정

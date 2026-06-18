@@ -1,18 +1,26 @@
 """관리자 전용 API — 모든 엔드포인트는 get_admin_user 의존성으로 보호됩니다."""
+
+from datetime import UTC
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from tortoise.transactions import in_transaction
 
 from app.dependencies.security import get_admin_user
-from app.dtos.support import AdminFAQResponse, FAQResponse, InquiryAnswerCreateRequest, InquiryAnswerResponse, InquiryDetailResponse, InquiryListItem
+from app.dtos.support import (
+    AdminFAQResponse,
+    InquiryAnswerCreateRequest,
+    InquiryAnswerResponse,
+    InquiryDetailResponse,
+    InquiryListItem,
+)
 from app.models.challenge import Challenge, ChallengeParticipant, ChallengeStatus
 from app.models.community import Comment, Post, PostCategory, Report, ReportTargetType
 from app.models.support import FAQ, FAQCategory, Inquiry, InquiryStatus
 from app.models.users import User
-from app.repositories.support_repository import FAQRepository, InquiryRepository
-from tortoise.transactions import in_transaction
+from app.repositories.support_repository import InquiryRepository
 
 admin_router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -86,23 +94,26 @@ async def list_users(
     qs = User.filter(is_deleted=False)
     if search:
         from tortoise.expressions import Q  # noqa: PLC0415
+
         qs = qs.filter(Q(email__icontains=search) | Q(nickname__icontains=search) | Q(name__icontains=search))
     users = await qs.order_by("-created_at").offset(offset).limit(limit)
     result = []
     for u in users:
         report_count = await Report.filter(reporter_id=u.id).count()
-        result.append(AdminUserItem(
-            id=str(u.id),
-            email=u.email,
-            name=u.name,
-            nickname=u.nickname,
-            created_at=u.created_at.isoformat(),
-            last_login=u.last_login.isoformat() if u.last_login else None,
-            is_active=u.is_active,
-            is_banned=u.is_banned,
-            ban_reason=u.ban_reason,
-            report_count=report_count,
-        ))
+        result.append(
+            AdminUserItem(
+                id=str(u.id),
+                email=u.email,
+                name=u.name,
+                nickname=u.nickname,
+                created_at=u.created_at.isoformat(),
+                last_login=u.last_login.isoformat() if u.last_login else None,
+                is_active=u.is_active,
+                is_banned=u.is_banned,
+                ban_reason=u.ban_reason,
+                report_count=report_count,
+            )
+        )
     return result
 
 
@@ -145,13 +156,16 @@ async def ban_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="사용자를 찾을 수 없습니다.")
     if u.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="관리자는 강퇴할 수 없습니다.")
-    from datetime import datetime, timezone  # noqa: PLC0415
-    await u.update_from_dict({
-        "is_banned": True,
-        "ban_reason": body.reason,
-        "banned_at": datetime.now(timezone.utc),
-        "banned_by": admin.id,
-    })
+    from datetime import datetime  # noqa: PLC0415
+
+    await u.update_from_dict(
+        {
+            "is_banned": True,
+            "ban_reason": body.reason,
+            "banned_at": datetime.now(UTC),
+            "banned_by": admin.id,
+        }
+    )
     await u.save()
 
 
@@ -217,17 +231,19 @@ async def list_challenges(
     result = []
     for c in challenges:
         count = await ChallengeParticipant.filter(challenge_id=c.id).count()
-        result.append(AdminChallengeItem(
-            id=c.id,
-            title=c.title,
-            scope=c.scope,
-            status=_effective_status(c.status, c.end_date),
-            category=c.category,
-            participant_count=count,
-            start_date=str(c.start_date),
-            end_date=str(c.end_date),
-            created_at=c.created_at.isoformat(),
-        ))
+        result.append(
+            AdminChallengeItem(
+                id=c.id,
+                title=c.title,
+                scope=c.scope,
+                status=_effective_status(c.status, c.end_date),
+                category=c.category,
+                participant_count=count,
+                start_date=str(c.start_date),
+                end_date=str(c.end_date),
+                created_at=c.created_at.isoformat(),
+            )
+        )
     return result
 
 
@@ -590,13 +606,13 @@ async def toggle_pin_notice(
     admin: Annotated[User, Depends(get_admin_user)],
 ) -> AdminNoticeItem:
     async with in_transaction():
-        post = await Post.filter(id=notice_id, category=PostCategory.NOTICE, is_deleted=False).select_for_update().first()
+        post = (
+            await Post.filter(id=notice_id, category=PostCategory.NOTICE, is_deleted=False).select_for_update().first()
+        )
         if not post:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공지사항을 찾을 수 없습니다.")
         if not post.is_pinned:
-            pinned_count = await Post.filter(
-                category=PostCategory.NOTICE, is_pinned=True, is_deleted=False
-            ).count()
+            pinned_count = await Post.filter(category=PostCategory.NOTICE, is_pinned=True, is_deleted=False).count()
             if pinned_count >= _MAX_PINNED:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
