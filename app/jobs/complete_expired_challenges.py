@@ -29,7 +29,14 @@ from tortoise.exceptions import IntegrityError
 from tortoise.transactions import in_transaction
 
 from app.core.db.databases import TORTOISE_ORM
-from app.models.challenge import Challenge, ChallengeCadence, ChallengeParticipant, ChallengeScope, ChallengeStatus, ParticipantStatus
+from app.models.challenge import (
+    Challenge,
+    ChallengeCadence,
+    ChallengeParticipant,
+    ChallengeScope,
+    ChallengeStatus,
+    ParticipantStatus,
+)
 from app.models.pet import PointSource, PointTransaction
 from app.services.rewards import RewardService
 
@@ -155,7 +162,9 @@ async def complete_expired_challenges(*, dry_run: bool, batch_size: int) -> dict
 
     if dry_run:
         for c in targets:
-            logger.info("[dry-run] 대상 challenge_id=%d title=%s end_date=%s status=%s", c.id, c.title, c.end_date, c.status)
+            logger.info(
+                "[dry-run] 대상 challenge_id=%d title=%s end_date=%s status=%s", c.id, c.title, c.end_date, c.status
+            )
         elapsed = time.monotonic() - started
         logger.info("[dry-run] 종료 — 대상 %d건, 실제 업데이트 없음, 소요 %.2fs", total, elapsed)
         return {"total": total, "completed": 0, "failed": 0}

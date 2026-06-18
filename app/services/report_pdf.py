@@ -152,7 +152,9 @@ def _trend_chart_svg(trend: dict[str, Any]) -> str:
     if not points:
         return f'<div class="empty">{_esc(label)} 데이터가 없습니다.</div>'
 
-    cfg = _TREND_CHART_CONFIGS.get(metric, {"domain": None, "ticks": None, "bands": [], "lines": [(label, "value", "#2563eb")]})
+    cfg = _TREND_CHART_CONFIGS.get(
+        metric, {"domain": None, "ticks": None, "bands": [], "lines": [(label, "value", "#2563eb")]}
+    )
     values = [v for p in points if (v := _to_float(p["value"])) is not None]
     if cfg["domain"] is not None:
         lo, hi = cfg["domain"]
@@ -280,10 +282,7 @@ def _risk_section(disease_risks: list[dict[str, Any]]) -> str:
         else:
             body = '<div class="empty">예측 데이터가 없습니다.</div>'
             level_html = '<div class="gauge-level">예측 없음</div>'
-        gauges.append(
-            f'<div class="gauge-card"><div class="gauge-title">{_esc(label)}</div>'
-            f"{body}{level_html}</div>"
-        )
+        gauges.append(f'<div class="gauge-card"><div class="gauge-title">{_esc(label)}</div>{body}{level_html}</div>')
     return f'<section><h2>위험도 평가</h2><div class="gauge-row">{"".join(gauges)}</div></section>'
 
 
@@ -294,7 +293,7 @@ def _factors_section(disease_risks: list[dict[str, Any]]) -> str:
             continue
         factors = info.get("top_factors") or []
         items = "".join(
-            f'<li>{_esc(f.get("name_kor") or f.get("factor") or "")} '
+            f"<li>{_esc(f.get('name_kor') or f.get('factor') or '')} "
             f'<span class="dir">{_esc(f.get("direction") or "")}</span></li>'
             for f in factors
             if isinstance(f, dict)
@@ -305,7 +304,7 @@ def _factors_section(disease_risks: list[dict[str, Any]]) -> str:
         blocks.append(f'<div class="factor-group"><h3>{_esc(label)}</h3><ol class="factors">{items}</ol></div>')
     if not blocks:
         return ""
-    return f'<section><h2>판단 근거 TOP5</h2>{"".join(blocks)}</section>'
+    return f"<section><h2>판단 근거 TOP5</h2>{''.join(blocks)}</section>"
 
 
 def _trend_section(trends: list[dict[str, Any]]) -> str:
@@ -318,8 +317,7 @@ def _trend_section(trends: list[dict[str, Any]]) -> str:
             continue
         label = _METRIC_LABELS.get(t.get("metric", ""), (t.get("metric", ""), ""))[0]
         blocks.append(
-            f'<div class="trend-card"><div class="trend-title">{_esc(label)} 추이</div>'
-            f"{_trend_chart_svg(t)}</div>"
+            f'<div class="trend-card"><div class="trend-title">{_esc(label)} 추이</div>{_trend_chart_svg(t)}</div>'
         )
     if not blocks:
         return ""
@@ -365,15 +363,14 @@ def _challenge_section(challenges: list[dict[str, Any]]) -> str:
             f"{_progress_bar(ratio)}"
             f'<span class="ch-state">{_esc(state)}</span></div>'
         )
-    return f'<section><h2>챌린지 내역</h2>{"".join(rows)}</section>'
+    return f"<section><h2>챌린지 내역</h2>{''.join(rows)}</section>"
 
 
 def _habits_section(good_habits: list[dict[str, Any]]) -> str:
     if not good_habits:
         return ""
     items = "".join(
-        f'<li><b>{_esc(h.get("label") or "")}</b> '
-        f'<span class="dir">{_esc(h.get("evidence") or "")}</span></li>'
+        f'<li><b>{_esc(h.get("label") or "")}</b> <span class="dir">{_esc(h.get("evidence") or "")}</span></li>'
         for h in good_habits
         if isinstance(h, dict)
     )

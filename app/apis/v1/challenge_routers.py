@@ -140,7 +140,7 @@ async def create_challenge(
 
 
 @challenges_router.get("", response_model=ChallengeListResponse, status_code=status.HTTP_200_OK)
-async def list_challenges(
+async def list_challenges(  # noqa: C901
     user: Annotated[User, Depends(get_request_user)],
     service: Annotated[ChallengeService, Depends(ChallengeService)],
     scope: Annotated[ChallengeScope | None, Query()] = None,
@@ -280,11 +280,9 @@ async def list_challenges(
     # 참여하기 탭: 정원이 찬 그룹 챌린지 제외 (공개/비공개 무관)
     if not mine:
         payload.items = [
-            item for item in payload.items
-            if not (
-                item.max_participants is not None
-                and group_active_members.get(item.id, 0) >= item.max_participants
-            )
+            item
+            for item in payload.items
+            if not (item.max_participants is not None and group_active_members.get(item.id, 0) >= item.max_participants)
         ]
         payload.total_elements = len(payload.items)
 
@@ -300,11 +298,10 @@ async def get_challenge(
     challenge = await service.get_public(challenge_id)
     is_creator = challenge.creator_id == user.id
     participation = await ChallengeParticipant.filter(
-        challenge_id=challenge_id, user_id=user.id,
+        challenge_id=challenge_id,
+        user_id=user.id,
     ).first()
-    is_member = is_creator or (
-        participation is not None and participation.status == ParticipantStatus.APPROVED
-    )
+    is_member = is_creator or (participation is not None and participation.status == ParticipantStatus.APPROVED)
     my_progress = await ChallengeVerification.filter(
         challenge_id=challenge_id,
         user_id=user.id,

@@ -45,7 +45,6 @@ from app.models.health import DiseaseRisk
 from app.models.notifications import NotificationType
 from app.models.pet import GrowthEventSource
 from app.models.users import User
-from app.repositories.notification_repository import NotificationRepository
 from app.repositories.challenge_repository import (
     ChallengeInviteRepository,
     ChallengeParticipantRepository,
@@ -57,6 +56,7 @@ from app.repositories.challenge_repository import (
     ChallengeVerificationRepository,
     ImageVerificationJobRepository,
 )
+from app.repositories.notification_repository import NotificationRepository
 from app.services.ml import ChallengeRecommender, ImageVerifier
 from app.services.pet import (
     XP_FROM_CHALLENGE_VERIFICATION,
@@ -73,7 +73,7 @@ _GROUP_SUM_DIFFICULTY: list[tuple[int, ChallengeDifficulty]] = [
     (35, ChallengeDifficulty.LEVEL_4),
     (30, ChallengeDifficulty.LEVEL_3),
     (15, ChallengeDifficulty.LEVEL_2),
-    (6,  ChallengeDifficulty.LEVEL_1),
+    (6, ChallengeDifficulty.LEVEL_1),
 ]
 _GROUP_MEMBERS_DIFFICULTY: list[tuple[int, ChallengeDifficulty]] = [
     (5, ChallengeDifficulty.LEVEL_4),
@@ -119,9 +119,7 @@ class ChallengeService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="템플릿을 찾을 수 없습니다.")
 
         difficulty = (
-            _calc_group_difficulty(data.goal_config or {})
-            if scope == ChallengeScope.GROUP
-            else data.difficulty
+            _calc_group_difficulty(data.goal_config or {}) if scope == ChallengeScope.GROUP else data.difficulty
         )
 
         async with in_transaction():
@@ -214,7 +212,9 @@ class ChallengeService:
         if data.end_date is not None and data.end_date < challenge.start_date:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="end_date 가 잘못되었습니다.")
         if data.status is not None and data.status != ChallengeStatus.CANCELLED:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="status 는 CANCELLED 로만 변경 가능합니다.")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="status 는 CANCELLED 로만 변경 가능합니다."
+            )
         return await self.repo.update_instance(challenge, data.model_dump(exclude_unset=True))
 
     async def delete(self, user: User, challenge_id: int) -> None:
@@ -243,6 +243,7 @@ class ChallengeService:
                 )
         except Exception:
             import logging  # noqa: PLC0415
+
             logging.getLogger(__name__).warning("챌린지 삭제 알림 전송 실패 challenge_id=%s", challenge_id)
 
     async def list_challenges(
@@ -311,7 +312,9 @@ class ParticipantService:
         existing = await self.repo.get_by_user(challenge_id, user.id)
         if existing:
             if existing.status == ParticipantStatus.KICKED:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="강퇴된 챌린지에는 다시 참여할 수 없습니다.")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, detail="강퇴된 챌린지에는 다시 참여할 수 없습니다."
+                )
             if existing.status in {ParticipantStatus.APPROVED, ParticipantStatus.PENDING}:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 참여한 챌린지입니다.")
         async with in_transaction():
@@ -332,7 +335,10 @@ class ParticipantService:
                         "status": ParticipantStatus.APPROVED,
                     }
                 )
-            if active_count + 1 >= challenge_locked.max_participants and challenge_locked.status == ChallengeStatus.RECRUITING:
+            if (
+                active_count + 1 >= challenge_locked.max_participants
+                and challenge_locked.status == ChallengeStatus.RECRUITING
+            ):
                 await self.challenge_repo.update_instance(challenge_locked, {"status": ChallengeStatus.ACTIVE})
         return participant
 
@@ -346,7 +352,9 @@ class ParticipantService:
         existing = await self.repo.get_by_user(challenge_id, user.id)
         if existing:
             if existing.status == ParticipantStatus.KICKED:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="강퇴된 챌린지에는 다시 참여할 수 없습니다.")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, detail="강퇴된 챌린지에는 다시 참여할 수 없습니다."
+                )
             if existing.status in {ParticipantStatus.APPROVED, ParticipantStatus.PENDING}:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 참여한 챌린지입니다.")
         async with in_transaction():
@@ -367,7 +375,10 @@ class ParticipantService:
                         "status": ParticipantStatus.APPROVED,
                     }
                 )
-            if active_count + 1 >= challenge_locked.max_participants and challenge_locked.status == ChallengeStatus.RECRUITING:
+            if (
+                active_count + 1 >= challenge_locked.max_participants
+                and challenge_locked.status == ChallengeStatus.RECRUITING
+            ):
                 await self.challenge_repo.update_instance(challenge_locked, {"status": ChallengeStatus.ACTIVE})
         return participant
 
@@ -472,17 +483,19 @@ class ParticipantService:
             }
         )
         try:
-            from app.models.notifications import NotificationType as NT  # noqa: PLC0415
+            from app.models.notifications import NotificationType  # noqa: PLC0415
+
             await NotificationRepository().create(
                 recipient_id=request.invitee_id,
                 actor_id=owner.id,
-                notification_type=NT.CHALLENGE_INVITE,
+                notification_type=NotificationType.CHALLENGE_INVITE,
                 target_type="CHALLENGE",
                 target_id=challenge_id,
                 message=f"'{challenge.title[:40]}' 챌린지에 초대되었습니다.",
             )
         except Exception as e:  # noqa: BLE001
             import logging  # noqa: PLC0415
+
             logging.getLogger(__name__).warning("CHALLENGE_INVITE 알림 생성 실패: %s", e)
         return invite
 

@@ -205,7 +205,6 @@ _KDA2025: dict[str, list[str]] = {
     "KDA2025_SEC_0189": ["smoking", "complication"],  # 당뇨병 환자 흡연과 합병증 위험 (신규)
     "KDA2025_SEC_0160": ["complication"],  # 8-3. 당뇨병망막병증
     "KDA2025_SEC_0161": ["complication", "medication"],  # 8-4. 당뇨병케토산증·고삼투질상태
-
     # 9. 동반 대사질환
     "KDA2025_SEC_0162": ["complication", "weight"],  # 동반 대사질환관리 챕터
     "KDA2025_SEC_0015": ["weight"],  # 3-9. 비만 관리
@@ -385,7 +384,6 @@ _KSH2026: dict[str, list[str]] = {
     "KSH2026_SEC_0132": ["lifestyle"],  # 14.5. 환자 중심 관리 한계
     "KSH2026_SEC_0134": ["diet", "lifestyle"],  # DASH 식단 개요 및 핵심 원칙
     "KSH2026_SEC_0135": ["diet", "lifestyle"],  # DASH 식단 식품군별 권장 섭취 횟수
-
     # 그림
     "KSH2026_FIG_001": ["diagnosis"],
     "KSH2026_FIG_002": ["risk"],

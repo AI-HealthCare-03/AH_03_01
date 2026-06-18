@@ -761,9 +761,7 @@ class MonthlyReportService:
         trends: list[dict[str, Any]] = []
         for metric, record_type, sub_type, unit in cls._TREND_SPECS:
             matched = [
-                r
-                for r in records
-                if r.record_type == record_type and (sub_type is None or r.sub_type == sub_type)
+                r for r in records if r.record_type == record_type and (sub_type is None or r.sub_type == sub_type)
             ]
             matched.sort(key=lambda r: r.measured_at)
             series = [
@@ -783,9 +781,7 @@ class MonthlyReportService:
                     "series": series,
                     "avg": round(sum(primary_vals) / len(primary_vals), 2) if primary_vals else None,
                     "latest": primary_vals[-1] if primary_vals else None,
-                    "secondary_avg": (
-                        round(sum(secondary_vals) / len(secondary_vals), 2) if secondary_vals else None
-                    ),
+                    "secondary_avg": (round(sum(secondary_vals) / len(secondary_vals), 2) if secondary_vals else None),
                     # secondary_vals[-1] 사용: 마지막 레코드의 secondary 가 None 이어도(혈압 일부 누락)
                     # 마지막 '유효' 이완기값을 안전하게 반환 (matched[-1].secondary_value 직접 캐스트 시 None→TypeError).
                     "secondary_latest": (secondary_vals[-1] if secondary_vals else None),

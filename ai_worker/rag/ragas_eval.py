@@ -225,14 +225,12 @@ def collect_answers(eval_dataset: list[dict], seed: int | None = None) -> dict:
 
     sampled = stratified_sample(filtered, EVAL_SAMPLE_SIZE, seed=seed)
 
-    from collections import Counter
-
     # RAGAS 평가용 필터링 — out_of_scope 제외
-    CORE_EVAL_EXCLUDE = {"out_of_scope"}
+    core_eval_exclude = {"out_of_scope"}
     filtered = [
         item
         for item in eval_dataset
-        if item.get("category") not in CORE_EVAL_EXCLUDE and item.get("eval_type") not in ("out_of_scope",)
+        if item.get("category") not in core_eval_exclude and item.get("eval_type") not in ("out_of_scope",)
     ]
 
     # category별 stratified 샘플링: EVAL_SAMPLE_PER_CATEGORY 이하면 전수, 초과면 N개만
@@ -246,7 +244,7 @@ def collect_answers(eval_dataset: list[dict], seed: int | None = None) -> dict:
         random.seed(seed)
 
     sampled = []
-    for cat, items in sorted(by_category.items()):
+    for _cat, items in sorted(by_category.items()):
         if len(items) <= EVAL_SAMPLE_PER_CATEGORY:
             sampled.extend(items)
         else:
@@ -388,7 +386,13 @@ def run_ragas_evaluation(data: dict) -> tuple[dict, list[float], list[float | No
 # ─────────────────────────────────────────────
 # 결과 출력
 # ─────────────────────────────────────────────
-def print_results(ragas_result, ko_ar_scores: list[float], ref_hit_scores: list[float | None], data: dict, output_filename: str = "ragas_result.json"):
+def print_results(
+    ragas_result,
+    ko_ar_scores: list[float],
+    ref_hit_scores: list[float | None],
+    data: dict,
+    output_filename: str = "ragas_result.json",
+):
     import numpy as np
 
     print("\n" + "=" * 60)

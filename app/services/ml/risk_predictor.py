@@ -213,7 +213,15 @@ class RuleBasedRiskCalculator:
             factors,
             [
                 (p.family_dm == 1, 10, "family_history", 0.1, "당뇨 가족력이 발병 위험을 높이고 있어요"),
-                (bmi is not None and (bmi or 0) >= 25, 8, "bmi", 0.08, f"BMI {bmi:.1f}로 비만 구간에 있어 당뇨 위험을 높이고 있어요" if bmi else "비만이 당뇨 위험을 높이고 있어요"),
+                (
+                    bmi is not None and (bmi or 0) >= 25,
+                    8,
+                    "bmi",
+                    0.08,
+                    f"BMI {bmi:.1f}로 비만 구간에 있어 당뇨 위험을 높이고 있어요"
+                    if bmi
+                    else "비만이 당뇨 위험을 높이고 있어요",
+                ),
             ],
         )
         return _build(DiseaseType.DIABETES, score, factors)
@@ -224,20 +232,47 @@ class RuleBasedRiskCalculator:
         sys_ = _as_float(p.systolic_bp)
         if sys_ is not None and sys_ >= 140:
             score += 25
-            factors.append(RiskFactor("systolic_bp", 0.25, "수축기 혈압이 위험 수준으로 심혈관 위험을 높이고 있어요", name_kor=_FACTOR_KOR.get("systolic_bp")))
+            factors.append(
+                RiskFactor(
+                    "systolic_bp",
+                    0.25,
+                    "수축기 혈압이 위험 수준으로 심혈관 위험을 높이고 있어요",
+                    name_kor=_FACTOR_KOR.get("systolic_bp"),
+                )
+            )
         if p.current_smoker == 1:
             score += 20
-            factors.append(RiskFactor("smoking", 0.2, "흡연이 심혈관 위험을 크게 높이고 있어요", name_kor=_FACTOR_KOR.get("smoking")))
+            factors.append(
+                RiskFactor(
+                    "smoking", 0.2, "흡연이 심혈관 위험을 크게 높이고 있어요", name_kor=_FACTOR_KOR.get("smoking")
+                )
+            )
         bmi = _bmi(p.height_cm, p.weight_kg)
         if bmi is not None and bmi >= 25:
             score += 15
-            factors.append(RiskFactor("bmi", 0.15, f"BMI {bmi:.1f}로 비만 구간에 있어 심혈관 위험을 높이고 있어요", name_kor=_FACTOR_KOR.get("bmi")))
+            factors.append(
+                RiskFactor(
+                    "bmi",
+                    0.15,
+                    f"BMI {bmi:.1f}로 비만 구간에 있어 심혈관 위험을 높이고 있어요",
+                    name_kor=_FACTOR_KOR.get("bmi"),
+                )
+            )
         if p.age is not None and p.age >= 50:
             score += 10
-            factors.append(RiskFactor("age", 0.1, "나이가 많을수록 심혈관 위험이 높아져요", name_kor=_FACTOR_KOR.get("age")))
+            factors.append(
+                RiskFactor("age", 0.1, "나이가 많을수록 심혈관 위험이 높아져요", name_kor=_FACTOR_KOR.get("age"))
+            )
         if p.family_hp == 1 or p.family_dm == 1 or p.family_hl == 1:
             score += 8
-            factors.append(RiskFactor("family_history", 0.08, "가족력이 심혈관 위험을 높이고 있어요", name_kor=_FACTOR_KOR.get("family_history")))
+            factors.append(
+                RiskFactor(
+                    "family_history",
+                    0.08,
+                    "가족력이 심혈관 위험을 높이고 있어요",
+                    name_kor=_FACTOR_KOR.get("family_history"),
+                )
+            )
         return PredictionOutput(
             disease_type=DiseaseType.CARDIOVASCULAR,
             risk_score=Decimal(str(min(round(score, 2), 100.0))),

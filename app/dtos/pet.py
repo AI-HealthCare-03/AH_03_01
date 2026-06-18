@@ -205,5 +205,3 @@ class AttendanceCheckResponse(BaseModel):
     reward_point: int
     bonus_point: int
     transaction_ids: list[int]
-
-

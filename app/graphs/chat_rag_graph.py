@@ -83,7 +83,7 @@ _logger = logging.getLogger(__name__)
 # 상수 / 정책
 # ─────────────────────────────────────────────
 MAX_REVISIONS = 2  # 재검색·재생성 합산 상한 (API 계약 eval_revision_count 0~2)
-RETRIEVE_TOP_K = 7   # 일반/서비스 기본 (5→7: BM25 동의어 미스 보정용 여유 청크)
+RETRIEVE_TOP_K = 7  # 일반/서비스 기본 (5→7: BM25 동의어 미스 보정용 여유 청크)
 # medical_inquiry 는 생활요법·약물·추적·위험도 4측면이 한 번에 잡혀야 답변 완전성↑.
 # 교차 주제(흡연·합병증·신장 등) 질문은 관련 섹션이 3개 이상이므로 8→12 로 확장.
 RETRIEVE_TOP_K_MEDICAL = 12
@@ -1187,7 +1187,12 @@ async def generate_node(state: ChatState) -> dict[str, Any]:
         return {"draft_answer": ""}
     system = _SERVICE_SYSTEM if intent == "service_guide" else _MEDICAL_SYSTEM
     context = _format_context(docs)
-    _logger.info("generate context len=%d docs=%d first_section=%s", len(context), len(docs), docs[0].metadata.get("section_id", "?") if docs else "none")
+    _logger.info(
+        "generate context len=%d docs=%d first_section=%s",
+        len(context),
+        len(docs),
+        docs[0].metadata.get("section_id", "?") if docs else "none",
+    )
     health_block = _format_health_snapshot(state.get("health_data"))
 
     feedback = state.get("eval_feedback", "")
@@ -1403,7 +1408,11 @@ def _build_graph() -> Any:
     g.add_conditional_edges(
         "fetch_health_data",
         decide_after_fetch_health,
-        {"retrieve": "retrieve", "final_missing_info": "final_missing_info", "final_health_summary": "final_health_summary"},
+        {
+            "retrieve": "retrieve",
+            "final_missing_info": "final_missing_info",
+            "final_health_summary": "final_health_summary",
+        },
     )
     g.add_edge("final_health_summary", END)
     g.add_edge("retrieve", "generate")
