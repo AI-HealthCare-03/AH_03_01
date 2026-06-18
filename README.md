@@ -1,276 +1,249 @@
-# 🤖 만성질환 생활습관 챌린지 웹 서비스
+<div align="center">
 
-> 고혈압·당뇨 등 만성질환의 발병 가능성을 예측하고, 사용자의 생활습관 데이터를 기반으로 건강 상태를 추적하며, 생활습관 개선 챌린지를 제공하는 AI 기반 만성질환 관리 웹 서비스입니다.
+<img src="assets/logo.png" alt="케어로그 로고" width="120" />
+
+# 케어로그 · CareLog
+
+### 만성질환 생활습관 챌린지 웹 서비스
+
+**"매일의 케어, 건강의 기록."**
+
+고혈압 · 당뇨 · 이상지질혈증 발병 위험을 예측하고, 생활습관 개선을 돕는 AI 기반 통합 헬스케어 플랫폼
+
+[![Live](https://img.shields.io/badge/Live-carelog.ai.kr-2ea44f?style=flat-square)](https://carelog.ai.kr/)
+![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?style=flat-square&logo=fastapi&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-PGVector-336791?style=flat-square&logo=postgresql&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-RAG-1C3C3C?style=flat-square)
+
+🔗 **배포 URL**: https://carelog.ai.kr/
+
+</div>
+
+---
+
+## 📑 목차
+
+1. [프로젝트 개요](#1-프로젝트-개요-)
+2. [핵심 기능](#2-핵심-기능-)
+3. [기술 스택](#3-기술-스택-)
+4. [시스템 아키텍처](#4-시스템-아키텍처-)
+5. [구현 하이라이트 — 어떻게 만들었나](#5-구현-하이라이트--어떻게-만들었나-)
+6. [프로젝트 구조](#6-프로젝트-구조-)
+7. [설치 및 실행](#7-설치-및-실행-)
+8. [테스트 및 품질 관리](#8-테스트-및-품질-관리-)
+9. [개발 가이드](#9-개발-가이드-)
+10. [팀](#10-팀-)
 
 ---
 
 ## 1. 프로젝트 개요 📝
 
-본 프로젝트는 만성질환 관리에 필요한 **예측 모델링**, **건강 데이터 시각화**, **생활습관 개선 챌린지**, **AI 기반 예방 행동 추천** 기능을 통합한 웹 서비스입니다.
+만성질환은 식습관·운동·수면 등 **생활습관과 밀접하게 연결**되어 있지만, 기존 건강관리 앱은 기록 중심이라 지속적인 참여를 끌어내는 데 한계가 있었습니다.
 
-만성질환은 장기간의 생활습관, 건강 상태, 유전적 요인 등이 복합적으로 작용하여 발생합니다. 따라서 단순한 질병 예측에 그치지 않고, 사용자가 자신의 건강 데이터를 지속적으로 확인하고 생활습관을 개선할 수 있도록 돕는 서비스가 필요합니다.
+**케어로그**는 사용자가 쉽게 입력할 수 있는 생활습관 정보만으로 만성질환 발병 위험을 예측하고, 그 결과를 토대로 **예측 → 추적 → 챌린지**로 이어지는 자기관리 루프를 완성하는 것을 목표로 합니다.
 
-본 서비스는 공개 의료·헬스케어 데이터를 활용하여 만성질환 발병 가능성을 예측하고, 사용자가 입력한 건강/행동 데이터를 기반으로 대시보드와 챌린지를 제공합니다.
-
----
-
-## 2. 주제 📌
-
-### 만성질환(고혈압·당뇨) 생활습관 챌린지 웹 서비스
-
-사용자의 건강 정보와 생활습관 데이터를 기반으로 만성질환 발병 가능성을 예측하고, 건강 개선을 위한 맞춤형 생활습관 챌린지를 제공하는 서비스입니다.
+> ⚠️ 본 서비스의 위험도 예측·건강 정보는 **의학적 진단이 아니며**, 정확한 진단·치료는 의료 전문가에게 문의해야 합니다. 모든 위험도/가이드 화면에 면책 고지를 노출합니다.
 
 ---
 
-## 3. 주제 선정 배경 🌄
+## 2. 핵심 기능 ⚒️
 
-만성질환은 장기간의 관리가 필요한 질환으로, 의료 데이터 기반 예측과 생활습관 개선이 중요한 분야입니다.
-
-특히 고혈압과 당뇨는 식습관, 운동량, 체중, 수면, 음주·흡연 여부 등 생활습관과 밀접한 관련이 있습니다. 따라서 사용자 건강 데이터를 기반으로 위험도를 예측하고, 이를 시각적으로 제공하며, 일상 속에서 실천 가능한 행동 개선 챌린지를 제안하는 서비스가 필요하다고 판단했습니다.
-
-본 프로젝트는 공개 의료 데이터를 활용한 AI 모델 개발부터 웹 서비스 구현, 사용자 대시보드, 챌린지 기능, AI 기반 행동 추천까지 전체 서비스 흐름을 실무 환경과 유사하게 구현하는 것을 목표로 합니다.
-
----
-
-## 4. 핵심 목표 🎯
-
-- 공개 데이터셋을 활용한 만성질환 발병 가능성 예측 모델 구축
-- 사용자 건강/생활습관 데이터 입력 및 관리
-- 예측 결과와 건강 데이터 변화 추이를 시각화
-- 생활습관 개선을 위한 챌린지 기능 제공
-- LLM 기반 맞춤형 예방 행동 추천 기능 구현
-- 알림 기능을 통한 지속적인 건강 관리 유도
-
----
-
-## 5. 주요 기능 ⚒️
-
-| 구분 | 기능명 | 설명 |
+| 기능 | 설명 | 구현 방식 |
 |---|---|---|
-| 필수 | 만성질환 예측 모델링 | 공개 데이터셋을 활용하여 고혈압·당뇨 등 만성질환 발병 가능성을 예측 |
-| 필수 | 만성질환 추적 대시보드 | 사용자 건강/행동 데이터를 시각화하고 예측 결과 변화를 제공 |
-| 필수 | 생활습관 챌린지 | 걷기, 물 마시기, 운동 등 생활습관 개선 챌린지 제공 |
-| 선택 | LLM 기반 예방 행동 추천 | 사용자 건강/행동 데이터를 기반으로 맞춤형 건강 행동 가이드 생성 |
-| 선택 | 이미지 분류 기반 식단 분석 | 사용자의 식단 사진 데이터 입력을 기반으로 음식을 분류하고, 사용자 개인에 따라 부족한 영양소를 분석해주는 시스템 |
-| 선택 | 알림 기능 | 건강 데이터 입력, 챌린지 체크, 주요 가이드 확인 알림 제공 |
+| 🔐 **인증** | 회원가입/로그인, 카카오 소셜 로그인 | JWT(Access+Refresh) · bcrypt 해싱 · Redis 블랙리스트 로그아웃 · 5회 실패 잠금 |
+| 📊 **만성질환 위험도 예측** | 고혈압·당뇨·이상지질혈증 발병 위험 | KNHANES 기반 CatBoost+LightGBM 성별 분리 모델 · SHAP Top5 기여인자 · 0~100점 |
+| 📈 **건강 추적 대시보드** | 건강·행동 데이터 시각화, 예측 결과 변화 추적 | 7단계 멀티스텝 입력 폼 · 진료지침 기반 상태 판정 · 추이 그래프 · 월간 리포트(PDF) |
+| 💬 **AI 챗봇 (RAG)** | 의료 지식 기반 건강 상담 | LangGraph: Prefilter → 하이브리드 검색 → 2단계 품질평가 · SSE 실시간 스트리밍 |
+| 📷 **챌린지 사진 인증** | 사진으로 챌린지 인증 자동 검증 | SigLIP2 Zero-shot 분류 · Redis 큐로 비동기 처리 |
+| 🏃 **생활습관 챌린지** | 개인·그룹 챌린지, 출석·퀴즈 | 8개 카테고리 · 사진형/체크형 인증 · 포인트 보상 |
+| 🐾 **커뮤니티 & 펫** | 정보 공유 게시판, 펫 키우기 | 게시글/댓글/좋아요/리더보드 · 포인트·경험치 게이미피케이션 |
+| 🔔 **알림** | 복약·챌린지·커뮤니티 알림 | FCM(Firebase Cloud Messaging) 웹 푸시 |
 
 ---
 
-## 6. 상세 기능 설명
+## 3. 기술 스택 🛠️
 
-### 6.1 만성질환 예측 모델링
+| 구분 | 기술 |
+|---|---|
+| **Backend** | Python 3.13, FastAPI (async), Tortoise ORM, UV 패키지 매니저 |
+| **Database** | PostgreSQL 16 + PGVector (RAG 임베딩), Redis (큐·캐싱·블랙리스트) |
+| **AI / ML** | PyTorch, scikit-learn, CatBoost, LightGBM, SHAP, Optuna |
+| **LLM / RAG** | LangGraph, OpenAI GPT-4o / 4o-mini, text-embedding-3, BM25 + Kiwi(형태소) 하이브리드 검색 |
+| **Vision** | SigLIP2 (Zero-shot 챌린지 사진 인증) |
+| **Frontend** | Next.js, React, TypeScript |
+| **Infra / DevOps** | Docker Compose, Nginx (Reverse Proxy), AWS EC2 + RDS, Certbot(HTTPS), GitHub Actions(CI) |
 
-사용자의 건강 데이터를 기반으로 만성질환 발병 가능성을 예측하는 기능.
+### 기술 선택 근거
 
-활용 가능한 데이터 예시:
-
-- Kaggle 공개 헬스케어 데이터셋
-- AIHub 의료/건강 관련 데이터셋
-- HuggingFace 공개 모델 및 데이터셋
-- 고혈압, 당뇨, 심혈관 질환 관련 공개 데이터
-
-예측 모델은 사용자의 건강 지표를 입력받아 질환 발병 가능성을 확률 형태로 제공.
-
-예상 입력 데이터 예시:
-
-- 나이
-- 성별
-- 키
-- 몸무게
-- BMI
-- 혈압
-- 혈당
-- 흡연 여부
-- 음주 여부
-- 운동 빈도
-- 수면 시간
-- 가족력
-- 식습관 관련 정보
-
-예상 출력 예시:
-
-```json
-{
-  "disease": "diabetes",
-  "risk_score": 0.72,
-  "risk_level": "High",
-  "message": "당뇨(/고혈압) 발병 가능성이 높은 편입니다. 병원에 내원하여 검진을 꼭 받아보세요!"
-}
-```
-
-### 6.2 만성질환 추적 대시보드
-
-### 6.3 생활습관 챌린지
+- **FastAPI(async)** — I/O 다중 처리에 유리해 동기 프레임워크 대비 동시성 우위.
+- **Redis 큐 + 워커 분리** — 무거운 ML 추론을 API 서버와 디커플링하여 응답성 확보.
+- **RAG vs 파인튜닝** — 수십억 파라미터 재학습 대신 진료지침을 실시간 주입(저비용·고신뢰).
+- **PostgreSQL + PGVector** — 관계형 데이터와 벡터 검색을 단일 DB에서 운영.
 
 ---
 
-## 7. 주요 특징 
+## 4. 시스템 아키텍처 🏗️
 
-- **FastAPI Framework**: 고성능 비동기 API 서버 구현.
-- **AI Worker**: 모델 추론 및 학습 작업을 API 서버와 분리하여 처리.
-- **UV Package Manager**: 매우 빠른 의존성 설치 및 가상환경 관리.
-- **Tortoise ORM**: 비동기 방식의 데이터베이스 모델링 및 쿼리 관리.
-- **Docker-Compose**: MySQL, Redis, Nginx를 포함한 전체 서비스 스택을 한 번에 실행.
-- **CI/CD Scripts**: 코드 포맷팅(Ruff), 타입 체크(Mypy), 테스트(Pytest)를 위한 자동화 스크립트 제공.
+![시스템 아키텍처](assets/architecture.png)
+
+- **Client (Next.js)** → **Nginx** → **FastAPI** 구조. Nginx가 `:80/:443`에서 리버스 프록시.
+- **FastAPI(Producer)** 는 무거운 ML 작업을 **Redis 큐**에 적재하고, **ai-worker / risk-worker(Consumer)** 가 BRPOP 폴링으로 비동기 처리 → 결과를 DB에 기록.
+- **AWS RDS (PostgreSQL + PGVector)** — 비즈니스 데이터와 RAG 임베딩을 함께 저장.
+- **FCM** — 백그라운드 알림 푸시.
+
+### LangGraph 오케스트레이션
+
+RAG 챗봇(1단계)과 위험도 권고(2단계)는 LangGraph 상태 그래프로 구현되며, 의료 가드(`R1~R5` 규칙 + LLM 6기준)를 양 그래프가 공용으로 사용합니다.
+
+![LangGraph 오케스트레이션](assets/langgraph.png)
 
 ---
 
-## 8. 프로젝트 구조 📂 
+## 5. 구현 하이라이트 — 어떻게 만들었나 🔬
+
+### 5.1 만성질환 위험도 예측 모델
+
+- **데이터셋**: 국민건강영양조사(KNHANES) 9차 2022–2024 — 원본 6,997행 → 최종 학습 5,275행.
+- **전처리**: 가족력 3컬럼 통합(있음/없음/모름), 취침·기상 시각에서 수면시간 역산, 결측·이상치 처리.
+- **프록시 파생변수**: 혈액검사 없이도 생활습관만으로 추정 — 예) **HbA1c 추정**(공복혈당 + 생활습관 16개 변수 가중합, 혈당 구간별 가중치 조정).
+- **모델**: CatBoost + LightGBM **성별 분리 학습** → SHAP(15 features) → Optuna 50회 HPO → OOF 5-fold CV.
+- **점수화**: AHA 가중치 기반 `risk_prob` 계산 후, bimodal 분포 문제를 `P(질환있음)` 혼합으로 보정 → KDE 백분위로 0~100점 변환.
+- **검증**: 전 질환 well-calibrated (ECE 0.03~0.07).
+- **입력**: 남성 25개 / 여성 27개 항목, **출력**: 고혈압(4단계)·당뇨(3단계)·이상지질혈증(2단계) + SHAP 기여요인.
+
+### 5.2 RAG 챗봇 (LangGraph)
+
+- **① Heuristic Prefilter** — GPT 호출 전 규칙 기반 필터(서비스 질문·짧은 인사는 즉시 응답).
+- **② N1~N4 / R1~R5 Guard** — GPT 오분류·위험 답변을 강제 교정하는 의료 안전장치.
+- **③ 2단계 품질 평가** — 규칙 검사(R1~R5) 후 GPT 6기준(근거 충실성·안전성·개인화·어조·완결성·환각) 평가 → 실패 시 최대 2회 재시도.
+- **④ 하이브리드 검색** — 벡터(text-embedding-3, 1536차원) + BM25(Kiwi 형태소) 결합.
+- **SSE 실시간 스트리밍** — `meta → stage → token → done` 이벤트로 단계 라벨과 LLM 토큰을 실시간 전송.
+
+### 5.3 챌린지 사진 인증 (Zero-shot CV)
+
+- **모델**: `google/siglip2-base-patch16-224` (Apache 2.0, 상업 사용 가능).
+- **Zero-shot 분류** — 별도 학습 없이 `"물 마시는 사진"` 같은 텍스트 프롬프트만으로 판별.
+- **Positive vs Negative 대결 구조** — `positive_max ≥ threshold AND positive_max > negative_max + 0.05` 조건으로 오인증 방지.
+
+---
+
+## 6. 프로젝트 구조 📂
+
+두 개의 Python 서비스가 하나의 저장소·`pyproject.toml`을 공유합니다.
 
 ```text
 .
-├── ai_worker/          # AI 모델 추론 및 학습 관련 코드 (Worker)
-│   ├── core/           # 워커 설정 및 로거
-│   ├── models/         # AI 모델 파일 보관 (PyTorch 등)
-│   ├── tasks/          # 실제 처리할 작업 정의
-│   └── main.py         # 워커 진입점
-├── app/                # FastAPI 서버 코드
-│   ├── apis/           # API 라우터 (v1 버전 관리)
-│   ├── core/           # 서버 설정 (pydantic-settings), DB 설정, JWT, Validator 등 핵심 기능
-│   ├── dtos/           # 데이터 전송 객체 (Pydantic models)
-│   ├── models/         # DB 테이블 정의
+├── app/                # FastAPI HTTP 서버 (인증, 사용자, 비즈니스 로직)
+│   ├── apis/v1/        # 라우터 (v1 버전 관리, __init__.py 에 등록)
 │   ├── services/       # 비즈니스 로직
-│   └── main.py         # FastAPI 애플리케이션 진입점
-├── envs/               # 환경 변수 설정 파일 (.env)
-├── infra/              # 인프라 설정 관련 디렉터리
-│   ├── docker/         # Docker Compose 설정 (운영용)
-│   └── nginx/          # Nginx 설정 파일 (리버스 프록시)
-├── scripts/            # 배포 및 CI용 쉘 스크립트
-├── docker-compose.yml  # 로컬 개발용 서비스 실행 설정
-└── pyproject.toml      # uv 기반 의존성 관리 설정
+│   ├── repositories/   # DB 접근 (Tortoise 모델)
+│   ├── models/         # Tortoise ORM 모델
+│   ├── dtos/           # Pydantic 요청/응답 스키마
+│   ├── dependencies/   # FastAPI Depends 제공자 (인증 등)
+│   ├── graphs/         # LangGraph 상태 그래프 (RAG · 위험도 권고)
+│   ├── core/           # 설정, DB, JWT, 유틸 등 공통 기능
+│   └── main.py         # FastAPI 진입점 (docs: /api/docs)
+├── ai_worker/          # ML 추론/학습 워커 (Redis 큐 소비)
+│   ├── main.py         # 챌린지 사진 인증 워커 (SigLIP2, 가동 중)
+│   └── risk_inference/ # 위험도 예측 워커
+├── migrations/models/  # aerich 마이그레이션
+├── infra/              # 운영 인프라 (docker/ · nginx/)
+├── scripts/            # 배포·CI 쉘 스크립트
+├── docs/               # 기획 산출물 · 아키텍처 · 이미지
+├── web/                # Next.js 프론트엔드
+├── docker-compose.yml  # 로컬 개발용 전체 스택
+└── pyproject.toml      # uv 기반 의존성 관리
 ```
 
 ---
 
-## ⚙️ 사전 준비 사항
+## 7. 설치 및 실행 🚀
 
-- **Python**: 3.13 이상 (로컬 개발 환경용)
-- **UV**: Python 패키지 매니저 ([설치 가이드](https://github.com/astral-sh/uv))
-- **Docker & Docker-Compose**: 전체 서비스 실행용
+### 사전 준비
 
----
+- **Python** 3.13 이상
+- **UV** ([설치 가이드](https://github.com/astral-sh/uv))
+- **Docker & Docker Compose**
 
-## 🛠️ 설치 및 설정
-
-### 1. 가상환경 구축 및 의존성 설치
-
-`uv`를 사용하여 프로젝트에 필요한 패키지를 설치합니다.
+### 1) 의존성 설치
 
 ```bash
-# 의존성 설치 (가상환경 자동 생성)
-uv sync
-
-# 특정 그룹의 의존성만 설치하려는 경우
-uv sync --group app  # API 서버용
-uv sync --group ai   # AI 워커용
+uv sync                 # 전체 (그룹: app, ai, dev)
+uv sync --group app     # API 서버만
+uv sync --group ai      # AI 워커만
 ```
 
-### 2. 환경 변수 설정
-
-`envs/` 디렉토리에 있는 예시 파일을 복사하여 `.env` 파일을 생성합니다.
-- 로컬용 
-    ```bash
-    cp envs/example.local.env envs/.local.env
-    ```
-- 배포용 
-    ```bash
-    cp envs/example.prod.env envs/.prod.env
-    ```
-
-생성된 `env` 파일 내의 환경변수들은 프로젝트 상황에 맞게 수정하세요.
-
----
-
-## 🏃 실행 방법
-
-### 1. 로컬 및 개발 환경
-
-#### Docker Compose로 전체 스택 실행
-
-모든 서비스(API, Worker, DB, Redis, Nginx)를 한 번에 실행합니다.
+### 2) 환경 변수 설정
 
 ```bash
+cp envs/example.local.env envs/.local.env   # 로컬용 (.env 심볼릭 링크 대상)
+cp envs/example.prod.env  envs/.prod.env    # 배포용
+```
+
+### 3) 로컬 실행
+
+```bash
+# 전체 스택 (PostgreSQL · Redis · FastAPI · ai-worker · risk-worker · Nginx)
 docker-compose up -d --build
+
+# 개별 실행 (개발용)
+uv run uvicorn app.main:app --reload    # FastAPI — http://localhost/api/docs
+uv run python -m ai_worker.main         # AI 워커
 ```
 
-실행 후 다음 주소로 접속 가능합니다:
-- **API 서버**: [http://localhost/api/docs](http://localhost/api/docs) (Swagger UI)
-- **Nginx**: 80 포트를 통해 API 서버로 요청을 전달합니다.
+### 4) DB 마이그레이션 (aerich)
 
-#### 로컬에서 개별 실행 (개발용)
-
-**FastAPI 서버 실행:**
 ```bash
-uv run uvicorn app.main:app --reload
-# or
-docker compose up -d --build app
+uv run aerich migrate
+uv run aerich upgrade
 ```
 
-**AI Worker 실행:**
-```bash
-uv run python -m ai_worker.main
-# or
-docker compose up -d --build ai_worker
-```
+### 5) EC2 배포 (Production)
 
-### 2. EC2 배포 환경 (Production)
-
-제공된 쉘 스크립트를 사용하여 AWS EC2 환경에 이미지를 빌드, 푸시 및 배포할 수 있습니다.
-
-#### 사전 준비
-- EC2 인스턴스 (Ubuntu 권장)
-- SSH 키 페어 (`~/.ssh/` 경로에 위치)
-- 도커 허브(Docker Hub) 계정 및 Personal Access Token
-- 배포용 환경 변수 설정 (`envs/.prod.env`)
-- 도메인 구매 (Gabia, GoDaddy, AWS Route53 등)
-
-#### 자동 배포 스크립트 실행
-`scripts/deployment.sh`는 도커 이미지 빌드, 레포지토리 푸시, EC2 접속 및 컨테이너 실행 과정을 자동화합니다.
+`scripts/deployment.sh` 가 Docker 이미지 빌드 → Docker Hub 푸시 → EC2 접속·컨테이너 실행을 자동화합니다. DB는 외부 **AWS RDS**(`.env` 의 `DB_HOST`)를 사용합니다.
 
 ```bash
-chmod +x scripts/deployment.sh
-./scripts/deployment.sh
-```
-스크립트 실행 시 다음 정보를 입력해야 합니다:
-1. 도커 허브 계정 정보 (Username, PAT)
-2. 이미지를 업로드할 레포지토리 이름
-3. 배포할 서비스 선택 (FastAPI, AI-Worker) 및 버전(Tag)
-4. SSH 키 파일명 및 EC2 IP 주소
-5. https 사용여부
-   - 5-1. https인 경우 도메인 추가 입력  
-
-#### SSL(HTTPS) 설정 (Certbot)
-도메인을 연결하고 HTTPS를 적용하려면 `scripts/certbot.sh`를 사용합니다.
-
-```bash
-chmod +x scripts/certbot.sh
-./scripts/certbot.sh
-```
-1. 도메인 주소 및 이메일 입력
-2. SSH 키 파일명 및 EC2 IP 주소 입력
-3. Let's Encrypt를 통한 인증서 발급 및 Nginx 설정 자동 갱신 적용
-
----
-
-## 🧪 테스트 및 품질 관리
-
-제공된 스크립트를 사용하여 코드의 품질을 검증할 수 있습니다.
-
-```bash
-# 테스트 실행
-./scripts/ci/run_test.sh
-
-# 코드 포맷팅 확인 (Ruff)
-./scripts/ci/code_fommatting.sh
-
-# 정적 타입 검사 (Mypy)
-./scripts/ci/check_mypy.sh
+chmod +x scripts/deployment.sh && ./scripts/deployment.sh
+chmod +x scripts/certbot.sh    && ./scripts/certbot.sh   # HTTPS (Let's Encrypt)
 ```
 
 ---
 
-## 📝 개발 가이드
+## 8. 테스트 및 품질 관리 🧪
 
-- **API 추가**: `app/apis/v1/` 아래에 새로운 라우터 파일을 생성하고 `app/apis/v1/__init__.py`에 등록하세요.
-- **DB 모델 추가**: `app/models/`에 Tortoise 모델을 정의하고 `app/db/databases.py`의 `MODELS` 리스트에 추가하세요.
-- **AI 로직 추가**: `ai_worker/tasks/`에 새로운 처리 로직을 작성하고 `ai_worker/main.py`에서 호출하도록 구성하세요.
+CI(`.github/workflows/checks.yml`)에서 ruff lint/format 과 pytest 를 실행합니다.
+
+```bash
+./scripts/ci/code_fommatting.sh   # ruff check --fix + ruff format
+./scripts/ci/check_mypy.sh        # mypy .
+./scripts/ci/run_test.sh          # pytest + coverage (PostgreSQL 컨테이너 필요)
+
+# 단일 테스트
+uv run pytest app/tests/auth_apis/test_login_api.py::test_name -v
+```
+
+---
+
+## 9. 개발 가이드 📝
+
+- **API 추가**: `app/apis/v1/` 에 라우터를 만들고 `app/apis/v1/__init__.py` 의 `v1_routers` 에 등록.
+- **DB 모델 추가**: `app/models/` 에 Tortoise 모델 정의 후 `app/core/db/databases.py` 의 `TORTOISE_APP_MODELS` 에 추가(누락 시 마이그레이션 안 됨).
+- **AI 로직 추가**: `ai_worker/` 에 워커/태스크를 작성하고 `ai_worker/main.py` 에서 호출.
+- **커밋 컨벤션**: gitmoji + 한국어 (`/.github/commit_template.txt` 참고).
+
+---
+
+## 10. 팀 👥
+
+**오즈코딩스쿨(넥스트러너스) · AI헬스케어 3기 · 1조**
+
+| 이름 | 역할 |
+|---|---|
+| 정정화 (팀장) | 요구사항·API 명세, 아키텍처 설계, LangGraph 구현, 백엔드·DB·EC2 배포, 웹서비스 기능 구현 |
+| 이경우 | 요구사항·API 명세, LLM·RAG 챗봇 개발, 웹서비스 기능 구현 |
+| 박윤수 | ERD 설계, EDA·데이터 분석, 위험도 예측 모델(ML) 개발, 웹서비스 기능 구현 |
+| 박진영 | 서비스 UI 디자인, EDA·데이터 분석, 웹서비스 기능 구현·수정 |
+
+**멘토**: 김경수 (시그넘헬스)
+</content>
