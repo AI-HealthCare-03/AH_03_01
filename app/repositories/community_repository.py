@@ -22,7 +22,7 @@ from app.models.community import (
     ReportTargetType,
 )
 
-QUIZ_COOLDOWN_DAYS = 3
+QUIZ_COOLDOWN_DAYS = 3  # 한 번 푼 퀴즈는 N일 후 다시 출제 가능
 
 
 class LikeRepository:
@@ -183,9 +183,6 @@ class DailyAssignmentRepository:
     async def create_assignments(self, user_id: UUID, quiz_ids: list[int], today: date) -> None:
         for quiz_id in quiz_ids:
             await DailyQuizAssignment.get_or_create(user_id=user_id, quiz_id=quiz_id, assigned_date=today)
-
-
-QUIZ_COOLDOWN_DAYS = 3  # 한 번 푼 퀴즈는 N일 후 다시 출제 가능
 
 
 class QuizRepository:
