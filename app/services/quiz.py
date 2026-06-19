@@ -32,15 +32,26 @@ class HealthQuizService:
         assignments = await assignment_repo.get_today_assignments(user_id, today)
 
         if not assignments:
-            # 오늘 이미 답한 수를 제외한 나머지 슬롯만 배정
-            today_answered_count = await QuizAttempt.filter(user_id=user_id, attempted_at__gte=today_start).count()
-            remaining_slots = DAILY_LIMIT - today_answered_count
-            candidates = (
-                await self.repo.list_unanswered_quizzes(user_id, remaining_slots) if remaining_slots > 0 else []
-            )
-            if candidates:
-                await assignment_repo.create_assignments(user_id, [q.id for q in candidates], today)
+            # 동시 첫 요청(같은 사용자)이 각자 빈 결과를 보고 서로 다른 랜덤 셋을 배정하면 하루 목표치를
+            # 초과 배정한다 → 사용자별 PG advisory xact lock 으로 직렬화하고 락 안에서 재확인(double-check).
+            async with in_transaction() as conn:
+                await conn.execute_query(
+                    "SELECT pg_advisory_xact_lock(hashtext($1))",
+                    [f"quiz_assign:{user_id}:{today.isoformat()}"],
+                )
                 assignments = await assignment_repo.get_today_assignments(user_id, today)
+                if not assignments:
+                    # 오늘 이미 답한 수를 제외한 나머지 슬롯만 배정
+                    today_answered_count = await QuizAttempt.filter(
+                        user_id=user_id, attempted_at__gte=today_start
+                    ).count()
+                    remaining_slots = DAILY_LIMIT - today_answered_count
+                    candidates = (
+                        await self.repo.list_unanswered_quizzes(user_id, remaining_slots) if remaining_slots > 0 else []
+                    )
+                    if candidates:
+                        await assignment_repo.create_assignments(user_id, [q.id for q in candidates], today)
+                        assignments = await assignment_repo.get_today_assignments(user_id, today)
 
         if not assignments:
             return []

@@ -7,11 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from redis.exceptions import RedisError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from tortoise.contrib.fastapi import RegisterTortoise
 
 from app.apis.media import media_router
 from app.apis.v1 import v1_routers
 from app.core import config
-from app.core.db.databases import initialize_tortoise
+from app.core.db.databases import TORTOISE_ORM, init_tortoise_models
 from app.core.limiter import limiter
 from app.core.responses import ORJSONResponse
 from app.core.scheduler import start_scheduler, stop_scheduler
@@ -36,11 +37,14 @@ async def _warmup_bm25_index() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    start_scheduler()
-    # Tortoise 초기화 완료 후 BM25 warmup 실행 (lifespan 내부에서만 DB 접근 가능)
-    await _warmup_bm25_index()
-    yield
-    stop_scheduler()
+    # RegisterTortoise 가 DB 연결을 먼저 연 뒤에 스케줄러·BM25 warmup 을 실행한다.
+    # (커스텀 lifespan pre-yield 는 register_tortoise 의 on_startup 보다 먼저 돌기 때문에,
+    #  과거 구조에선 Tortoise 초기화 전에 DB 접근이 일어나 warmup silent 실패·스케줄러 첫 틱 크래시가 났다.)
+    async with RegisterTortoise(app, config=TORTOISE_ORM):
+        start_scheduler()
+        await _warmup_bm25_index()
+        yield
+        stop_scheduler()
 
 
 app = FastAPI(
@@ -87,7 +91,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-initialize_tortoise(app)
+init_tortoise_models()  # 모델 관계 등록(DB 연결 X). 실제 연결은 lifespan 의 RegisterTortoise.
 
 # /media 서빙: 무인증 StaticFiles 대신 signed-URL 검증 라우트(app/apis/media.py).
 # 업로드 파일은 PHI(예: 챌린지 인증 사진)를 포함할 수 있어 서명·만료 게이트를 둔다.
