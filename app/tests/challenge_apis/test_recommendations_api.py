@@ -10,6 +10,7 @@ from app.models.challenge import (
     VerificationType,
 )
 from app.tests.health_apis.helpers import make_client, signup_and_login
+from app.tests.health_apis.test_predictions_api import _FULL_MALE_PROFILE_PAYLOAD
 
 
 class TestChallengeRecommendationsApi(TestCase):
@@ -27,16 +28,12 @@ class TestChallengeRecommendationsApi(TestCase):
             is_active=True,
         )
 
-    async def _seed_profile_and_bp(self, client, headers):
+    async def _seed_full_profile(self, client, headers):
+        # 예측 게이트(완성도 100%) 통과를 위해 모델입력 필수 필드를 모두 채운다.
         await client.post(
             "/api/v1/health-records?recordType=profile",
             headers=headers,
-            json={
-                "height_cm": 170,
-                "weight_kg": 78,
-                "current_smoker": 1,
-                "family_hp": 1,
-            },
+            json=_FULL_MALE_PROFILE_PAYLOAD,
         )
         await client.post(
             "/api/v1/health-records",
@@ -56,7 +53,7 @@ class TestChallengeRecommendationsApi(TestCase):
         async with make_client() as client:
             token = await signup_and_login(client, email="rec@example.com", phone_number="01060000001")
             headers = {"Authorization": f"Bearer {token}"}
-            await self._seed_profile_and_bp(client, headers)
+            await self._seed_full_profile(client, headers)
             pred = await client.post("/api/v1/predictions?diseaseType=HYPERTENSION", headers=headers, json={})
             pid = pred.json()["id"]
 
@@ -75,7 +72,7 @@ class TestChallengeRecommendationsApi(TestCase):
         async with make_client() as client:
             owner_token = await signup_and_login(client, email="rec_own@example.com", phone_number="01060000002")
             owner_h = {"Authorization": f"Bearer {owner_token}"}
-            await self._seed_profile_and_bp(client, owner_h)
+            await self._seed_full_profile(client, owner_h)
             pred = await client.post("/api/v1/predictions?diseaseType=HYPERTENSION", headers=owner_h, json={})
             pid = pred.json()["id"]
 
