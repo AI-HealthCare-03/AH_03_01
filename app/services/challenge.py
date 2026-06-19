@@ -300,6 +300,13 @@ class ParticipantService:
         return await self.join_by_code(user, invite.challenge_id, invite_code)
 
     async def join_by_code(self, user: User, challenge_id: int, invite_code: str) -> ChallengeParticipant:
+        """초대 코드로 그룹 챌린지 참가.
+
+        정책(PR #274 확정): 유효한 초대 코드 보유 = 신뢰 → 참가자를 **즉시 APPROVED** 로 생성한다
+        (방장 승인 대기(PENDING) 단계 없음). join_public·direct-invite 수락(respond_to_direct_invite)도
+        동일하게 즉시 APPROVED 다. 즉 어떤 참가 경로도 PENDING 참가자를 만들지 않으며,
+        방장 승인/거절(respond_to_pending) 경로는 현재 정상 흐름에선 호출되지 않는 예약 코드다.
+        """
         invite = await self.invite_repo.get_by_code(invite_code)
         if invite is None or invite.challenge_id != challenge_id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="유효한 초대 코드가 아닙니다.")
@@ -437,6 +444,13 @@ class ParticipantService:
         action: str,
         reason: str | None,
     ) -> ChallengeParticipant:
+        """방장이 PENDING 참가 신청을 승인/거절.
+
+        주의: 현재 모든 참가 경로(join_by_code·join_public·direct-invite 수락)는 참가자를
+        즉시 APPROVED 로 생성하므로(자동 승인 정책, PR #274) PENDING 참가자는 정상 흐름에서
+        발생하지 않는다. 따라서 이 메서드는 레거시/예약(방장 승인 흐름)용이며, 정상 상황에선
+        아래 PENDING 가드에 걸려 404 를 반환한다. '방장 승인 플로우가 활성'이라고 오해하지 말 것.
+        """
         if action not in {"approve", "reject"}:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="action 은 approve|reject 입니다.")
         challenge = await self.challenge_repo.get(challenge_id)

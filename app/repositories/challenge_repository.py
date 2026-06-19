@@ -84,7 +84,8 @@ class ChallengeRepository:
         if user_id is not None:
             # Tortoise 가 __in= 에 subquery 객체를 직접 받지 못하므로 list 로 먼저 materialize.
             # left_only=True: 탈퇴(LEFT)한 챌린지만 조회 (완료 탭 노출용)
-            # 기본: PENDING 상태도 포함 — 초대 코드로 참가 신청 후 승인 대기 중인 챌린지도 목록에 표시
+            # 참가자는 가입 즉시 APPROVED 가 되어 정상 흐름에서 PENDING 은 발생하지 않는다(자동 승인 정책, PR #274).
+            # PENDING 은 과거 버전이 남겼을 수 있는 레거시/예약(방장 승인) 행 대비 방어적으로만 포함한다.
             participant_statuses = (
                 [ParticipantStatus.LEFT] if left_only else [ParticipantStatus.APPROVED, ParticipantStatus.PENDING]
             )
