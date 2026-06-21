@@ -246,7 +246,10 @@ export default function MyPage() {
           { href: "/leaderboard", label: "주간 리더보드", icon: "🏆" },
           { href: "/support", label: "고객지원", icon: "🎧" },
           { href: "/withdrawal", label: "회원 탈퇴", icon: "🗑️" },
-        ].map((it) => (
+        ]
+          // 소셜(카카오) 계정은 비밀번호가 없어(카카오 로그인 전용) 비밀번호 변경 메뉴를 숨긴다.
+          .filter((it) => !(it.href === "/mypage/password" && !!me && me.email === null))
+          .map((it) => (
           <Link
             key={it.href}
             href={it.href}
