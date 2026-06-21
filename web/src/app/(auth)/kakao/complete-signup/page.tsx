@@ -12,7 +12,6 @@ import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
 import { useToast } from "@/components/ui/Toast";
 import {
-  emailSchema,
   nameSchema,
   nicknameSchema,
   phoneSchema,
@@ -37,7 +36,7 @@ import {
    ========================================= */
 
 const kakaoCompleteSchema = z.object({
-  email: emailSchema,
+  // 소셜 계정은 이메일을 수집하지 않는다(카카오가 본인인증 대행).
   name: nameSchema,
   nickname: nicknameSchema,
   phone_number: phoneSchema,
@@ -69,7 +68,6 @@ export default function KakaoCompleteSignupPage() {
   } = useForm<KakaoCompleteFormValues>({
     resolver: zodResolver(kakaoCompleteSchema),
     defaultValues: {
-      email: "",
       name: "",
       nickname: "",
       phone_number: "",
@@ -93,11 +91,9 @@ export default function KakaoCompleteSignupPage() {
       try {
         const prefill = JSON.parse(rawPrefill) as {
           nickname: string | null;
-          email: string | null;
         };
         reset((prev) => ({
           ...prev,
-          email: prefill.email ?? "",
           nickname: prefill.nickname ?? "",
         }));
       } catch {
@@ -116,7 +112,6 @@ export default function KakaoCompleteSignupPage() {
     try {
       const res = await kakaoSignup({
         signup_ticket: ticket,
-        email: data.email,
         name: data.name,
         nickname: data.nickname,
         gender: data.gender,
@@ -151,17 +146,6 @@ export default function KakaoCompleteSignupPage() {
       </p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        {/* 이메일 */}
-        <Input
-          label="이메일"
-          type="email"
-          placeholder="example@email.com"
-          autoComplete="email"
-          required
-          error={errors.email?.message}
-          {...register("email")}
-        />
-
         {/* 이름 */}
         <Input
           label="이름"

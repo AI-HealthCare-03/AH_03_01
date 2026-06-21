@@ -116,8 +116,8 @@ export type KakaoCallbackResponse =
 
 /** POST /api/v1/auth/kakao/signup */
 export interface KakaoSignupRequest {
+  /* 소셜 계정은 이메일을 수집하지 않는다(카카오가 본인인증 대행) → email 필드 없음 */
   signup_ticket: string;
-  email: string;
   name: string;
   nickname: string;
   gender: "MALE" | "FEMALE";
