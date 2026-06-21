@@ -35,7 +35,7 @@ class WithdrawRequest(BaseModel):
 
 class UserInfoResponse(BaseSerializerModel):
     id: UUID
-    email: str
+    email: str | None = None  # 소셜(카카오) 계정은 이메일이 없다
     name: str
     nickname: str | None = None
     phone_number: str

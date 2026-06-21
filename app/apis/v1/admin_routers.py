@@ -63,7 +63,7 @@ async def get_stats(_: Annotated[User, Depends(get_admin_user)]) -> AdminStats:
 
 class AdminUserItem(BaseModel):
     id: str
-    email: str
+    email: str | None  # 소셜(카카오) 계정은 이메일이 없다
     name: str
     nickname: str | None
     created_at: str
@@ -373,7 +373,7 @@ async def delete_comment(
 
 class AdminInquiryItem(BaseModel):
     id: int
-    user_email: str
+    user_email: str | None  # 소셜(카카오) 계정은 이메일이 없다
     title: str
     category: str
     status: str

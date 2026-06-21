@@ -24,7 +24,7 @@ class UserRepository:
 
     async def create_user(
         self,
-        email: str | EmailStr,
+        email: str | EmailStr | None,
         hashed_password: str,
         name: str,
         nickname: str,
