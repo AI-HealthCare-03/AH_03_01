@@ -10,7 +10,6 @@ from app.core.jwt.state import token_backend
 from app.core.utils.security import generate_oauth_state, register_oauth_state
 from app.main import app
 from app.models.users import User
-from app.services.email_verification import EmailVerificationService
 from app.services.kakao_oauth import KakaoProfile
 
 BASE = "/api/v1/auth"
@@ -28,7 +27,6 @@ def _patch_kakao(social_id: str, email: str | None = None, nickname: str | None 
 def _signup_payload(ticket: str, **overrides) -> dict:
     payload = {
         "signup_ticket": ticket,
-        "email": "kakao_user@example.com",
         "name": "카카오테스터",
         "nickname": "카카오테스",
         "gender": "MALE",
@@ -85,7 +83,8 @@ class TestKakaoOAuthAPI(TestCase):
         body = res.json()
         assert body["status"] == "signup_required"
         assert body["signup_ticket"]
-        assert body["prefill"]["email"] == "new@kakao.com"
+        # 소셜 계정은 이메일 미수집 → prefill 은 닉네임만.
+        assert body["prefill"]["nickname"] == "신규"
 
     async def test_callback_invalid_state_returns_400(self):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -104,18 +103,9 @@ class TestKakaoOAuthAPI(TestCase):
         assert res.status_code == status.HTTP_201_CREATED
         assert "access_token" in res.json()
         assert any("refresh_token" in h for h in res.headers.get_list("set-cookie"))
-
-    async def test_signup_rejects_unverified_email(self):
-        # 카카오 scope 는 닉네임뿐이라 이메일은 사용자 입력 → 본인 인증 없으면 가입 거부(타인 이메일 선점 차단).
-        state = await _fresh_state()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            with _patch_kakao(social_id="900099", email="unv@kakao.com", nickname="미인증"):
-                cb = await client.post(f"{BASE}/kakao/callback", json={"code": "authcode", "state": state})
-            ticket = cb.json()["signup_ticket"]
-            with mock.patch.object(EmailVerificationService, "is_verified", new=mock.AsyncMock(return_value=False)):
-                res = await client.post(f"{BASE}/kakao/signup", json=_signup_payload(ticket, email="unv@kakao.com"))
-        assert res.status_code == status.HTTP_400_BAD_REQUEST
-        assert await User.filter(social_id="900099").count() == 0  # 계정 미생성
+        # 소셜 계정은 이메일을 수집/저장하지 않는다.
+        created = await User.get(social_provider="kakao", social_id="900003")
+        assert created.email is None
 
     async def test_existing_social_user_logs_in(self):
         state = await _fresh_state()
@@ -152,31 +142,6 @@ class TestKakaoOAuthAPI(TestCase):
             res = await client.post(f"{BASE}/kakao/signup", json=_signup_payload(bogus))
         assert res.status_code == status.HTTP_401_UNAUTHORIZED
 
-    async def test_signup_duplicate_email_returns_409(self):
-        state = await _fresh_state()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            # 기존 로컬 계정 선점
-            await client.post(
-                f"{BASE}/signup",
-                json={
-                    "email": "taken@example.com",
-                    "password": "Password123!",
-                    "name": "기존",
-                    "nickname": "기존유저",
-                    "gender": "FEMALE",
-                    "birth_date": "1992-02-02",
-                    "phone_number": "01077778888",
-                },
-            )
-            with _patch_kakao(social_id="900006", email="taken@example.com", nickname="중복"):
-                cb = await client.post(f"{BASE}/kakao/callback", json={"code": "authcode", "state": state})
-            ticket = cb.json()["signup_ticket"]
-            res = await client.post(
-                f"{BASE}/kakao/signup",
-                json=_signup_payload(ticket, email="taken@example.com", nickname="다른닉", phone_number="01099990000"),
-            )
-        assert res.status_code == status.HTTP_409_CONFLICT
-
     async def test_callback_deleted_user_returns_restore_required(self):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             await _signup_kakao_user(
@@ -191,7 +156,9 @@ class TestKakaoOAuthAPI(TestCase):
         body = res.json()
         assert body["status"] == "restore_required"
         assert body["restore_ticket"]
-        assert body["masked_email"] and body["deleted_at"] and body["restore_deadline"]
+        # 소셜 계정은 이메일이 없어 masked_email 은 None. 복구 안내엔 탈퇴일·복구마감만 필요.
+        assert body["masked_email"] is None
+        assert body["deleted_at"] and body["restore_deadline"]
 
     async def test_kakao_restore_restores_and_logs_in(self):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
