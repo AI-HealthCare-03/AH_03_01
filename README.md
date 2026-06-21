@@ -96,7 +96,7 @@
 
 RAG 챗봇(1단계)과 위험도 권고(2단계)는 LangGraph 상태 그래프로 구현되며, 의료 가드(`R1~R5` 규칙 + LLM 6기준)를 양 그래프가 공용으로 사용합니다.
 
-![LangGraph 오케스트레이션](assets/langgraph.png)
+<img width="1504" height="811" alt="LangGraph 워크플로우" src="https://github.com/user-attachments/assets/27d09c16-b506-403a-866a-627d9ca6cb72" />
 
 ---
 
