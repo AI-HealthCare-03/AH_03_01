@@ -40,7 +40,7 @@ export interface SignupResponse {
 /* 사용자 */
 export interface User {
   id: number;
-  email: string;
+  email: string | null; /* 소셜(카카오) 계정은 이메일이 없다 */
   name: string;
   nickname?: string;
   gender: "MALE" | "FEMALE";

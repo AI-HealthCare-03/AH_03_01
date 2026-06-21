@@ -94,7 +94,8 @@ export default function MyPage() {
             {meLoading ? "…" : (me?.nickname ?? me?.name ?? "—")}
           </p>
           <p className="text-xs text-text-tertiary truncate">
-            @{me?.name ?? "—"} · {me?.email}
+            {/* 소셜(카카오) 계정은 이메일이 없다 → "카카오 계정" 표기 */}
+            @{me?.name ?? "—"} · {me?.email ?? (me ? "카카오 계정" : "—")}
           </p>
         </div>
         <Link
@@ -148,7 +149,7 @@ export default function MyPage() {
           </dd>
           <dt className="text-text-tertiary">이메일</dt>
           <dd className="text-text-primary text-right truncate">
-            {me?.email ?? "—"}
+            {me?.email ?? (me ? "카카오 계정" : "—")}
           </dd>
           <dt className="text-text-tertiary">성별</dt>
           <dd className="text-text-primary text-right">
