@@ -41,7 +41,9 @@ def _signup_payload(ticket: str, **overrides) -> dict:
 
 async def _signup_kakao_user(client: AsyncClient, social_id: str, **overrides) -> str:
     """카카오 신규 가입을 끝내고 social_id 를 반환하는 헬퍼(테스트 픽스처용)."""
-    with _patch_kakao(social_id=social_id, email=overrides.get("email"), nickname=overrides.get("nickname")):
+    # email 은 카카오 프로필(_patch_kakao) 주입용일 뿐, 가입 요청 바디엔 들어가지 않는다(소셜=이메일 미수집).
+    email = overrides.pop("email", None)
+    with _patch_kakao(social_id=social_id, email=email, nickname=overrides.get("nickname")):
         cb = await client.post(f"{BASE}/kakao/callback", json={"code": "authcode", "state": await _fresh_state()})
     ticket = cb.json()["signup_ticket"]
     await client.post(f"{BASE}/kakao/signup", json=_signup_payload(ticket, **overrides))
@@ -116,7 +118,7 @@ class TestKakaoOAuthAPI(TestCase):
             ticket = cb.json()["signup_ticket"]
             await client.post(
                 f"{BASE}/kakao/signup",
-                json=_signup_payload(ticket, email="s4@kakao.com", nickname="사번", phone_number="01055556666"),
+                json=_signup_payload(ticket, nickname="사번", phone_number="01055556666"),
             )
             # 동일 social_id 재방문 → 로그인 분기
             with _patch_kakao(social_id="900004", email="s4@kakao.com", nickname="사번"):

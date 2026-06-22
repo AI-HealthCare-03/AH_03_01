@@ -116,8 +116,8 @@ class KakaoCallbackRequest(BaseModel):
 
 
 class KakaoPrefill(BaseModel):
+    # 소셜 계정은 이메일을 수집하지 않으므로 prefill 은 닉네임만 제공한다.
     nickname: str | None = None
-    email: str | None = None
 
 
 class KakaoCallbackResponse(BaseModel):
