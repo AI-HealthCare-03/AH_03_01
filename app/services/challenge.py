@@ -462,13 +462,19 @@ class ParticipantService:
         if participant is None or participant.status != ParticipantStatus.PENDING:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="대기 중인 참여 신청이 없습니다.")
         if action == "approve":
-            active = await self.repo.count_active(challenge_id)
-            if active >= challenge.max_participants:
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="모집 정원이 가득 찼습니다.")
-            participant = await self.repo.update_status(participant, ParticipantStatus.APPROVED)
-            # 승인 후 정원 달성 시 RECRUITING → ACTIVE 자동 전환
-            if active + 1 >= challenge.max_participants and challenge.status == ChallengeStatus.RECRUITING:
-                await self.challenge_repo.update_instance(challenge, {"status": ChallengeStatus.ACTIVE})
+            async with in_transaction():
+                # select_for_update: 동시 승인 요청의 정원 초과 방지 (join_by_code 와 동일 패턴)
+                challenge_locked = await Challenge.filter(id=challenge_id).select_for_update().first()
+                active = await self.repo.count_active(challenge_id)
+                if active >= challenge_locked.max_participants:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="모집 정원이 가득 찼습니다.")
+                participant = await self.repo.update_status(participant, ParticipantStatus.APPROVED)
+                # 승인 후 정원 달성 시 RECRUITING → ACTIVE 자동 전환
+                if (
+                    active + 1 >= challenge_locked.max_participants
+                    and challenge_locked.status == ChallengeStatus.RECRUITING
+                ):
+                    await self.challenge_repo.update_instance(challenge_locked, {"status": ChallengeStatus.ACTIVE})
             return participant
         # reject
         if reason:

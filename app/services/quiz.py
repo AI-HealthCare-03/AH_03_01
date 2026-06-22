@@ -77,9 +77,6 @@ class HealthQuizService:
         today_start = datetime.combine(today, datetime.min.time()).replace(tzinfo=SEOUL)
         if await self.repo.get_today_attempt(user_id, quiz_id, today_start):
             raise ValueError("already_answered")
-        daily_count = await QuizAttempt.filter(user_id=user_id, attempted_at__gte=today_start).count()
-        if daily_count >= DAILY_LIMIT:
-            raise ValueError("daily_limit_exceeded")
 
         quiz = await self.repo.get_quiz_by_id(quiz_id)
         if not quiz:
@@ -88,7 +85,17 @@ class HealthQuizService:
         is_correct = selected_option == quiz.correct_option
         points_earned = 0
         try:
-            async with in_transaction():
+            async with in_transaction() as conn:
+                # daily_count 를 트랜잭션 밖에서 읽으면 서로 다른 퀴즈를 동시에 답할 때 둘 다 한도 검사를
+                # 통과해 DAILY_LIMIT 을 초과 저장할 수 있다(TOCTOU). 사용자별 advisory xact lock 으로
+                # 직렬화하고 락 안에서 한도를 재확인한다(퀴즈 배정 get_available_quizzes 와 동일 패턴).
+                await conn.execute_query(
+                    "SELECT pg_advisory_xact_lock(hashtext($1))",
+                    [f"quiz_answer:{user_id}:{today.isoformat()}"],
+                )
+                daily_count = await QuizAttempt.filter(user_id=user_id, attempted_at__gte=today_start).count()
+                if daily_count >= DAILY_LIMIT:
+                    raise ValueError("daily_limit_exceeded")
                 if is_correct:
                     result = await self.reward_service.grant_quiz_correct(user_id=user_id, quiz_id=quiz_id)
                     points_earned = result.amount

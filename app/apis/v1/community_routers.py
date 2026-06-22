@@ -97,7 +97,7 @@ async def get_post(post_id: int, current_user: User = Depends(get_request_user))
     post = await repo.get_post(post_id)
     if not post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
-    await repo.increment_view(post.id, post.view_count)
+    await repo.increment_view(post.id)
     is_liked = await LikeRepository().is_post_liked(post_id, current_user.id)
     return PostDetailResponse(
         **_to_item(post).model_dump(), content=post.content, updated_at=post.updated_at, is_liked=is_liked
