@@ -335,6 +335,9 @@ class AuthService:
                 # 일반 로그인과 동일하게 복구/파기를 사용자가 선택하게 한다. 단, 카카오는 방금 OAuth 로
                 # 본인 확인을 마쳤으므로 이메일 인증 대신 단기 복구 티켓(신원 증명)으로 처리한다.
                 return self._kakao_deleted_response(user), None
+            if not user.is_active:
+                # 이메일 로그인(authenticate)·JWT 미들웨어(get_request_user)와 동일하게 비활성 계정은 차단.
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="비활성화된 계정입니다.")
             tokens = await self.login(user)
             response = KakaoCallbackResponse(status="login", access_token=str(tokens["access_token"]))
             return response, tokens
