@@ -18,7 +18,8 @@ import { ROUTES } from "@/constants";
    ========================================= */
 
 interface FoundResult {
-  maskedEmail: string;
+  maskedEmail: string | null;
+  socialProvider: string | null;
   createdAt: string;
 }
 
@@ -39,7 +40,11 @@ export default function ForgotIdPage() {
   const onSubmit = async (data: ForgotIdFormValues) => {
     try {
       const res = await findId(data.name, data.phone_number);
-      setResult({ maskedEmail: res.maskedEmail, createdAt: res.createdAt });
+      setResult({
+        maskedEmail: res.maskedEmail,
+        socialProvider: res.socialProvider,
+        createdAt: res.createdAt,
+      });
     } catch {
       showToast("일치하는 계정을 찾을 수 없습니다", "error");
     }
@@ -54,18 +59,34 @@ export default function ForgotIdPage() {
             가입 시 입력한 정보를 확인합니다
           </p>
 
-          <div className="p-5 bg-surface rounded-[12px] space-y-3 mb-8">
-            <div>
-              <p className="text-xs text-text-tertiary mb-1">이메일</p>
-              <p className="text-lg font-semibold text-text-primary">
-                {result.maskedEmail}
+          {result.socialProvider ? (
+            /* 소셜(카카오) 계정 — 이메일/비밀번호 로그인이 없으므로 소셜 로그인 안내 */
+            <div className="p-5 bg-surface rounded-[12px] space-y-3 mb-8">
+              <p className="text-base font-semibold text-text-primary">
+                카카오로 가입한 계정입니다
               </p>
+              <p className="text-sm text-text-secondary">
+                이 계정은 이메일/비밀번호 없이 카카오로 로그인합니다. 로그인 화면에서 “카카오로 계속하기”를 이용해 주세요.
+              </p>
+              <div>
+                <p className="text-xs text-text-tertiary mb-1">가입일</p>
+                <p className="text-sm text-text-secondary">{result.createdAt}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-text-tertiary mb-1">가입일</p>
-              <p className="text-sm text-text-secondary">{result.createdAt}</p>
+          ) : (
+            <div className="p-5 bg-surface rounded-[12px] space-y-3 mb-8">
+              <div>
+                <p className="text-xs text-text-tertiary mb-1">이메일</p>
+                <p className="text-lg font-semibold text-text-primary">
+                  {result.maskedEmail}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-text-tertiary mb-1">가입일</p>
+                <p className="text-sm text-text-secondary">{result.createdAt}</p>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="space-y-3">
             <Button

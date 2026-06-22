@@ -150,7 +150,12 @@ class AuthService:
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="일치하는 계정을 찾을 수 없습니다.")
 
-        return FindIdResponse(masked_email=self._mask_email(user.email), created_at=user.created_at.date())
+        # 소셜(카카오) 계정은 이메일이 없으므로 masked_email=None + social_provider 로 카카오 로그인 안내.
+        return FindIdResponse(
+            masked_email=self._mask_email(user.email),
+            social_provider=user.social_provider,
+            created_at=user.created_at.date(),
+        )
 
     async def get_previous_account(self, email: str) -> PreviousAccountResponse:
         """이메일로 복구 가능한 탈퇴 계정을 감지. 인증 전이므로 마스킹 이메일·탈퇴일·복구마감만 반환.
@@ -291,8 +296,11 @@ class AuthService:
         return {"challenge_count": challenge_count, "points": points, "pet_name": pet.name if pet else None}
 
     @staticmethod
-    def _mask_email(email: str) -> str:
-        """이메일 로컬파트를 처음/끝 1글자만 남기고 마스킹. 예: jkh3043@gmail.com -> j*****3@gmail.com"""
+    def _mask_email(email: str | None) -> str | None:
+        """이메일 로컬파트를 처음/끝 1글자만 남기고 마스킹. 예: jkh3043@gmail.com -> j*****3@gmail.com
+        소셜(카카오) 계정은 이메일이 없어 None 이 들어올 수 있으며 그대로 None 을 돌려준다."""
+        if not email:
+            return None
         local, _, domain = email.partition("@")
         if not domain:
             return email
@@ -337,7 +345,8 @@ class AuthService:
                 "type": KAKAO_SIGNUP_TICKET_TYPE,
                 "provider": KAKAO_PROVIDER,
                 "social_id": profile.social_id,
-                "prefill": {"nickname": profile.nickname, "email": profile.email},
+                # 소셜 계정은 이메일 미수집 → 닉네임만 prefill.
+                "prefill": {"nickname": profile.nickname},
                 "exp": int(time.time()) + KAKAO_SIGNUP_TICKET_TTL_SECONDS,
                 "jti": uuid4().hex,
             }
@@ -345,7 +354,7 @@ class AuthService:
         response = KakaoCallbackResponse(
             status="signup_required",
             signup_ticket=signup_ticket,
-            prefill=KakaoPrefill(nickname=profile.nickname, email=profile.email),
+            prefill=KakaoPrefill(nickname=profile.nickname),
         )
         return response, None
 
@@ -361,11 +370,7 @@ class AuthService:
         # 티켓 재사용/경합 방지 + 일반 가입 중복 검증(기존 헬퍼 재사용).
         if await self.user_repo.get_user_by_social(KAKAO_PROVIDER, social_id) is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 가입된 카카오 계정입니다.")
-        # 카카오 인가 scope 는 닉네임만이라 이메일은 사용자가 직접 입력한다 → 일반 가입과 동일하게
-        # 이메일 소유권(본인 인증)을 확인해야 타인 이메일 선점(메일 폭탄·계정 탈취 단서) 을 막는다.
-        if not await self.email_verification.is_verified(str(data.email)):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이메일 본인 인증이 필요합니다.")
-        await self.check_email_exists(data.email)
+        # 소셜 계정은 이메일을 수집하지 않는다(카카오가 본인인증 대행, 복구=카카오 재로그인) → email 검증/저장 없음.
         await self.check_nickname_exists(data.nickname)
 
         normalized_phone_number = normalize_phone_number(data.phone_number)
@@ -375,7 +380,7 @@ class AuthService:
         try:
             async with in_transaction():
                 user = await self.user_repo.create_user(
-                    email=data.email,
+                    email=None,  # 소셜 계정은 이메일 미수집
                     hashed_password=generate_unusable_password(),  # 비번 로그인 불가(소셜 전용)
                     name=data.name,
                     nickname=data.nickname,
@@ -393,7 +398,6 @@ class AuthService:
             # 유니크 인덱스가 막는다. 500 대신 409 로 정리한다.
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 가입된 계정입니다.") from err
 
-        await self.email_verification.consume(str(data.email))
         return await self.login(user)
 
     @staticmethod

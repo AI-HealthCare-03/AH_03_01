@@ -26,7 +26,9 @@ class FindIdRequest(BaseModel):
 
 
 class FindIdResponse(BaseModel):
-    masked_email: str
+    # 소셜(카카오) 계정은 이메일이 없으므로 masked_email 은 None 이고 social_provider 로 안내한다.
+    masked_email: str | None = None
+    social_provider: str | None = None
     created_at: date
 
 
@@ -114,8 +116,8 @@ class KakaoCallbackRequest(BaseModel):
 
 
 class KakaoPrefill(BaseModel):
+    # 소셜 계정은 이메일을 수집하지 않으므로 prefill 은 닉네임만 제공한다.
     nickname: str | None = None
-    email: str | None = None
 
 
 class KakaoCallbackResponse(BaseModel):
@@ -144,8 +146,8 @@ class KakaoRestoreTicketRequest(BaseModel):
 
 
 class KakaoSignupRequest(BaseModel):
+    # 소셜 계정은 이메일을 수집하지 않는다(카카오가 본인인증 대행) → email 필드 없음.
     signup_ticket: Annotated[str, Field(min_length=1)]
-    email: Annotated[EmailStr, Field(max_length=40)]
     name: Annotated[str, Field(max_length=20)]
     nickname: Annotated[str, Field(min_length=2, max_length=10)]
     gender: Gender

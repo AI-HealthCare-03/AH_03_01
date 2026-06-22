@@ -80,12 +80,17 @@ export async function checkNicknameAvailable(
 export async function findId(
   name: string,
   phone_number: string
-): Promise<{ maskedEmail: string; createdAt: string }> {
-  const res = await apiClient.post<{ masked_email: string; created_at: string }>(
-    "/api/v1/auth/find-id",
-    { name, phone_number }
-  );
-  return { maskedEmail: res.data.masked_email, createdAt: res.data.created_at };
+): Promise<{ maskedEmail: string | null; socialProvider: string | null; createdAt: string }> {
+  const res = await apiClient.post<{
+    masked_email: string | null;
+    social_provider: string | null;
+    created_at: string;
+  }>("/api/v1/auth/find-id", { name, phone_number });
+  return {
+    maskedEmail: res.data.masked_email,
+    socialProvider: res.data.social_provider,
+    createdAt: res.data.created_at,
+  };
 }
 
 /**
