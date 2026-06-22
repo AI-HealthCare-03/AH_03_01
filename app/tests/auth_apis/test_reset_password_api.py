@@ -141,5 +141,7 @@ class TestResetPassword(TestCase):
                     json={"email": user.email, "name": user.name, "new_password": NEW_PW},
                 )
         assert res.status_code == status.HTTP_400_BAD_REQUEST
+        # is_verified 가드(autouse 로 True)가 아닌 소셜 차단 가드가 실제로 동작했는지 detail 로 확인.
+        assert "소셜 로그인" in res.json()["detail"]
         await user.refresh_from_db()
         assert verify_password(OLD_PW, user.hashed_password)  # 비밀번호 미변경
