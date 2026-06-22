@@ -1,0 +1,37 @@
+#  첫 세팅 시 - pip install -r requirements.txt
+
+# core RAG
+langchain-text-splitters
+langchain
+langchain-core
+langchain-openai
+langchain-community
+langgraph==0.2.28
+
+python-frontmatter
+openai
+
+# retrieval
+rank_bm25
+kiwipiepy
+
+# RAGAS eval
+ragas==0.2.6
+datasets
+numpy
+pandas
+tqdm
+scikit-learn
+networkx
+
+# DB
+tortoise-orm
+asyncpg
+pgvector
+
+# utils
+tiktoken
+httpx
+aiohttp
+tenacity
+pydantic

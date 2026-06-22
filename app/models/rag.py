@@ -5,7 +5,7 @@ from tortoise import fields, models
 
 from app.core.db.fields import VectorField
 
-DEFAULT_EMBEDDING_DIM = 768
+DEFAULT_EMBEDDING_DIM = 1536  # OpenAI text-embedding-3-small
 
 
 class DocumentType(StrEnum):
@@ -19,7 +19,7 @@ class DocumentType(StrEnum):
 class RAGDocument(models.Model):
     """RAG / 챗봇 검색용 문서 청크.
 
-    embedding 컬럼은 PGVector `vector(768)` 로 저장된다. 유사도 검색은
+    embedding 컬럼은 PGVector `vector(1536)` 로 저장된다. 유사도 검색은
     raw SQL(`embedding <=> $1`) 로 수행한다.
     """
 

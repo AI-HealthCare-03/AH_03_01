@@ -7,7 +7,10 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import Checkbox from "@/components/ui/Checkbox";
 import { useToast } from "@/components/ui/Toast";
-import { WITHDRAWAL_REASONS, ROUTES } from "@/constants";
+import { useAuth } from "@/hooks/useAuth";
+import { deleteAccount } from "@/lib/api/auth";
+import { extractErrorMessage } from "@/lib/api/client";
+import { WITHDRAWAL_REASONS } from "@/constants";
 
 /* =========================================
    회원탈퇴 페이지
@@ -17,6 +20,7 @@ import { WITHDRAWAL_REASONS, ROUTES } from "@/constants";
 export default function WithdrawalPage() {
   const router = useRouter();
   const { showToast } = useToast();
+  const { logout } = useAuth();
 
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
   const [otherText, setOtherText] = useState("");
@@ -32,10 +36,13 @@ export default function WithdrawalPage() {
   const handleWithdraw = async () => {
     setLoading(true);
     try {
-      // TODO(backend): DELETE /api/v1/users/me 엔드포인트 확인 필요
-      showToast("탈퇴 처리는 백엔드 추가 예정입니다", "info");
+      const reason = isOther ? otherText.trim() : selectedReason ?? "";
+      await deleteAccount(reason);
       setConfirmOpen(false);
-      router.push(ROUTES.LOGIN);
+      showToast("탈퇴가 완료되었습니다.", "success");
+      logout(); // 토큰·캐시 정리 후 /login 으로 이동
+    } catch (err) {
+      showToast(extractErrorMessage(err), "error");
     } finally {
       setLoading(false);
     }

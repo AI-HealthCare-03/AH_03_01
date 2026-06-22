@@ -22,4 +22,15 @@ async def get_request_user(credential: Annotated[HTTPAuthorizationCredentials, D
     user = await UserRepository().get_user(user_id)
     if not user:
         raise HTTPException(detail="Authenticate Failed.", status_code=status.HTTP_401_UNAUTHORIZED)
+    # 탈퇴/비활성/정지 계정은 기존 access token 으로도 즉시 차단(토큰은 stateless 라 만료 전까지 유효하므로).
+    if user.is_deleted or not user.is_active:
+        raise HTTPException(detail="비활성화되었거나 탈퇴한 계정입니다.", status_code=status.HTTP_401_UNAUTHORIZED)
+    if user.is_banned:
+        raise HTTPException(detail="정지된 계정입니다.", status_code=status.HTTP_403_FORBIDDEN)
     return user
+
+
+async def get_admin_user(current_user: Annotated[User, Depends(get_request_user)]) -> User:
+    if not current_user.is_admin:
+        raise HTTPException(detail="관리자 권한이 필요합니다.", status_code=status.HTTP_403_FORBIDDEN)
+    return current_user

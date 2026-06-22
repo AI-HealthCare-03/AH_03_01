@@ -1,8 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import ChallengeCategoryIcon, { CATEGORY_CONFIG } from "@/components/challenges/common/ChallengeCategoryIcon";
 import ChallengeProgressBar from "@/components/challenges/common/ChallengeProgressBar";
@@ -25,6 +23,12 @@ interface GroupDetailProps {
   challenge: Challenge;
   onShield: () => void;
   initialTab?: GroupTab;
+  onLeave?: () => void;
+  onCancel?: () => void;
+  currentUserId?: string;
+  verifiedDates?: string[];
+  pendingDates?: string[];
+  rejectedToday?: boolean;
 }
 
 const TABS: { key: GroupTab; label: string }[] = [
@@ -37,16 +41,19 @@ export default function GroupDetail({
   challenge,
   onShield,
   initialTab = "info",
+  onLeave,
+  onCancel,
+  currentUserId,
+  verifiedDates = [],
+  pendingDates = [],
+  rejectedToday = false,
 }: GroupDetailProps) {
   const [activeTab, setActiveTab] = useState<GroupTab>(initialTab);
   const { showToast } = useToast();
   const { data: participantsData } = useChallengeParticipants(challenge.id);
 
   const catConfig = CATEGORY_CONFIG[challenge.category] ?? CATEGORY_CONFIG.EXERCISE;
-  const progressPct =
-    challenge.total_days && challenge.total_days > 0
-      ? Math.round(((challenge.my_progress ?? 0) / challenge.total_days) * 100)
-      : 0;
+  const progressPct = challenge.achievement_rate ?? 0;
 
   const participants = participantsData?.items ?? [];
 
@@ -96,8 +103,6 @@ export default function GroupDetail({
           </div>
           <ChallengeProgressBar
             progress={progressPct}
-            completedDays={challenge.my_progress}
-            totalDays={challenge.total_days}
           />
           {/* 모바일 초대 코드 복사 */}
           {challenge.invite_code && (
@@ -146,7 +151,17 @@ export default function GroupDetail({
         {/* 메인 탭 콘텐츠 */}
         <div className="flex-1 min-w-0">
           {activeTab === "info" && (
-            <GroupInfoTab challenge={challenge} participants={participants} />
+            <GroupInfoTab
+              challenge={challenge}
+              participants={participants}
+              currentUserId={currentUserId}
+              onLeave={onLeave}
+              onCancel={onCancel}
+              onShield={onShield}
+              verifiedDates={verifiedDates}
+              pendingDates={pendingDates}
+              rejectedToday={rejectedToday}
+            />
           )}
           {activeTab === "chat" && (
             <GroupChatTab challengeId={challenge.id} />
@@ -154,43 +169,11 @@ export default function GroupDetail({
           {activeTab === "members" && (
             <GroupMemberTab
               challengeId={challenge.id}
-              totalDays={challenge.total_days}
             />
           )}
         </div>
 
-        {/* 데스크탑 우측: 오늘 인증하기 사이드박스 */}
-        {challenge.status === "ACTIVE" && (
-          <aside className="hidden md:block w-56 shrink-0">
-            <div className="bg-white border border-border rounded-[16px] p-5 sticky top-32 space-y-3">
-              <p className="text-sm font-bold text-text-primary">오늘의 인증</p>
-              <Link href={`/challenges/${challenge.id}/verify`}>
-                <Button variant="primary" size="md" fullWidth>
-                  오늘 인증하기
-                </Button>
-              </Link>
-              <button
-                type="button"
-                onClick={onShield}
-                className="w-full text-xs text-text-tertiary hover:text-text-secondary underline"
-              >
-                🛡️ 방지권 사용
-              </button>
-            </div>
-          </aside>
-        )}
       </div>
-
-      {/* 모바일 하단 고정 CTA */}
-      {challenge.status === "ACTIVE" && (
-        <div className="md:hidden fixed bottom-16 left-0 right-0 bg-white border-t border-border px-5 py-3 z-20">
-          <Link href={`/challenges/${challenge.id}/verify`}>
-            <Button variant="primary" size="lg" fullWidth>
-              오늘 인증하기
-            </Button>
-          </Link>
-        </div>
-      )}
     </div>
   );
 }

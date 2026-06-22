@@ -33,7 +33,7 @@ function HealthRecordsInner() {
     raw && VALID_TABS.includes(raw) ? raw : "summary";
 
   return (
-    <div className="min-h-screen bg-[#f8f8f8]">
+    <div className="min-h-screen bg-[#f8f8f8]" id="health-records-layout">
       <HealthRecordsTabs activeTab={activeTab} />
       <div className="max-w-5xl mx-auto px-4 py-5">
         <TabContent tab={activeTab} />

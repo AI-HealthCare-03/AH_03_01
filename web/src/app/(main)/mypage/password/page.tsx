@@ -6,20 +6,51 @@ import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
+import { useMe } from "@/hooks/queries/useMe";
 import { changeMyPassword } from "@/lib/api/user";
+import { checkEmailVerified, sendEmailVerification } from "@/lib/api/auth";
 import { extractErrorMessage } from "@/lib/api/client";
 
 /* =========================================
    마이페이지 - 비밀번호 변경
    ========================================= */
 
+/* 백엔드 PASSWORD_CHANGE_PURPOSE 와 동일 문자열 — 인증 플래그 네임스페이스 격리용 */
+const PASSWORD_CHANGE_PURPOSE = "password_change";
+
 export default function PasswordChangePage() {
   const router = useRouter();
   const { showToast } = useToast();
+  const { data: me } = useMe();
+  const email = me?.email ?? "";
 
   const [current, setCurrent] = useState("");
   const [next1, setNext1] = useState("");
   const [next2, setNext2] = useState("");
+  /* 본인 인증 단계: 비밀번호 변경 전 이메일 인증을 요구(백엔드도 동일 게이트) */
+  const [verifyState, setVerifyState] = useState<"idle" | "sent" | "verified">("idle");
+
+  const sendMutation = useMutation({
+    mutationFn: () => sendEmailVerification(email, undefined, PASSWORD_CHANGE_PURPOSE),
+    onSuccess: () => {
+      setVerifyState("sent");
+      showToast("인증 메일을 보냈어요. 메일함을 확인해 주세요", "success");
+    },
+    onError: (err) => showToast(extractErrorMessage(err), "error"),
+  });
+
+  const checkMutation = useMutation({
+    mutationFn: () => checkEmailVerified(email, PASSWORD_CHANGE_PURPOSE),
+    onSuccess: (verified) => {
+      if (verified) {
+        setVerifyState("verified");
+        showToast("본인 인증이 완료됐어요", "success");
+      } else {
+        showToast("아직 인증이 완료되지 않았어요. 메일의 링크를 클릭해 주세요", "error");
+      }
+    },
+    onError: (err) => showToast(extractErrorMessage(err), "error"),
+  });
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -43,6 +74,7 @@ export default function PasswordChangePage() {
   if (current && next1 && current === next1) errors.push("기존과 동일한 비밀번호는 사용할 수 없어요");
 
   const canSubmit =
+    verifyState === "verified" &&
     current.length >= 8 &&
     next1.length >= 8 &&
     next2.length >= 8 &&
@@ -64,6 +96,45 @@ export default function PasswordChangePage() {
         <p className="text-sm text-text-secondary mt-1">
           안전한 비밀번호를 사용해 주세요. 8자 이상.
         </p>
+      </div>
+
+      {/* 본인 인증 (비밀번호 변경 전 필수) */}
+      <div className="space-y-2 bg-surface rounded-[12px] p-4">
+        <p className="text-xs font-semibold text-text-secondary">본인 인증</p>
+        <p className="text-xs text-text-tertiary">
+          보안을 위해 비밀번호 변경 전 이메일 본인 인증이 필요해요
+          {email ? ` (${email})` : ""}.
+        </p>
+        {verifyState === "verified" ? (
+          <p className="text-xs font-semibold text-status-success">✓ 본인 인증 완료</p>
+        ) : (
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!email || sendMutation.isPending}
+              loading={sendMutation.isPending}
+              onClick={() => sendMutation.mutate()}
+            >
+              {verifyState === "sent" ? "메일 재전송" : "인증 메일 받기"}
+            </Button>
+            {verifyState === "sent" && (
+              <Button
+                variant="primary"
+                size="sm"
+                loading={checkMutation.isPending}
+                onClick={() => checkMutation.mutate()}
+              >
+                인증 완료 확인
+              </Button>
+            )}
+          </div>
+        )}
+        {verifyState === "sent" && (
+          <p className="text-xs text-text-tertiary">
+            메일함의 인증 링크를 클릭한 뒤 [인증 완료 확인]을 눌러주세요.
+          </p>
+        )}
       </div>
 
       <div className="space-y-4">

@@ -7,7 +7,7 @@ import {
   DurationPicker,
   WeeklyDurationNote,
   TitleInput,
-  MaxParticipantsSlider,
+  MaxParticipantsChips,
   RewardPreview,
   Step4Header,
   GROUP_SUM_OPTIONS,
@@ -52,6 +52,12 @@ const WALKING_STEP_OPTIONS = [
 /* 걷기 목표 모드 라디오 */
 type WalkingGoalMode = "TIME" | "DISTANCE" | "STEPS";
 
+function initWalkingMode(form: WizardFormState): WalkingGoalMode {
+  if (form.goal_config.distance_km !== undefined) return "DISTANCE";
+  if (form.goal_config.step_count !== undefined) return "STEPS";
+  return "TIME";
+}
+
 function WalkingGoalPicker({
   form,
   onChange,
@@ -59,22 +65,28 @@ function WalkingGoalPicker({
   form: WizardFormState;
   onChange: (partial: Partial<WizardFormState>) => void;
 }) {
-  // 현재 어떤 모드인지 파악
-  let currentMode: WalkingGoalMode = "TIME";
-  if (form.goal_config.distance_km !== undefined) currentMode = "DISTANCE";
-  if (form.goal_config.step_count !== undefined) currentMode = "STEPS";
-  if (form.goal_config.duration_minutes !== undefined && !form.goal_config.distance_km && !form.goal_config.step_count) {
-    currentMode = "TIME";
-  }
+  // goal_config 파생이 아닌 로컬 state로 모드 관리 (파생 시 undefined → 모드 고정 버그 방지)
+  const [mode, setMode] = useState<WalkingGoalMode>(() =>
+    initWalkingMode(form),
+  );
 
-  const handleModeChange = (mode: WalkingGoalMode) => {
-    // 모드 전환 시 이전 값 초기화
+  const handleModeChange = (newMode: WalkingGoalMode) => {
+    setMode(newMode);
     onChange({
+      goal_type:
+        newMode === "TIME"
+          ? "DURATION"
+          : newMode === "DISTANCE"
+            ? "AMOUNT"
+            : "COUNT",
       goal_config: {
         ...form.goal_config,
-        duration_minutes: mode === "TIME" ? (form.goal_config.duration_minutes ?? undefined) : undefined,
-        distance_km: mode === "DISTANCE" ? (form.goal_config.distance_km ?? undefined) : undefined,
-        step_count: mode === "STEPS" ? (form.goal_config.step_count ?? undefined) : undefined,
+        duration_minutes:
+          newMode === "TIME" ? form.goal_config.duration_minutes : undefined,
+        distance_km:
+          newMode === "DISTANCE" ? form.goal_config.distance_km : undefined,
+        step_count:
+          newMode === "STEPS" ? form.goal_config.step_count : undefined,
       },
     });
   };
@@ -84,24 +96,41 @@ function WalkingGoalPicker({
       <RadioCards
         label="목표 방식"
         options={[
-          { value: "TIME" as WalkingGoalMode, emoji: "⏱️", title: "시간", desc: "분 단위 목표" },
-          { value: "DISTANCE" as WalkingGoalMode, emoji: "📍", title: "거리", desc: "km 단위 목표" },
-          { value: "STEPS" as WalkingGoalMode, emoji: "👣", title: "걸음 수", desc: "보 단위 목표" },
+          {
+            value: "TIME" as WalkingGoalMode,
+            emoji: "⏱️",
+            title: "시간",
+            desc: "분 단위 목표",
+          },
+          {
+            value: "DISTANCE" as WalkingGoalMode,
+            emoji: "📍",
+            title: "거리",
+            desc: "km 단위 목표",
+          },
+          {
+            value: "STEPS" as WalkingGoalMode,
+            emoji: "👣",
+            title: "걸음 수",
+            desc: "보 단위 목표",
+          },
         ]}
-        value={currentMode}
+        value={mode}
         onChange={handleModeChange}
       />
-      {currentMode === "TIME" && (
+      {mode === "TIME" && (
         <Chips
           label="목표 시간"
           options={TIME_30_60_90_120}
           value={form.goal_config.duration_minutes}
           onChange={(v) =>
-            onChange({ goal_config: { ...form.goal_config, duration_minutes: v } })
+            onChange({
+              goal_config: { ...form.goal_config, duration_minutes: v },
+            })
           }
         />
       )}
-      {currentMode === "DISTANCE" && (
+      {mode === "DISTANCE" && (
         <Chips
           label="목표 거리"
           options={WALKING_DISTANCE_OPTIONS}
@@ -111,7 +140,7 @@ function WalkingGoalPicker({
           }
         />
       )}
-      {currentMode === "STEPS" && (
+      {mode === "STEPS" && (
         <Chips
           label="목표 걸음 수"
           options={WALKING_STEP_OPTIONS}
@@ -164,7 +193,9 @@ export function WalkingWeeklyForm({
         options={WEEKLY_COUNT_OPTIONS}
         value={form.goal_config.weekly_target_count}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, weekly_target_count: v } })
+          onChange({
+            goal_config: { ...form.goal_config, weekly_target_count: v },
+          })
         }
       />
       <WeeklyDurationNote />
@@ -190,11 +221,13 @@ export function WalkingGroupForm({
         options={GROUP_SUM_OPTIONS}
         value={form.goal_config.group_target_count}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, group_target_count: v } })
+          onChange({
+            goal_config: { ...form.goal_config, group_target_count: v },
+          })
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />
@@ -220,49 +253,76 @@ const RUNNING_GROUP_DISTANCE = [
 
 type RunningGoalMode = "TIME" | "DISTANCE";
 
+function initRunningMode(form: WizardFormState): RunningGoalMode {
+  if (form.goal_config.distance_km !== undefined) return "DISTANCE";
+  return "TIME";
+}
+
 function RunningGoalPicker({
   form,
   onChange,
+  distanceOptions = RUNNING_DISTANCE_OPTIONS,
 }: {
   form: WizardFormState;
   onChange: (partial: Partial<WizardFormState>) => void;
+  distanceOptions?: { value: number; label: string }[];
 }) {
-  const currentMode: RunningGoalMode =
-    form.goal_config.distance_km !== undefined ? "DISTANCE" : "TIME";
+  // goal_config 파생이 아닌 로컬 state로 모드 관리 (파생 시 undefined → 모드 고정 버그 방지)
+  const [mode, setMode] = useState<RunningGoalMode>(() =>
+    initRunningMode(form),
+  );
+
+  const handleModeChange = (newMode: RunningGoalMode) => {
+    setMode(newMode);
+    onChange({
+      goal_type: newMode === "TIME" ? "DURATION" : "AMOUNT",
+      goal_config: {
+        ...form.goal_config,
+        duration_minutes:
+          newMode === "TIME" ? form.goal_config.duration_minutes : undefined,
+        distance_km:
+          newMode === "DISTANCE" ? form.goal_config.distance_km : undefined,
+      },
+    });
+  };
 
   return (
     <>
       <RadioCards
         label="목표 방식"
         options={[
-          { value: "TIME" as RunningGoalMode, emoji: "⏱️", title: "시간", desc: "분 단위 목표" },
-          { value: "DISTANCE" as RunningGoalMode, emoji: "📍", title: "거리", desc: "km 단위 목표" },
+          {
+            value: "TIME" as RunningGoalMode,
+            emoji: "⏱️",
+            title: "시간",
+            desc: "분 단위 목표",
+          },
+          {
+            value: "DISTANCE" as RunningGoalMode,
+            emoji: "📍",
+            title: "거리",
+            desc: "km 단위 목표",
+          },
         ]}
-        value={currentMode}
-        onChange={(mode) =>
-          onChange({
-            goal_config: {
-              ...form.goal_config,
-              duration_minutes: mode === "TIME" ? form.goal_config.duration_minutes : undefined,
-              distance_km: mode === "DISTANCE" ? form.goal_config.distance_km : undefined,
-            },
-          })
-        }
+        value={mode}
+        onChange={handleModeChange}
       />
-      {currentMode === "TIME" && (
+      {mode === "TIME" && (
         <Chips
           label="목표 시간"
           options={TIME_30_60_90_120}
           value={form.goal_config.duration_minutes}
           onChange={(v) =>
-            onChange({ goal_config: { ...form.goal_config, duration_minutes: v } })
+            onChange({
+              goal_config: { ...form.goal_config, duration_minutes: v },
+            })
           }
         />
       )}
-      {currentMode === "DISTANCE" && (
+      {mode === "DISTANCE" && (
         <Chips
           label="목표 거리"
-          options={RUNNING_DISTANCE_OPTIONS}
+          options={distanceOptions}
           value={form.goal_config.distance_km}
           onChange={(v) =>
             onChange({ goal_config: { ...form.goal_config, distance_km: v } })
@@ -310,7 +370,9 @@ export function RunningWeeklyForm({
         options={WEEKLY_COUNT_OPTIONS}
         value={form.goal_config.weekly_target_count}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, weekly_target_count: v } })
+          onChange({
+            goal_config: { ...form.goal_config, weekly_target_count: v },
+          })
         }
       />
       <WeeklyDurationNote />
@@ -330,24 +392,23 @@ export function RunningGroupForm({
   return (
     <div className="space-y-6">
       <Step4Header />
-      <Chips
-        label="그룹 목표 거리"
-        options={RUNNING_GROUP_DISTANCE}
-        value={form.goal_config.distance_km}
-        onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, distance_km: v } })
-        }
+      <RunningGoalPicker
+        form={form}
+        onChange={onChange}
+        distanceOptions={RUNNING_GROUP_DISTANCE}
       />
       <Chips
         label="그룹 합산 목표 횟수"
         options={GROUP_SUM_OPTIONS}
         value={form.goal_config.group_target_count}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, group_target_count: v } })
+          onChange({
+            goal_config: { ...form.goal_config, group_target_count: v },
+          })
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />
@@ -369,14 +430,18 @@ export function CyclingWeeklyForm({
     <div className="space-y-6">
       <Step4Header />
       <div className="p-3 bg-surface rounded-[10px]">
-        <p className="text-xs text-text-secondary">1일 1회만 횟수로 인정됩니다.</p>
+        <p className="text-xs text-text-secondary">
+          1일 1회만 횟수로 인정됩니다.
+        </p>
       </div>
       <Chips
         label="목표 시간"
         options={TIME_30_60_90_120}
         value={form.goal_config.duration_minutes}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, duration_minutes: v } })
+          onChange({
+            goal_config: { ...form.goal_config, duration_minutes: v },
+          })
         }
       />
       <Chips
@@ -384,7 +449,9 @@ export function CyclingWeeklyForm({
         options={WEEKLY_COUNT_OPTIONS}
         value={form.goal_config.weekly_target_count}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, weekly_target_count: v } })
+          onChange({
+            goal_config: { ...form.goal_config, weekly_target_count: v },
+          })
         }
       />
       <WeeklyDurationNote />
@@ -409,7 +476,9 @@ export function CyclingGroupForm({
         options={TIME_30_60_90_120}
         value={form.goal_config.duration_minutes}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, duration_minutes: v } })
+          onChange({
+            goal_config: { ...form.goal_config, duration_minutes: v },
+          })
         }
       />
       <Chips
@@ -417,11 +486,13 @@ export function CyclingGroupForm({
         options={GROUP_SUM_OPTIONS}
         value={form.goal_config.group_target_count}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, group_target_count: v } })
+          onChange({
+            goal_config: { ...form.goal_config, group_target_count: v },
+          })
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />
@@ -447,7 +518,9 @@ export function StrengthDailyForm({
         options={TIME_20_30_40_60}
         value={form.goal_config.duration_minutes}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, duration_minutes: v } })
+          onChange({
+            goal_config: { ...form.goal_config, duration_minutes: v },
+          })
         }
       />
       <DurationPicker
@@ -475,7 +548,9 @@ export function StrengthWeeklyForm({
         options={TIME_20_30_40_60}
         value={form.goal_config.duration_minutes}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, duration_minutes: v } })
+          onChange({
+            goal_config: { ...form.goal_config, duration_minutes: v },
+          })
         }
       />
       <Chips
@@ -483,7 +558,9 @@ export function StrengthWeeklyForm({
         options={WEEKLY_COUNT_OPTIONS}
         value={form.goal_config.weekly_target_count}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, weekly_target_count: v } })
+          onChange({
+            goal_config: { ...form.goal_config, weekly_target_count: v },
+          })
         }
       />
       <WeeklyDurationNote />
@@ -508,7 +585,9 @@ export function StrengthGroupForm({
         options={TIME_20_30_40_60}
         value={form.goal_config.duration_minutes}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, duration_minutes: v } })
+          onChange({
+            goal_config: { ...form.goal_config, duration_minutes: v },
+          })
         }
       />
       <Chips
@@ -516,11 +595,13 @@ export function StrengthGroupForm({
         options={GROUP_SUM_OPTIONS}
         value={form.goal_config.group_target_count}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, group_target_count: v } })
+          onChange({
+            goal_config: { ...form.goal_config, group_target_count: v },
+          })
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />
@@ -546,7 +627,9 @@ export function SwimmingWeeklyForm({
         options={WEEKLY_COUNT_OPTIONS}
         value={form.goal_config.weekly_target_count}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, weekly_target_count: v } })
+          onChange({
+            goal_config: { ...form.goal_config, weekly_target_count: v },
+          })
         }
       />
       <WeeklyDurationNote />
@@ -571,11 +654,13 @@ export function SwimmingGroupForm({
         options={GROUP_SUM_OPTIONS}
         value={form.goal_config.group_target_count}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, group_target_count: v } })
+          onChange({
+            goal_config: { ...form.goal_config, group_target_count: v },
+          })
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />
@@ -587,8 +672,15 @@ export function SwimmingGroupForm({
 
 /* ─── 기타 운동 (OTHER) ─── */
 const OTHER_EXERCISE_TYPES = [
-  "등산", "요가", "필라테스", "홈트레이닝",
-  "배드민턴", "테니스", "축구", "농구", "기타",
+  "등산",
+  "요가",
+  "필라테스",
+  "홈트레이닝",
+  "배드민턴",
+  "테니스",
+  "축구",
+  "농구",
+  "기타",
 ];
 
 const OTHER_GROUP_SUM_OPTIONS = [
@@ -606,7 +698,7 @@ function OtherTypePicker({
   onChange: (v: string) => void;
 }) {
   const [customVal, setCustomVal] = useState(
-    value && !OTHER_EXERCISE_TYPES.slice(0, -1).includes(value) ? value : ""
+    value && !OTHER_EXERCISE_TYPES.slice(0, -1).includes(value) ? value : "",
   );
 
   return (
@@ -618,7 +710,8 @@ function OtherTypePicker({
         {OTHER_EXERCISE_TYPES.map((t) => {
           const isCustom = t === "기타";
           const isSelected = isCustom
-            ? (value !== undefined && !OTHER_EXERCISE_TYPES.slice(0, -1).includes(value))
+            ? value !== undefined &&
+              !OTHER_EXERCISE_TYPES.slice(0, -1).includes(value)
             : value === t;
           return (
             <button
@@ -670,7 +763,9 @@ export function OtherWeeklyForm({
       <OtherTypePicker
         value={form.goal_config.exercise_other_type}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, exercise_other_type: v } })
+          onChange({
+            goal_config: { ...form.goal_config, exercise_other_type: v },
+          })
         }
       />
       <Chips
@@ -678,7 +773,9 @@ export function OtherWeeklyForm({
         options={WEEKLY_COUNT_OPTIONS}
         value={form.goal_config.weekly_target_count}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, weekly_target_count: v } })
+          onChange({
+            goal_config: { ...form.goal_config, weekly_target_count: v },
+          })
         }
       />
       <WeeklyDurationNote />
@@ -701,7 +798,9 @@ export function OtherGroupForm({
       <OtherTypePicker
         value={form.goal_config.exercise_other_type}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, exercise_other_type: v } })
+          onChange({
+            goal_config: { ...form.goal_config, exercise_other_type: v },
+          })
         }
       />
       <Chips
@@ -709,11 +808,13 @@ export function OtherGroupForm({
         options={OTHER_GROUP_SUM_OPTIONS}
         value={form.goal_config.group_target_count}
         onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, group_target_count: v } })
+          onChange({
+            goal_config: { ...form.goal_config, group_target_count: v },
+          })
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />

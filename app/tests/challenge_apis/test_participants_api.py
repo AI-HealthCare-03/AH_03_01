@@ -19,12 +19,14 @@ class TestChallengeParticipantsApi(TestCase):
                 "unit": "회",
                 "verification_type": "CHECK",
                 "max_participants": max_participants,
+                "goal_config": {"group_target_count": 30},
                 "start_date": start,
                 "end_date": end,
             },
         )
 
-    async def test_join_by_code_pending_then_owner_approve(self):
+    async def test_join_by_code_auto_approved(self):
+        # 유효한 초대 코드 보유 = 신뢰로 간주 → 코드 참가는 즉시 APPROVED (방장 승인 불필요).
         async with make_client() as client:
             owner = await signup_and_login(client, email="own_app@example.com", phone_number="01040000001")
             owner_h = {"Authorization": f"Bearer {owner}"}
@@ -42,20 +44,9 @@ class TestChallengeParticipantsApi(TestCase):
                 json={"invite_code": invite_code},
             )
             assert join.status_code == status.HTTP_201_CREATED
-            assert join.json()["status"] == "PENDING"
+            assert join.json()["status"] == "APPROVED"
 
-            # 멤버는 대기 상태에서 챌린지 상세 접근 불가
-            denied = await client.get(f"/api/v1/challenges/{cid}", headers=member_h)
-            assert denied.status_code == status.HTTP_403_FORBIDDEN
-
-            target_user_id = join.json()["user_id"]
-            approve = await client.patch(
-                f"/api/v1/challenges/{cid}/participants/{target_user_id}?action=approve",
-                headers=owner_h,
-            )
-            assert approve.status_code == status.HTTP_200_OK
-            assert approve.json()["status"] == "APPROVED"
-
+            # 즉시 승인 상태이므로 멤버는 바로 챌린지 상세에 접근 가능
             ok = await client.get(f"/api/v1/challenges/{cid}", headers=member_h)
             assert ok.status_code == status.HTTP_200_OK
 

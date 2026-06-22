@@ -174,9 +174,10 @@ export function TitleInput({
         className="w-full h-12 px-4 rounded-[12px] border border-border text-sm focus:outline-none focus:border-brand-black bg-white"
         placeholder="챌린지 이름을 입력하세요"
       />
-      <p className="text-xs text-text-tertiary mt-1 text-right">
-        {value.length}/40
-      </p>
+      <div className="flex justify-between mt-1">
+        <p className="text-xs text-text-tertiary">2자 이상 입력해주세요</p>
+        <p className="text-xs text-text-tertiary">{value.length}/40</p>
+      </div>
     </div>
   );
 }
@@ -213,6 +214,31 @@ export function MaxParticipantsSlider({
         <span>5명</span>
       </div>
     </div>
+  );
+}
+
+/* ─── 그룹 최대 참여 인원 칩 (2/3/4/5명) ─── */
+export const MAX_PARTICIPANTS_OPTIONS = [
+  { value: 2, label: "2명" },
+  { value: 3, label: "3명" },
+  { value: 4, label: "4명" },
+  { value: 5, label: "5명" },
+];
+
+export function MaxParticipantsChips({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <Chips
+      label="최대 참여 인원"
+      options={MAX_PARTICIPANTS_OPTIONS}
+      value={value}
+      onChange={onChange}
+    />
   );
 }
 

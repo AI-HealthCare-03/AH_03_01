@@ -164,10 +164,10 @@ class Challenge(models.Model):
         on_delete=fields.SET_NULL,
     )
     template_id: int | None
-    creator: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(
-        "models.User", related_name="created_challenges", on_delete=fields.CASCADE
+    creator: fields.ForeignKeyNullableRelation["User"] = fields.ForeignKeyField(
+        "models.User", related_name="created_challenges", null=True, on_delete=fields.SET_NULL
     )
-    creator_id: int
+    creator_id: int | None
     title = fields.CharField(max_length=120)
     description = fields.TextField(null=True)
     category = fields.CharEnumField(enum_type=ChallengeCategory)
@@ -265,6 +265,8 @@ class ChallengeVerification(models.Model):
     photo_file_id = fields.BigIntField(null=True)
     shield_inventory_id = fields.BigIntField(null=True)
     status = fields.CharEnumField(enum_type=VerificationStatus, default=VerificationStatus.PENDING)
+    caption = fields.TextField(null=True)
+    verified_duration_seconds = fields.IntField(null=True)
     rejection_reason = fields.TextField(null=True)
     like_count = fields.IntField(default=0)
     comment_count = fields.IntField(default=0)
@@ -330,6 +332,13 @@ class ChallengeReaction(models.Model):
     user_id: int
     type = fields.CharEnumField(enum_type=ReactionType)
     content = fields.TextField(null=True)
+    parent: fields.ForeignKeyNullableRelation["ChallengeReaction"] = fields.ForeignKeyField(
+        "models.ChallengeReaction",
+        related_name="replies",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
+    parent_id: int | None
     is_deleted = fields.BooleanField(default=False)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Activity, Trophy, MessageCircle, User, Sparkles } from "lucide-react";
 import ProfileDropdown from "@/components/layout/ProfileDropdown";
+import NotificationDropdown from "@/components/layout/NotificationDropdown";
 import { usePointBalance } from "@/hooks/queries/usePointBalance";
 
 /* =========================================
@@ -30,7 +31,7 @@ export default function GNB() {
       <header className="hidden md:flex items-center justify-between px-8 h-16 border-b border-border bg-white sticky top-0 z-40">
         {/* 로고 */}
         <Link href="/" className="text-xl font-black text-brand-black">
-          헬씨루틴
+          케어로그
         </Link>
 
         {/* 네비 링크 */}
@@ -102,10 +103,11 @@ export default function GNB() {
 function HeaderRight() {
   const { data: balance } = usePointBalance(0);
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2">
       <span className="text-sm font-semibold text-text-primary">
         {(balance?.balance ?? 0).toLocaleString()} P
       </span>
+      <NotificationDropdown />
       <ProfileDropdown />
     </div>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useMe } from "@/hooks/queries/useMe";
 import { useMyPet } from "@/hooks/queries/useMyPet";
 import { usePointBalance } from "@/hooks/queries/usePointBalance";
@@ -9,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchHealthProfileDetail } from "@/lib/api/health";
 import { resolveMediaUrl } from "@/lib/api/media";
 import { useAuth } from "@/hooks/useAuth";
+import MedicationManager, { MEDICATION_STORAGE_KEY, type Medication } from "@/components/health/MedicationManager";
 
 /* =========================================
    마이페이지
@@ -56,6 +58,16 @@ export default function MyPage() {
   });
   const { logout } = useAuth();
 
+  // 복약 관리 localStorage에서 복용중인 약 이름 목록 읽기
+  const [medNames, setMedNames] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(MEDICATION_STORAGE_KEY);
+      const list: Medication[] = raw ? JSON.parse(raw) : [];
+      setMedNames(list.filter((m) => m.active).map((m) => m.name));
+    } catch { /* 무시 */ }
+  }, []);
+
   const birth = me?.birthday ?? me?.birth_date;
   const age = calcAge(birth);
   const bmi = calcBmi(profile?.height_cm, profile?.weight_kg);
@@ -82,7 +94,8 @@ export default function MyPage() {
             {meLoading ? "…" : (me?.nickname ?? me?.name ?? "—")}
           </p>
           <p className="text-xs text-text-tertiary truncate">
-            @{me?.name ?? "—"} · {me?.email}
+            {/* 소셜(카카오) 계정은 이메일이 없다 → "카카오 계정" 표기 */}
+            @{me?.name ?? "—"} · {me?.email ?? (me ? "카카오 계정" : "—")}
           </p>
         </div>
         <Link
@@ -136,7 +149,7 @@ export default function MyPage() {
           </dd>
           <dt className="text-text-tertiary">이메일</dt>
           <dd className="text-text-primary text-right truncate">
-            {me?.email ?? "—"}
+            {me?.email ?? (me ? "카카오 계정" : "—")}
           </dd>
           <dt className="text-text-tertiary">성별</dt>
           <dd className="text-text-primary text-right">
@@ -195,17 +208,20 @@ export default function MyPage() {
               return diseases.length > 0 ? diseases.join(", ") : "없음";
             })()}
           </dd>
+          <dt className="text-text-tertiary">복용중인 약</dt>
+          <dd className="text-text-primary text-right">
+            {medNames.length > 0 ? medNames.join(", ") : "없음"}
+          </dd>
           <dt className="text-text-tertiary">가족력</dt>
           <dd className="text-text-primary text-right">
             {[
-              (profile?.has_hypertension_family_history ??
-                profile?.family_history_hypertension)
+              profile?.family_hp === 1 || profile?.has_hypertension_family_history === true
                 ? "고혈압"
                 : null,
-              (profile?.has_diabetes_family_history ??
-                profile?.family_history_diabetes)
+              profile?.family_dm === 1 || profile?.has_diabetes_family_history === true
                 ? "당뇨"
                 : null,
+              profile?.family_hl === 1 ? "고지혈증" : null,
             ]
               .filter(Boolean)
               .join(", ") || "없음"}
@@ -213,17 +229,27 @@ export default function MyPage() {
         </dl>
       </section>
 
+      {/* 복약 관리 */}
+      <MedicationManager />
+
       {/* 도메인 링크 */}
       <section className="bg-white border border-border rounded-[16px] overflow-hidden">
         {[
           { href: "/mypage/edit", label: "프로필 편집", icon: "✏️" },
           { href: "/mypage/password", label: "비밀번호 변경", icon: "🔒" },
+          { href: "/mypage/display-settings", label: "화면 설정", icon: "🖥️" },
+          { href: "/mypage/notification-settings", label: "알림 설정", icon: "🔔" },
+          { href: "/mypage/wearable", label: "웨어러블 기기 연동", icon: "⌚" },
           { href: "/mypage/invitations", label: "받은 초대", icon: "📨" },
           { href: "/mypage/points", label: "포인트 내역", icon: "💰" },
           { href: "/attendance", label: "출석 체크", icon: "📅" },
           { href: "/leaderboard", label: "주간 리더보드", icon: "🏆" },
+          { href: "/support", label: "고객지원", icon: "🎧" },
           { href: "/withdrawal", label: "회원 탈퇴", icon: "🗑️" },
-        ].map((it) => (
+        ]
+          // 소셜(카카오) 계정은 비밀번호가 없어(카카오 로그인 전용) 비밀번호 변경 메뉴를 숨긴다.
+          .filter((it) => !(it.href === "/mypage/password" && !!me && me.email === null))
+          .map((it) => (
           <Link
             key={it.href}
             href={it.href}

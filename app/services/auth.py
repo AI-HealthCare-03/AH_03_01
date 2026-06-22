@@ -1,21 +1,71 @@
+import logging
+import time
+from datetime import datetime, timedelta
+from uuid import uuid4
+
 from fastapi.exceptions import HTTPException
 from pydantic import EmailStr
 from starlette import status
+from tortoise.exceptions import IntegrityError
 from tortoise.transactions import in_transaction
 
+from app.core import config
+from app.core.jwt.exceptions import TokenBackendError, TokenBackendExpiredError
+from app.core.jwt.state import token_backend
 from app.core.jwt.tokens import AccessToken, RefreshToken
 from app.core.utils.common import normalize_phone_number
-from app.core.utils.security import hash_password, verify_password
-from app.dtos.auth import LoginRequest, SignUpRequest
+from app.core.utils.security import (
+    consume_oauth_state,
+    generate_unusable_password,
+    hash_password,
+    verify_oauth_state,
+    verify_password,
+)
+from app.dtos.auth import (
+    FindIdRequest,
+    FindIdResponse,
+    KakaoCallbackResponse,
+    KakaoPrefill,
+    KakaoSignupRequest,
+    LoginRequest,
+    PreviousAccountResponse,
+    RestoredAccountResponse,
+    SignUpRequest,
+)
 from app.models.users import User
 from app.repositories.user_repository import UserRepository
+from app.services.email_verification import EmailVerificationService
 from app.services.jwt import JwtService
+from app.services.kakao_oauth import KakaoOAuthService
+
+# 탈퇴(soft delete) 후 개인정보 보관 기간. 이 기간 내에는 복구 가능, 경과 시 파기(개인정보처리방침 기준).
+ACCOUNT_RETENTION_DAYS = 30
+
+# 로그인 연속 실패 잠금 정책 — 임계 도달 시 이메일 인증으로만 해제.
+LOGIN_FAIL_LOCK_THRESHOLD = 5
+ACCOUNT_LOCKED_DETAIL = "로그인 5회 실패로 계정이 잠겼습니다. 이메일 인증으로 잠금을 해제해 주세요."
+# 잠금 임박 경고 노출 임계: 남은 시도가 이 값 이하일 때만 잔여 횟수를 안내한다.
+# (평소·미존재 이메일은 일반 메시지 유지 → 계정 열거 노출을 잠금 임박 구간으로 한정)
+LOGIN_FAIL_WARN_REMAINING = 2
+
+# 카카오 신규 가입 티켓(JWT) 유효 시간(초). 콜백→가입 폼 작성→제출까지의 짧은 단계 전용.
+KAKAO_SIGNUP_TICKET_TTL_SECONDS = 15 * 60
+KAKAO_SIGNUP_TICKET_TYPE = "kakao_signup"
+# 카카오 탈퇴 계정 복구/파기 티켓(JWT). 콜백에서 탈퇴 계정 발견 시 발급 — 복구/파기 선택 단계 전용.
+# 카카오 OAuth 로 방금 본인 확인을 마쳤으므로 이 티켓이 신원 증명을 대신한다(이메일 인증 불필요).
+KAKAO_RESTORE_TICKET_TTL_SECONDS = 15 * 60
+KAKAO_RESTORE_TICKET_TYPE = "kakao_restore"
+KAKAO_PROVIDER = "kakao"
+
+logger = logging.getLogger(__name__)
 
 
 class AuthService:
     def __init__(self):
         self.user_repo = UserRepository()
         self.jwt_service = JwtService()
+        self.email_verification = EmailVerificationService()
+        self.kakao_oauth = KakaoOAuthService()
 
     async def signup(self, data: SignUpRequest) -> User:
         # 이메일 중복 체크
@@ -23,6 +73,10 @@ class AuthService:
 
         # 닉네임 중복 체크
         await self.check_nickname_exists(data.nickname)
+
+        # 이메일 본인 인증 확인 (미인증 시 가입 차단)
+        if not await self.email_verification.is_verified(str(data.email)):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이메일 본인 인증이 필요합니다.")
 
         # 입력받은 휴대폰 번호를 노말라이즈
         normalized_phone_number = normalize_phone_number(data.phone_number)
@@ -42,7 +96,9 @@ class AuthService:
                 birthday=data.birth_date,
             )
 
-            return user
+        # 가입 성공 후 인증 완료 플래그 소비 (재사용 방지)
+        await self.email_verification.consume(str(data.email))
+        return user
 
     async def authenticate(self, data: LoginRequest) -> User:
         # 이메일로 사용자 조회
@@ -53,8 +109,24 @@ class AuthService:
                 status_code=status.HTTP_400_BAD_REQUEST, detail="이메일 또는 비밀번호가 올바르지 않습니다."
             )
 
+        # 로그인 연속 실패 잠금: 임계 도달 시 비밀번호 검증 전에 차단하고 이메일 인증 해제로 안내.
+        if user.login_fail_count >= LOGIN_FAIL_LOCK_THRESHOLD:
+            raise HTTPException(status_code=status.HTTP_423_LOCKED, detail=ACCOUNT_LOCKED_DETAIL)
+
         # 비밀번호 검증
         if not verify_password(data.password, user.hashed_password):
+            await self.user_repo.increment_login_fail(user.id)
+            new_fail_count = user.login_fail_count + 1
+            # 이번 실패로 임계 도달 시 잠금 안내.
+            if new_fail_count >= LOGIN_FAIL_LOCK_THRESHOLD:
+                raise HTTPException(status_code=status.HTTP_423_LOCKED, detail=ACCOUNT_LOCKED_DETAIL)
+            # 잠금 임박(남은 시도 ≤ 임계) 시에만 잔여 횟수 경고. 그 외엔 일반 메시지로 계정 열거 방지.
+            remaining = LOGIN_FAIL_LOCK_THRESHOLD - new_fail_count
+            if remaining <= LOGIN_FAIL_WARN_REMAINING:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"비밀번호가 올바르지 않습니다. {remaining}회 더 실패하면 계정이 잠깁니다.",
+                )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="이메일 또는 비밀번호가 올바르지 않습니다."
             )
@@ -63,7 +135,377 @@ class AuthService:
         if not user.is_active:
             raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="비활성화된 계정입니다.")
 
+        # 로그인 성공 — 누적 실패 카운트 초기화.
+        if user.login_fail_count:
+            await self.user_repo.reset_login_fail(user.id)
+
         return user
+
+    async def find_id(self, data: FindIdRequest) -> FindIdResponse:
+        # 가입 시 노말라이즈된 형태로 저장되므로 동일하게 정규화 후 조회
+        normalized_phone_number = normalize_phone_number(data.phone_number)
+        user = await self.user_repo.get_user_by_name_and_phone(data.name, normalized_phone_number)
+
+        # 계정 열거(account enumeration) 방어: 미일치 시 동일한 404 응답
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="일치하는 계정을 찾을 수 없습니다.")
+
+        # 소셜(카카오) 계정은 이메일이 없으므로 masked_email=None + social_provider 로 카카오 로그인 안내.
+        return FindIdResponse(
+            masked_email=self._mask_email(user.email),
+            social_provider=user.social_provider,
+            created_at=user.created_at.date(),
+        )
+
+    async def get_previous_account(self, email: str) -> PreviousAccountResponse:
+        """이메일로 복구 가능한 탈퇴 계정을 감지. 인증 전이므로 마스킹 이메일·탈퇴일·복구마감만 반환.
+
+        상세 통계(챌린지·포인트·펫)는 복구(이메일 인증) 단계에서 제공한다.
+        """
+        user = await self.user_repo.get_deleted_by_email(email)
+        if user is None or user.deleted_at is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="복구 가능한 탈퇴 계정이 없습니다.")
+
+        deadline = user.deleted_at + timedelta(days=ACCOUNT_RETENTION_DAYS)
+        if deadline <= datetime.now(config.TIMEZONE):
+            # 보관 기간 경과 — 곧 파기되거나 파기됨, 복구 불가
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="복구 가능한 탈퇴 계정이 없습니다.")
+
+        return PreviousAccountResponse(
+            masked_email=self._mask_email(user.email),
+            deleted_at=user.deleted_at,
+            restore_deadline=deadline,
+        )
+
+    async def restore_account(self, email: str) -> RestoredAccountResponse:
+        """이메일 본인 인증을 마친 사용자의 탈퇴 계정을 복구(is_deleted=false)한다.
+
+        보관 기간 내 탈퇴 계정만 복구 가능. 인증 완료자에게만 상세 통계를 반환한다.
+        """
+        if not await self.email_verification.is_verified(email):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이메일 본인 인증이 필요합니다.")
+
+        user = await self.user_repo.get_deleted_by_email(email)
+        if user is None or user.deleted_at is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="복구 가능한 탈퇴 계정이 없습니다.")
+        if user.deleted_at + timedelta(days=ACCOUNT_RETENTION_DAYS) <= datetime.now(config.TIMEZONE):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="복구 가능한 탈퇴 계정이 없습니다.")
+        if user.is_banned:  # 운영자 제재(ban) 우회 방지 — get_request_user 와 동일하게 정지 계정은 하드 차단
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="정지된 계정은 복구할 수 없습니다.")
+
+        prev_deleted_at = user.deleted_at
+        user.is_deleted = False
+        user.is_active = True
+        user.deleted_at = None  # type: ignore[assignment]  # null=True 필드(스텁은 datetime)
+        user.withdrawal_reason = None  # type: ignore[assignment]  # null=True 필드(스텁은 str)
+        async with in_transaction():
+            await user.save(update_fields=["is_deleted", "is_active", "deleted_at", "withdrawal_reason", "updated_at"])
+        await self.email_verification.consume(email)
+
+        try:
+            stats = await self._account_stats(user.id)
+        except Exception:  # noqa: BLE001  # 부가 통계 실패가 이미 커밋된 복구를 500 으로 깨뜨리지 않도록 폴백
+            stats = {"challenge_count": 0, "points": 0, "pet_name": None}
+        return RestoredAccountResponse(
+            email=user.email,
+            created_at=user.created_at,
+            deleted_at=prev_deleted_at,
+            challenge_count=stats["challenge_count"],
+            points=stats["points"],
+            pet_name=stats["pet_name"],
+        )
+
+    async def destroy_previous_account(self, email: str) -> None:
+        """이메일 본인 인증을 마친 사용자의 탈퇴 계정을 즉시 영구 파기(하드 삭제)한다.
+
+        '새로 시작하기' — 30일 보관 기간을 기다리지 않고 본인 요청으로 파기.
+        DB cascade 로 PII/PHI 동반 삭제(챌린지는 creator SET_NULL 로 보존).
+        """
+        if not await self.email_verification.is_verified(email):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이메일 본인 인증이 필요합니다.")
+
+        user = await self.user_repo.get_deleted_by_email(email)
+        if user is None or user.deleted_at is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="파기할 탈퇴 계정이 없습니다.")
+        if user.is_banned:  # 정지 계정은 본인 파기로 자료 인멸 못 하게 차단(운영/조사 보존)
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="정지된 계정은 파기할 수 없습니다.")
+
+        async with in_transaction():
+            await user.delete()
+        await self.email_verification.consume(email)
+        # 감사 추적: 비가역 영구 파기 — PII 마스킹(이메일)하여 기록.
+        logger.info("탈퇴 계정 영구 파기 user_id=%s email=%s", user.id, self._mask_email(email))
+
+    async def reset_password(self, email: str, name: str, new_password: str) -> None:
+        """이메일 본인 인증을 마친 사용자가 새 비밀번호를 설정한다(비밀번호 찾기).
+
+        email+name 으로 계정을 식별하고, 새 비밀번호가 기존과 같으면 거부한다.
+        """
+        if not await self.email_verification.is_verified(email):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이메일 본인 인증이 필요합니다.")
+
+        user = await self.user_repo.get_user_by_email(email)
+        if user is None or user.is_deleted or user.name != name:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="일치하는 계정을 찾을 수 없습니다.")
+
+        # 소셜(카카오) 전용 계정은 비밀번호 로그인이 없다 — reset_password 로 사용 가능한 비번을
+        # 심으면 의도치 않게 이메일+비밀번호 로그인 경로가 열리므로 차단한다.
+        if user.social_provider:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="소셜 로그인 전용 계정은 비밀번호를 설정할 수 없습니다.",
+            )
+
+        if verify_password(new_password, user.hashed_password):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 사용 중인 비밀번호입니다.")
+
+        user.hashed_password = hash_password(new_password)
+        async with in_transaction():
+            await user.save(update_fields=["hashed_password", "updated_at"])
+        await self.email_verification.consume(email)
+        # 감사 추적: 비밀번호 재설정 — PII 마스킹(이메일)하여 기록.
+        logger.info("비밀번호 재설정 user_id=%s email=%s", user.id, self._mask_email(email))
+
+    async def unlock_account(self, email: str, name: str) -> None:
+        """로그인 연속 실패로 잠긴 계정을 이메일 본인 인증 후 해제(실패 카운트 초기화).
+
+        비밀번호 재설정과 동일하게 email 본인 인증 + email/name 일치로 계정을 식별한다.
+        """
+        if not await self.email_verification.is_verified(email):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이메일 본인 인증이 필요합니다.")
+
+        user = await self.user_repo.get_user_by_email(email)
+        if user is None or user.is_deleted or user.name != name:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="일치하는 계정을 찾을 수 없습니다.")
+
+        await self.user_repo.reset_login_fail(user.id)
+        await self.email_verification.consume(email)
+        # 감사 추적: 계정 잠금 해제 — PII 마스킹(이메일)하여 기록.
+        logger.info("계정 잠금 해제 user_id=%s email=%s", user.id, self._mask_email(email))
+
+    @staticmethod
+    async def _account_stats(user_id: object) -> dict:
+        """복구 계정의 요약 통계(챌린지 수·포인트·펫 이름). 순환 import 방지 위해 지연 import."""
+        from app.models.challenge import ChallengeParticipant, ParticipantStatus  # noqa: PLC0415
+        from app.repositories.pet_repository import PetRepository  # noqa: PLC0415
+        from app.services.pet import PointService  # noqa: PLC0415
+
+        points = await PointService().balance(user_id)  # type: ignore[arg-type]  # UUID PK (스텁 int)
+        pet = await PetRepository().get_by_user(user_id)  # type: ignore[arg-type]
+        challenge_count = await ChallengeParticipant.filter(user_id=user_id, status=ParticipantStatus.APPROVED).count()
+        return {"challenge_count": challenge_count, "points": points, "pet_name": pet.name if pet else None}
+
+    @staticmethod
+    def _mask_email(email: str | None) -> str | None:
+        """이메일 로컬파트를 처음/끝 1글자만 남기고 마스킹. 예: jkh3043@gmail.com -> j*****3@gmail.com
+        소셜(카카오) 계정은 이메일이 없어 None 이 들어올 수 있으며 그대로 None 을 돌려준다."""
+        if not email:
+            return None
+        local, _, domain = email.partition("@")
+        if not domain:
+            return email
+        if len(local) <= 2:
+            return f"{local[0]}*@{domain}"
+        masked = local[0] + "*" * (len(local) - 2) + local[-1]
+        return f"{masked}@{domain}"
+
+    async def kakao_callback(
+        self, code: str, state: str
+    ) -> tuple[KakaoCallbackResponse, dict[str, AccessToken | RefreshToken] | None]:
+        """카카오 콜백 처리.
+
+        기존 소셜 계정이면 로그인(access/refresh 토큰 dict 함께 반환), 신규면 가입 티켓을 발급한다.
+        반환: (응답 DTO, 토큰 dict | None). 라우터가 None 이 아닐 때만 쿠키를 심는다.
+        """
+        if not verify_oauth_state(state):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="유효하지 않은 인증 요청입니다.")
+        # state 단일 사용 — 동일 state 재사용(replay) 차단. Redis 장애 시 fail-open(위 HMAC/TTL 검증 유지).
+        if not await consume_oauth_state(state):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="유효하지 않은 인증 요청입니다.")
+
+        kakao_access_token = await self.kakao_oauth.exchange_code(code)
+        profile = await self.kakao_oauth.fetch_profile(kakao_access_token)
+
+        user = await self.user_repo.get_user_by_social(KAKAO_PROVIDER, profile.social_id)
+        if user is not None:
+            if user.is_banned:
+                # 정지(ban)는 인가 거부이므로 403 — 앱 전반(dependencies/security.py)·복구/파기와 동일.
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="정지된 계정입니다.")
+            if user.is_deleted:
+                # 일반 로그인과 동일하게 복구/파기를 사용자가 선택하게 한다. 단, 카카오는 방금 OAuth 로
+                # 본인 확인을 마쳤으므로 이메일 인증 대신 단기 복구 티켓(신원 증명)으로 처리한다.
+                return self._kakao_deleted_response(user), None
+            tokens = await self.login(user)
+            response = KakaoCallbackResponse(status="login", access_token=str(tokens["access_token"]))
+            return response, tokens
+
+        # 신규 사용자 — 추가 정보 입력을 위한 단기 가입 티켓 발급.
+        signup_ticket = token_backend.encode(
+            {
+                "type": KAKAO_SIGNUP_TICKET_TYPE,
+                "provider": KAKAO_PROVIDER,
+                "social_id": profile.social_id,
+                # 소셜 계정은 이메일 미수집 → 닉네임만 prefill.
+                "prefill": {"nickname": profile.nickname},
+                "exp": int(time.time()) + KAKAO_SIGNUP_TICKET_TTL_SECONDS,
+                "jti": uuid4().hex,
+            }
+        )
+        response = KakaoCallbackResponse(
+            status="signup_required",
+            signup_ticket=signup_ticket,
+            prefill=KakaoPrefill(nickname=profile.nickname),
+        )
+        return response, None
+
+    async def kakao_signup(self, data: KakaoSignupRequest) -> dict[str, AccessToken | RefreshToken]:
+        """카카오 가입 티켓 + 추가 입력으로 신규 소셜 계정을 생성하고 로그인 토큰을 발급한다."""
+        if not (data.terms_agreed and data.privacy_agreed):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="약관 및 개인정보 처리방침 동의가 필요합니다."
+            )
+
+        social_id = self._decode_kakao_signup_ticket(data.signup_ticket)
+
+        # 티켓 재사용/경합 방지 + 일반 가입 중복 검증(기존 헬퍼 재사용).
+        if await self.user_repo.get_user_by_social(KAKAO_PROVIDER, social_id) is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 가입된 카카오 계정입니다.")
+        # 소셜 계정은 이메일을 수집하지 않는다(카카오가 본인인증 대행, 복구=카카오 재로그인) → email 검증/저장 없음.
+        await self.check_nickname_exists(data.nickname)
+
+        normalized_phone_number = normalize_phone_number(data.phone_number)
+        await self.check_phone_number_exists(normalized_phone_number)
+
+        now = datetime.now(config.TIMEZONE)
+        try:
+            async with in_transaction():
+                user = await self.user_repo.create_user(
+                    email=None,  # 소셜 계정은 이메일 미수집
+                    hashed_password=generate_unusable_password(),  # 비번 로그인 불가(소셜 전용)
+                    name=data.name,
+                    nickname=data.nickname,
+                    phone_number=normalized_phone_number,
+                    gender=data.gender,
+                    birthday=data.birth_date,
+                    social_provider=KAKAO_PROVIDER,
+                    social_id=social_id,
+                )
+                user.terms_agreed_at = now
+                user.privacy_agreed_at = now
+                await user.save(update_fields=["terms_agreed_at", "privacy_agreed_at", "updated_at"])
+        except IntegrityError as err:
+            # 코드레벨 중복검사~INSERT 사이 동시 가입(TOCTOU)은 (social_provider, social_id)
+            # 유니크 인덱스가 막는다. 500 대신 409 로 정리한다.
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 가입된 계정입니다.") from err
+
+        return await self.login(user)
+
+    @staticmethod
+    def _decode_kakao_signup_ticket(ticket: str) -> str:
+        """가입 티켓을 검증하고 social_id 를 반환. 만료/위조/타입불일치는 401."""
+        try:
+            payload = token_backend.decode(ticket)
+        except TokenBackendExpiredError as err:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="가입 세션이 만료되었습니다. 다시 시도해 주세요."
+            ) from err
+        except TokenBackendError as err:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 가입 요청입니다."
+            ) from err
+
+        if payload.get("type") != KAKAO_SIGNUP_TICKET_TYPE or not payload.get("social_id"):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 가입 요청입니다.")
+        return str(payload["social_id"])
+
+    def _kakao_deleted_response(self, user: User) -> KakaoCallbackResponse:
+        """탈퇴한 카카오 계정 발견 시 복구/파기 선택 화면용 응답을 만든다.
+
+        복구 티켓에 social_id 를 담아 후속 복구/파기 요청의 신원 증명으로 쓴다(보관 기간 무관 발급 —
+        복구는 마감 검사, 파기는 마감 무관이라 일반 흐름과 동일).
+        """
+        if not user.social_id:  # 카카오 콜백 경로상 항상 존재하나, 필드가 null=True 라 방어적으로 가드.
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="소셜 계정 정보 오류입니다.")
+        restore_ticket = token_backend.encode(
+            {
+                "type": KAKAO_RESTORE_TICKET_TYPE,
+                "provider": KAKAO_PROVIDER,
+                "social_id": user.social_id,
+                "exp": int(time.time()) + KAKAO_RESTORE_TICKET_TTL_SECONDS,
+                "jti": uuid4().hex,
+            }
+        )
+        deadline = user.deleted_at + timedelta(days=ACCOUNT_RETENTION_DAYS) if user.deleted_at else None
+        return KakaoCallbackResponse(
+            status="restore_required",
+            restore_ticket=restore_ticket,
+            masked_email=self._mask_email(user.email),
+            deleted_at=user.deleted_at,
+            restore_deadline=deadline,
+        )
+
+    async def kakao_restore(self, restore_ticket: str) -> dict[str, AccessToken | RefreshToken]:
+        """카카오 복구 티켓으로 탈퇴 계정을 복구(is_deleted=false)하고 바로 로그인 토큰을 발급한다.
+
+        티켓 자체가 카카오 신원 증명이므로 이메일 인증을 요구하지 않는다. 보관 기간 내 계정만 복구 가능.
+        """
+        user = await self._find_deleted_kakao_user(restore_ticket)
+        if user.deleted_at is None or user.deleted_at + timedelta(days=ACCOUNT_RETENTION_DAYS) <= datetime.now(
+            config.TIMEZONE
+        ):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="복구 가능한 탈퇴 계정이 없습니다.")
+        if user.is_banned:  # 운영자 제재(ban) 우회 방지 — 일반 복구와 동일하게 정지 계정은 하드 차단
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="정지된 계정은 복구할 수 없습니다.")
+
+        user.is_deleted = False
+        user.is_active = True
+        user.deleted_at = None  # type: ignore[assignment]  # null=True 필드(스텁은 datetime)
+        user.withdrawal_reason = None  # type: ignore[assignment]  # null=True 필드(스텁은 str)
+        async with in_transaction():
+            await user.save(update_fields=["is_deleted", "is_active", "deleted_at", "withdrawal_reason", "updated_at"])
+        # 감사 추적: 카카오 신원 기반 복구 — PII 마스킹(이메일)하여 기록.
+        logger.info("카카오 탈퇴 계정 복구 user_id=%s email=%s", user.id, self._mask_email(user.email))
+        return await self.login(user)
+
+    async def kakao_destroy(self, restore_ticket: str) -> None:
+        """카카오 복구 티켓으로 탈퇴 계정을 즉시 영구 파기(하드 삭제)한다 — '새로 시작하기'.
+
+        보관 기간을 기다리지 않고 본인 요청으로 파기. DB cascade 로 PII/PHI 동반 삭제.
+        """
+        user = await self._find_deleted_kakao_user(restore_ticket)
+        if user.is_banned:  # 정지 계정은 본인 파기로 자료 인멸 못 하게 차단(운영/조사 보존)
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="정지된 계정은 파기할 수 없습니다.")
+
+        user_id = user.id
+        email = user.email
+        async with in_transaction():
+            await user.delete()
+        # 감사 추적: 비가역 영구 파기 — PII 마스킹(이메일)하여 기록.
+        logger.info("카카오 탈퇴 계정 영구 파기 user_id=%s email=%s", user_id, self._mask_email(email))
+
+    async def _find_deleted_kakao_user(self, restore_ticket: str) -> User:
+        """복구 티켓을 검증하고 그 social_id 의 탈퇴 카카오 계정을 반환한다. 미존재/미탈퇴는 404."""
+        social_id = self._decode_kakao_restore_ticket(restore_ticket)
+        user = await self.user_repo.get_user_by_social(KAKAO_PROVIDER, social_id)
+        if user is None or not user.is_deleted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="복구 가능한 탈퇴 계정이 없습니다.")
+        return user
+
+    @staticmethod
+    def _decode_kakao_restore_ticket(ticket: str) -> str:
+        """복구 티켓을 검증하고 social_id 를 반환. 만료/위조/타입불일치는 401."""
+        try:
+            payload = token_backend.decode(ticket)
+        except TokenBackendExpiredError as err:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="세션이 만료되었습니다. 다시 로그인해 주세요."
+            ) from err
+        except TokenBackendError as err:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 요청입니다.") from err
+
+        if payload.get("type") != KAKAO_RESTORE_TICKET_TYPE or not payload.get("social_id"):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 요청입니다.")
+        return str(payload["social_id"])
 
     async def login(self, user: User) -> dict[str, AccessToken | RefreshToken]:
         await self.user_repo.update_last_login(user.id)

@@ -13,7 +13,6 @@ from app.dtos.pet import (
     PetCreateRequest,
     PetUpdateRequest,
     PurchaseRequest,
-    RewardClaimRequest,
 )
 from app.models.pet import (
     AttendanceCheck,
@@ -64,6 +63,20 @@ CONSUMABLE_POLICY: dict[str, dict[str, int]] = {
 }
 ANIMAL_ONLY_CATEGORIES = {"FOOD_ANIMAL", "FOOD_ANIMAL_PREMIUM", "SNACK_ANIMAL"}
 PLANT_ONLY_CATEGORIES = {"FERTILIZER_PLANT", "FERTILIZER_PLANT_PREMIUM", "SUPPLEMENT_PLANT"}
+
+
+def _assert_species_not_blocked(item: Item, pet: Pet) -> None:
+    """item_metadata.species_block 에 펫 종류가 들어 있으면 구매/장착을 막는다.
+
+    단일 species_lock 으로 표현 불가한 "강아지+고양이 전용(식물 제외)" 같은
+    경우에 사용한다. 예: 리본/꽃/공 꾸미기는 species_block=["DOG"? no] → ["PLANT"].
+    """
+    blocked = (item.item_metadata or {}).get("species_block") or []
+    if pet.pet_type.value in blocked:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"이 아이템은 {pet.pet_type.value} 펫에게 사용할 수 없습니다.",
+        )
 
 
 class PetService:
@@ -267,18 +280,24 @@ class StoreService:
         item = await self.item_repo.get(data.item_id)
         if item is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="아이템을 찾을 수 없습니다.")
+        if (item.item_metadata or {}).get("species_block"):
+            pet = await Pet.get_or_none(user_id=user.id)
+            if pet is not None:
+                _assert_species_not_blocked(item, pet)
         total_cost = item.price * data.quantity
         async with in_transaction():
             balance = await self.point_repo.balance(user.id)
             if balance < total_cost:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="포인트 잔액이 부족합니다.")
-            await self.point_repo.spend(
-                user_id=user.id,
-                amount=total_cost,
-                source=PointSource.STORE_PURCHASE,
-                source_id=item.id,
-                description=f"{item.name} {data.quantity}개 구매",
-            )
+            # 무료(0P) 아이템은 포인트 차감을 건너뛴다 (spend 는 amount>0 만 허용).
+            if total_cost > 0:
+                await self.point_repo.spend(
+                    user_id=user.id,
+                    amount=total_cost,
+                    source=PointSource.STORE_PURCHASE,
+                    source_id=item.id,
+                    description=f"{item.name} {data.quantity}개 구매",
+                )
             inventory = await self.inventory_repo.upsert(user.id, item.id, increment=data.quantity)
             new_balance = await self.point_repo.balance(user.id)
         return {
@@ -352,12 +371,21 @@ class InventoryService:
 
             if category_value == ItemCategory.BACKGROUND.value:
                 pet = await self.pet_service.get_or_404(user)
-                pet.equipped_background_id = item.id
+                # 토글: 이미 적용된 배경을 다시 사용하면 해제(기본 배경으로 복귀).
+                if pet.equipped_background_id == item.id:
+                    pet.equipped_background_id = None
+                    suffix = "배경을 해제했어요."
+                else:
+                    pet.equipped_background_id = item.id
+                    suffix = "배경을 적용했어요."
                 await pet.save(update_fields=["equipped_background_id"])
-                return self._equip_response(inv, item, pet, suffix="배경을 적용했어요.")
+                return self._equip_response(inv, item, pet, suffix=suffix)
 
             if category_value in {ItemCategory.FURNITURE.value, ItemCategory.DECORATION.value}:
                 pet = await self.pet_service.get_or_404(user)
+                # 종 전용 가구(밥/물그릇 species_lock)·식물 차단(species_block) 모두 장착 시점에 강제.
+                self._check_species_lock(item, pet)
+                _assert_species_not_blocked(item, pet)
                 attr = (
                     "equipped_furniture_ids"
                     if category_value == ItemCategory.FURNITURE.value
@@ -370,8 +398,9 @@ class InventoryService:
                     toggled_on = False
                 else:
                     current.append(item.id)
-                    # 슬롯 최대 2개 유지 (오래된 것 제거)
-                    current = current[-2:]
+                    # 슬롯 한도 유지 (오래된 것 제거). 가구는 여러 개 배치 가능, 꾸미기는 소수.
+                    max_slots = 12 if category_value == ItemCategory.FURNITURE.value else 4
+                    current = current[-max_slots:]
                     toggled_on = True
                 setattr(pet, attr, current)
                 await pet.save(update_fields=[attr])
@@ -526,60 +555,6 @@ class AttendanceService:
         }
 
 
-class RewardClaimService:
-    """챌린지 보상 명시 클레임 API. 자동 지급되지 않은 보상을 사용자가 요청해 받을 때 사용."""
-
-    def __init__(self) -> None:
-        self.reward_service = RewardService()
-        self.point_repo = PointTransactionRepository()
-
-    async def claim(
-        self,
-        user: User,
-        reward_type: str,
-        data: RewardClaimRequest,
-    ) -> dict[str, Any]:
-        async with in_transaction():
-            if reward_type == "daily":
-                if data.verification_id is None:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="daily 보상은 verification_id 가 필요합니다.",
-                    )
-                result = await self.reward_service.grant_daily(
-                    user_id=user.id,
-                    challenge_id=data.challenge_id,
-                    verification_id=data.verification_id,
-                )
-            elif reward_type == "period":
-                result = await self.reward_service.grant_period_completion(
-                    user_id=user.id, challenge_id=data.challenge_id
-                )
-            elif reward_type == "group":
-                if not data.difficulty_level:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="group 보상은 difficulty_level 이 필요합니다.",
-                    )
-                result = await self.reward_service.grant_group_completion(
-                    user_id=user.id,
-                    challenge_id=data.challenge_id,
-                    difficulty_level=data.difficulty_level,
-                )
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="rewardType 은 daily|period|group 입니다.",
-                )
-            new_balance = await self.point_repo.balance(user.id)
-        return {
-            "transaction_id": result.transaction.id,
-            "reward_type": result.reward_type,
-            "point_amount": result.amount,
-            "point_balance": new_balance,
-        }
-
-
 class RescueTicketService:
     """SHIELD 인증 처리 시 사용. 보유 티켓 1장 차감 + 사용 기록 생성."""
 
@@ -648,6 +623,7 @@ async def equipped_slots_payload(pet: Pet) -> dict[str, Any]:
             "id": bg.id,
             "name": bg.name,
             "gradient": (bg.item_metadata or {}).get("gradient"),
+            "image": (bg.item_metadata or {}).get("image"),
         }
     return {
         "equipped_background": bg_payload,
@@ -658,6 +634,8 @@ async def equipped_slots_payload(pet: Pet) -> dict[str, Any]:
                 "emoji": (items_by_id[fid].item_metadata or {}).get("emoji"),
                 "slot": (items_by_id[fid].item_metadata or {}).get("slot"),
                 "placement": (items_by_id[fid].item_metadata or {}).get("placement"),
+                "asset": (items_by_id[fid].item_metadata or {}).get("asset"),
+                "variant": (items_by_id[fid].item_metadata or {}).get("variant"),
             }
             for fid in furn_ids
             if fid in items_by_id
@@ -668,6 +646,8 @@ async def equipped_slots_payload(pet: Pet) -> dict[str, Any]:
                 "name": items_by_id[did].name,
                 "emoji": (items_by_id[did].item_metadata or {}).get("emoji"),
                 "placement": (items_by_id[did].item_metadata or {}).get("placement"),
+                "asset": (items_by_id[did].item_metadata or {}).get("asset"),
+                "variant": (items_by_id[did].item_metadata or {}).get("variant"),
             }
             for did in deco_ids
             if did in items_by_id

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import logging
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -22,7 +25,27 @@ from app.repositories.chatbot_repository import (
 )
 from app.services.ml import ChatbotRAG, RAGAnswer
 
+_logger = logging.getLogger(__name__)
+
 MAX_TITLE_LENGTH = 30
+
+# 최종 답변 토큰 청크 크기 — 한국어 가독성 기준 ~12자. 인위적 sleep 없이 청크만 분할 발행.
+_TOKEN_CHUNK_SIZE = 12
+
+
+def _sse(event: str, data: dict[str, Any]) -> str:
+    """SSE 프레임 직렬화 — `event: <type>\\ndata: <json>\\n\\n`. JSON 은 ensure_ascii=False.
+
+    SSE 직렬화는 이 한 곳에서만 수행한다 (서비스가 완성된 프레임 문자열을 yield).
+    """
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _iter_token_chunks(text: str) -> list[str]:
+    """최종 답변 문자열을 _TOKEN_CHUNK_SIZE 자 단위 청크 리스트로 분할 (빈 문자열이면 빈 리스트)."""
+    if not text:
+        return []
+    return [text[i : i + _TOKEN_CHUNK_SIZE] for i in range(0, len(text), _TOKEN_CHUNK_SIZE)]
 
 
 class ChatbotFaqService:
@@ -54,10 +77,26 @@ class ChatbotConversationService:
         if mode not in {"faq", "rag"}:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="mode 는 faq|rag 입니다.")
 
+        if mode == "faq":
+            # FAQ 모드는 LLM 호출이 없어 트랜잭션 안에서 완결.
+            async with in_transaction():
+                session = await self._resolve_session(user, data)
+                await self.message_repo.create(
+                    data={
+                        "session_id": session.id,
+                        "role": ChatMessageRole.USER,
+                        "message_type": ChatMessageType.TEXT,
+                        "content": data.message,
+                    }
+                )
+                bot_message = await self._answer_with_faq(session, data)
+                await self.session_repo.touch(session, message_increment=2)
+            return self._build_response(session.id, bot_message)
+
+        # RAG 모드: ChatRAGGraph(OpenAI 외부 호출) 는 트랜잭션 바깥에서 수행해
+        # DB 커넥션 점유 시간을 최소화한다 (API 계약 §9 트랜잭션 정책).
         async with in_transaction():
             session = await self._resolve_session(user, data)
-
-            # 사용자 메시지 기록
             await self.message_repo.create(
                 data={
                     "session_id": session.id,
@@ -67,15 +106,132 @@ class ChatbotConversationService:
                 }
             )
 
-            if mode == "faq":
-                bot_message = await self._answer_with_faq(session, data)
-            else:
-                bot_message = await self._answer_with_rag(session, data)
+        # ChatRAGGraph 내부 예외는 run_chat_rag 의 try/except 가 fallback 으로 흡수하지만,
+        # 그래프 진입 전(예: import 단계) 또는 SDK 가 예외를 raise 하는 케이스를 위해
+        # 한 단계 더 방어. 어떤 경우에도 사용자 메시지만 남는 고아 세션이 생기지 않도록
+        # SYSTEM placeholder 응답을 보장한다.
+        try:
+            rag_result = await self.rag.answer(
+                query=data.message,
+                user_id=user.id,
+                thread_id=str(session.id),
+            )
+        except Exception as e:  # noqa: BLE001 — 모든 예외를 SYSTEM placeholder 로 흡수
+            _logger.error("rag.answer 실패, SYSTEM placeholder 저장: %s", type(e).__name__)
+            from app.graphs.chat_rag_graph import FALLBACK_MEDICAL, MEDICAL_DISCLAIMER
+            from app.services.ml.chatbot_rag import RAGAnswer
 
+            rag_result = RAGAnswer(
+                answer=FALLBACK_MEDICAL,
+                confidence=0.0,
+                model_version="chatragraph-v1",
+                fallback=True,
+                disclaimer=MEDICAL_DISCLAIMER,
+            )
+
+        async with in_transaction():
+            bot_message = await self._persist_rag_message(session, rag_result)
             await self.session_repo.touch(session, message_increment=2)
 
+        return self._build_response(session.id, bot_message)
+
+    async def handle_message_stream(  # noqa: C901 — SSE 단계별(meta/stage/token/done/error) 선형 흐름
+        self, user: User, mode: str, data: ChatMessageRequest
+    ) -> AsyncGenerator[str, None]:
+        """RAG 전용 SSE 스트리밍 — meta → stage* → token* → done (실패 시 error) 프레임을 yield.
+
+        비스트리밍 handle_message 와 동일한 트랜잭션 경계를 따른다:
+        1) USER 메시지 저장 (txn) → meta 발행
+        2) ChatRAGGraph 스트리밍 소비 (txn 바깥, OpenAI 호출) → 노드 진입마다 stage 발행
+        3) BOT 메시지 저장 (txn) → 최종 answer 를 token 청크로 발행 → done 발행
+
+        어떤 단계의 예외든 흡수해 error 프레임만 남긴다. USER 메시지 저장 이후 그래프/저장이
+        실패하면 BOT placeholder(FALLBACK) 를 저장해 사용자 메시지만 남는 고아 세션을 방지한다
+        (handle_message 의 SYSTEM placeholder 방어 패턴과 동일 정신).
+        """
+        # 스트리밍은 RAG 전용 — faq 는 비스트리밍 /messages 를 사용.
+        if mode != "rag":
+            yield _sse("error", {"message": "스트리밍은 rag 모드 전용입니다."})
+            return
+
+        # 1) USER 메시지 저장 (txn). 세션 해석 단계 실패(404 등)는 error 로 변환.
+        try:
+            async with in_transaction():
+                session = await self._resolve_session(user, data)
+                await self.message_repo.create(
+                    data={
+                        "session_id": session.id,
+                        "role": ChatMessageRole.USER,
+                        "message_type": ChatMessageType.TEXT,
+                        "content": data.message,
+                    }
+                )
+        except HTTPException as e:
+            yield _sse("error", {"message": str(e.detail)})
+            return
+        except Exception:  # noqa: BLE001 — 저장 전 단계 실패는 세션 없이 종료 (고아 미발생)
+            _logger.exception("handle_message_stream: USER 메시지 저장 실패")
+            yield _sse("error", {"message": "메시지를 처리하지 못했습니다. 잠시 후 다시 시도해 주세요."})
+            return
+
+        # meta — conversation_id 확정 직후 1회.
+        yield _sse("meta", {"conversation_id": session.id})
+
+        # 2) ChatRAGGraph 스트리밍 — txn 바깥(OpenAI 호출). 노드 진입마다 stage 발행.
+        # STAGE_LABELS 는 그래프가 canonical 소유 — lazy import 로 순환(ml.__init__ ↔ graphs) 회피.
+        from app.graphs.chat_rag_graph import STAGE_LABELS
+
+        rag_result: RAGAnswer | None = None
+        try:
+            async for kind, payload in self.rag.answer_stream(
+                query=data.message,
+                user_id=user.id,
+                thread_id=str(session.id),
+            ):
+                if kind == "stage":
+                    label = STAGE_LABELS.get(payload)
+                    if label is not None:
+                        yield _sse("stage", {"node": payload, "label": label})
+                elif kind == "result":
+                    rag_result = payload
+        except Exception as e:  # noqa: BLE001 — 그래프 예외는 FALLBACK placeholder 로 흡수
+            _logger.error("handle_message_stream: rag 스트리밍 실패: %s", type(e).__name__)
+            rag_result = None
+
+        if rag_result is None:
+            # 그래프가 결과를 못 내면 FALLBACK placeholder 로 대체 (고아 세션 방지).
+            from app.graphs.chat_rag_graph import FALLBACK_MEDICAL, MEDICAL_DISCLAIMER
+
+            rag_result = RAGAnswer(
+                answer=FALLBACK_MEDICAL,
+                confidence=0.0,
+                model_version="chatragraph-v1",
+                fallback=True,
+                disclaimer=MEDICAL_DISCLAIMER,
+            )
+
+        # 3) BOT 메시지 저장 (txn). 저장 실패 시에도 사용자에게는 답변을 흘려보낸다.
+        try:
+            async with in_transaction():
+                bot_message = await self._persist_rag_message(session, rag_result)
+                await self.session_repo.touch(session, message_increment=2)
+        except Exception:  # noqa: BLE001 — 저장 실패는 error 로 종료
+            _logger.exception("handle_message_stream: BOT 메시지 저장 실패")
+            yield _sse("error", {"message": "답변을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요."})
+            return
+
+        # token — 최종(통과) answer 를 청크 단위로 순차 발행 (approach A). 빈 answer 면 생략.
+        for chunk in _iter_token_chunks(bot_message.content):
+            yield _sse("token", {"text": chunk})
+
+        # done — 비스트리밍 _build_response 와 완전히 동일한 shape.
+        yield _sse("done", self._build_response(session.id, bot_message))
+
+    @staticmethod
+    def _build_response(conversation_id: int, bot_message: ChatbotMessage) -> dict[str, Any]:
+        extra = bot_message.extra_data or {}
         return {
-            "conversation_id": session.id,
+            "conversation_id": conversation_id,
             "message_id": bot_message.id,
             "role": bot_message.role,
             "message_type": bot_message.message_type,
@@ -83,6 +239,15 @@ class ChatbotConversationService:
             "sources": bot_message.sources,
             "confidence": bot_message.confidence,
             "model_version": bot_message.model_version,
+            # 신규 필드 — extra_data 가 없으면(faq 모드 등) 기본값으로 채워져 역호환성 유지
+            "disclaimer": extra.get("disclaimer", "본 답변은 의학적 진단을 대체하지 않습니다."),
+            "intent": extra.get("intent"),
+            "needs_health_data": bool(extra.get("needs_health_data", False)),
+            "has_health_data": bool(extra.get("has_health_data", False)),
+            "missing_fields": list(extra.get("missing_fields") or []),
+            "action_hint": extra.get("action_hint"),
+            "is_fallback": bool(extra.get("is_fallback", False)),
+            "eval_revision_count": extra.get("eval_revision_count"),
         }
 
     async def _resolve_session(self, user: User, data: ChatMessageRequest) -> ChatbotSession:
@@ -129,16 +294,39 @@ class ChatbotConversationService:
             }
         )
 
-    async def _answer_with_rag(self, session: ChatbotSession, data: ChatMessageRequest) -> ChatbotMessage:
-        rag_result: RAGAnswer = await self.rag.answer(query=data.message)
+    async def _persist_rag_message(self, session: ChatbotSession, rag_result: RAGAnswer) -> ChatbotMessage:
+        """ChatRAGGraph 결과를 ChatbotMessage 로 저장.
+
+        message_type 분기 (API 계약 §6 매핑):
+        - needs_health_data=true  → SYSTEM (개인화 건강 정보 안내)
+        - is_fallback=true        → SYSTEM (Evaluator 한도 초과 폴백)
+        - 그 외                   → RAG
+        """
+        if rag_result.needs_health_data or rag_result.fallback:
+            message_type = ChatMessageType.SYSTEM
+        else:
+            message_type = ChatMessageType.RAG
+
+        extra_data = {
+            "intent": rag_result.intent,
+            "needs_health_data": rag_result.needs_health_data,
+            "has_health_data": rag_result.has_health_data,
+            "missing_fields": list(rag_result.missing_fields),
+            "action_hint": rag_result.action_hint,
+            "is_fallback": rag_result.fallback,
+            "eval_revision_count": rag_result.eval_revision_count,
+            "disclaimer": rag_result.disclaimer,
+        }
+
         return await self.message_repo.create(
             data={
                 "session_id": session.id,
                 "role": ChatMessageRole.BOT,
-                "message_type": ChatMessageType.RAG,
+                "message_type": message_type,
                 "content": rag_result.answer,
                 "sources": [s.to_dict() for s in rag_result.sources],
                 "confidence": rag_result.confidence,
                 "model_version": rag_result.model_version,
+                "extra_data": extra_data,
             }
         )

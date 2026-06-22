@@ -5,10 +5,9 @@ import {
   DurationPicker,
   WeeklyDurationNote,
   TitleInput,
-  MaxParticipantsSlider,
+  MaxParticipantsChips,
   RewardPreview,
   Step4Header,
-  GROUP_MEMBERS_OPTIONS,
 } from "./_shared";
 import type { WizardFormState } from "@/types/challenge";
 
@@ -64,12 +63,12 @@ function GroupDurationPicker({
   );
 }
 
-/* 공통 CHECK 안내 */
-function CheckNote({ label }: { label: string }) {
+/* 금연/금주 사진 인증 안내 */
+function PhotoNote({ label }: { label: string }) {
   return (
     <div className="p-3 bg-surface rounded-[10px]">
       <p className="text-xs text-text-secondary">
-        인증 방식: 매일 {label} 여부 체크 (사진 불필요)
+        인증 방식: 매일 {label} 관련 사진 촬영으로 인증 (AI 자동 검증)
       </p>
     </div>
   );
@@ -86,7 +85,7 @@ export function NoSmokingForm({
   return (
     <div className="space-y-6">
       <Step4Header />
-      <CheckNote label="금연" />
+      <PhotoNote label="금연" />
       <DurationPicker
         value={form.duration_days}
         onChange={(v) => onChange({ duration_days: v })}
@@ -113,7 +112,7 @@ export function NoSmokingWeeklyForm({
   return (
     <div className="space-y-6">
       <Step4Header />
-      <CheckNote label="금연" />
+      <PhotoNote label="금연" />
       <Chips
         label="주간 금연 목표 일수"
         options={WEEKLY_NOSMOKING_OPTIONS}
@@ -140,22 +139,17 @@ export function NoSmokingGroupForm({
   return (
     <div className="space-y-6">
       <Step4Header />
-      <CheckNote label="금연" />
-      <Chips
-        label="그룹 달성 목표 인원"
-        options={GROUP_MEMBERS_OPTIONS}
-        value={form.goal_config.group_target_members}
-        onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, group_target_members: v } })
-        }
+      <PhotoNote label="금연" />
+      <MaxParticipantsChips
+        value={form.max_participants}
+        onChange={(v) => onChange({
+          max_participants: v,
+          goal_config: { ...form.goal_config, group_target_members: v },
+        })}
       />
       <GroupDurationPicker
         value={form.duration_days}
         onChange={(v) => onChange({ duration_days: v })}
-      />
-      <MaxParticipantsSlider
-        value={form.max_participants}
-        onChange={(v) => onChange({ max_participants: v })}
       />
       <TitleInput value={form.title} onChange={(v) => onChange({ title: v })} />
       <RewardPreview durationDays={form.duration_days} isGroup />
@@ -174,7 +168,7 @@ export function NoAlcoholForm({
   return (
     <div className="space-y-6">
       <Step4Header />
-      <CheckNote label="금주" />
+      <PhotoNote label="금주" />
       <DurationPicker
         value={form.duration_days}
         onChange={(v) => onChange({ duration_days: v })}
@@ -196,7 +190,7 @@ export function NoAlcoholWeeklyForm({
   return (
     <div className="space-y-6">
       <Step4Header />
-      <CheckNote label="금주" />
+      <PhotoNote label="금주" />
       <Chips
         label="주간 금주 목표 일수"
         options={WEEKLY_NOSMOKING_OPTIONS}
@@ -223,22 +217,17 @@ export function NoAlcoholGroupForm({
   return (
     <div className="space-y-6">
       <Step4Header />
-      <CheckNote label="금주" />
-      <Chips
-        label="그룹 달성 목표 인원"
-        options={GROUP_MEMBERS_OPTIONS}
-        value={form.goal_config.group_target_members}
-        onChange={(v) =>
-          onChange({ goal_config: { ...form.goal_config, group_target_members: v } })
-        }
+      <PhotoNote label="금주" />
+      <MaxParticipantsChips
+        value={form.max_participants}
+        onChange={(v) => onChange({
+          max_participants: v,
+          goal_config: { ...form.goal_config, group_target_members: v },
+        })}
       />
       <GroupDurationPicker
         value={form.duration_days}
         onChange={(v) => onChange({ duration_days: v })}
-      />
-      <MaxParticipantsSlider
-        value={form.max_participants}
-        onChange={(v) => onChange({ max_participants: v })}
       />
       <TitleInput value={form.title} onChange={(v) => onChange({ title: v })} />
       <RewardPreview durationDays={form.duration_days} isGroup />

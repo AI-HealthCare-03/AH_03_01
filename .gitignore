@@ -4,8 +4,23 @@ preprocessed/
 *.npy
 references/
 docs/
-RAG/
+/RAG/
+prediction model/
 test_imgs/
+design/
+ai_worker/rag/chroma_db/
+ai_worker/rag/output/chunks.json
+ai_worker/rag/output/ragas_result.json
+scripts/rag/output/
+ai_worker/rag/rag_eval_qa_dataset_v3.jsonl
+ai_worker/rag/output/
+
+# DB dumps (PHI 포함 가능 — 절대 커밋 금지, Drive 공유만)
+infra/db/*.sql
+infra/db/*.sql.sha256
+infra/db/*.dump
+infra/db/*.tar
+infra/db/*.backup
 
 
 # Python
@@ -16,15 +31,19 @@ __pycache__/
 *.pyd
 
 # Environment
+.ssh/
 .env
 .env.*
 *.env
+envs/.local.env
 # 예시 env 파일은 트래킹 (placeholder 만 들어 있음)
 !envs/example.*.env
 
 # Virtual Environment
 venv/
 .venv/
+.venv-*/
+
 
 # GitHub
 # .github/ 차단 제거 — CI 워크플로우는 트래킹 필요.
@@ -92,6 +111,7 @@ out/
 *.keystore
 credentials*.json
 service-account*.json
+*service-account*.json
 secrets*.json
 secrets*.yaml
 secrets*.yml
@@ -108,6 +128,7 @@ wheels/
 *.coverage
 .coverage.*
 .claude/
+ops/
 
 # 로컬 스크린샷·플레이라이트 캐시·원본 PNG 보관 폴더
 .playwright-mcp/

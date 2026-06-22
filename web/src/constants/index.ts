@@ -15,7 +15,18 @@ export const ROUTES = {
   FORGOT_PASSWORD: "/forgot-password",
   SMS_VERIFY: "/sms-verify",
   ACCOUNT_RESTORE: "/account-restore",
+  LOGIN_BLOCKED: "/login/blocked",
+  KAKAO_CALLBACK: "/kakao/callback",
+  KAKAO_COMPLETE_SIGNUP: "/kakao/complete-signup",
+  KAKAO_ACCOUNT_RESTORE: "/kakao/account-restore",
 } as const;
+
+/* 카카오 OAuth sessionStorage 키 */
+export const KAKAO_STATE_KEY = "kakao_oauth_state";
+export const KAKAO_TICKET_KEY = "kakao_signup_ticket";
+export const KAKAO_PREFILL_KEY = "kakao_signup_prefill";
+export const KAKAO_RESTORE_TICKET_KEY = "kakao_restore_ticket";
+export const KAKAO_RESTORE_INFO_KEY = "kakao_restore_info";
 
 /* 로그인 실패 잠금 임계값 */
 export const MAX_LOGIN_ATTEMPTS = 5;
@@ -34,7 +45,6 @@ export const PASSWORD_STRENGTH_LABELS = {
 export const WITHDRAWAL_REASONS = [
   "서비스 이용이 불편해요",
   "원하는 기능이 없어요",
-  "개인정보 보호가 걱정돼요",
   "자주 사용하지 않아요",
   "다른 서비스로 이동할게요",
   "기타",
@@ -49,11 +59,10 @@ export const RESTORE_DATA_ITEMS = [
   { key: "community" as const, label: "커뮤니티 활동 내역" },
 ] as const;
 
-/* 파괴적 모달 삭제 항목 */
-export const DESTRUCT_ITEMS = [
-  { label: "건강 데이터", value: "142건" },
-  { label: "챌린지 참여", value: "42개" },
-  { label: "보유 포인트", value: "2,840 P" },
-  { label: "캐릭터", value: "함께" },
-  { label: "커뮤니티 활동", value: "글 12 · 댓글 47" },
+/* 파괴적 모달 삭제 항목 레이블 (수치 없음 — 실데이터 API 미제공) */
+export const DESTRUCT_ITEM_LABELS = [
+  "건강 기록 (혈압·혈당·복약)",
+  "챌린지 참여 내역 및 진행 현황",
+  "보유 포인트 및 캐릭터",
+  "커뮤니티 작성 글 및 댓글",
 ] as const;

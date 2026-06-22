@@ -12,7 +12,9 @@ class User(models.Model):
     """ERD 사양: docs/ERD v1.pdf USER 테이블 (PK: UUID)."""
 
     id = fields.UUIDField(primary_key=True)
-    email = fields.CharField(max_length=40)
+    # 소셜(카카오) 계정은 이메일을 수집하지 않는다(카카오가 본인인증 대행, 복구=카카오 재로그인).
+    # 일반 가입 계정만 이메일을 가진다 → null 허용. 앱 레벨에서 일반 가입 시 중복/형식 검증.
+    email = fields.CharField(max_length=40, null=True)
     hashed_password = fields.CharField(max_length=128)
     nickname = fields.CharField(max_length=10, unique=True, null=True)
     name = fields.CharField(max_length=20)
@@ -24,6 +26,7 @@ class User(models.Model):
     social_id = fields.CharField(max_length=128, null=True)
     login_fail_count = fields.IntField(default=0)
     device_id = fields.CharField(max_length=128, null=True)
+    fcm_token = fields.CharField(max_length=256, null=True)
     refresh_token_hash = fields.CharField(max_length=255, null=True)
     last_login = fields.DatetimeField(null=True)
     password_changed_at = fields.DatetimeField(null=True)

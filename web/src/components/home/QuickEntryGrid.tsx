@@ -8,11 +8,12 @@
 import MyStatusCard from "./MyStatusCard";
 import AttendanceCard from "./AttendanceCard";
 import HealthQuizCard from "./HealthQuizCard";
-import type { MyPet, ChallengeItem, AttendanceMonthResponse } from "@/types/api";
+import type { MyPet, AttendanceMonthResponse } from "@/types/api";
+import type { Challenge } from "@/types/challenge";
 
 interface QuickEntryGridProps {
   pet: MyPet | null | undefined;
-  challenges: ChallengeItem[];
+  challenges: Challenge[];
   petLoading: boolean;
   attendance: AttendanceMonthResponse | undefined;
   attendanceLoading: boolean;

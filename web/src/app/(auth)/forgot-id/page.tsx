@@ -9,6 +9,7 @@ import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { forgotIdSchema, type ForgotIdFormValues, formatPhoneNumber } from "@/lib/validators";
+import { findId } from "@/lib/api/auth";
 import { ROUTES } from "@/constants";
 
 /* =========================================
@@ -17,7 +18,8 @@ import { ROUTES } from "@/constants";
    ========================================= */
 
 interface FoundResult {
-  maskedEmail: string;
+  maskedEmail: string | null;
+  socialProvider: string | null;
   createdAt: string;
 }
 
@@ -35,26 +37,13 @@ export default function ForgotIdPage() {
     defaultValues: { name: "", phone_number: "" },
   });
 
-  /** 이메일 마스킹: j*********4@gmail.com */
-  function maskEmail(email: string): string {
-    const [local, domain] = email.split("@");
-    if (!local || !domain) return email;
-    if (local.length <= 2) return `${local[0]}*@${domain}`;
-    const masked =
-      local[0] + "*".repeat(local.length - 2) + local[local.length - 1];
-    return `${masked}@${domain}`;
-  }
-
-  const onSubmit = async () => {
+  const onSubmit = async (data: ForgotIdFormValues) => {
     try {
-      // TODO(backend): /api/v1/auth/find-id 엔드포인트 추가 필요
-      // const res = await findId(data.name, data.phone_number);
-
-      /* mock 응답 */
-      showToast("아이디 찾기는 백엔드 추가 예정입니다", "info");
+      const res = await findId(data.name, data.phone_number);
       setResult({
-        maskedEmail: maskEmail("jkh3043@gmail.com"),
-        createdAt: "2024-03-12",
+        maskedEmail: res.maskedEmail,
+        socialProvider: res.socialProvider,
+        createdAt: res.createdAt,
       });
     } catch {
       showToast("일치하는 계정을 찾을 수 없습니다", "error");
@@ -70,18 +59,34 @@ export default function ForgotIdPage() {
             가입 시 입력한 정보를 확인합니다
           </p>
 
-          <div className="p-5 bg-surface rounded-[12px] space-y-3 mb-8">
-            <div>
-              <p className="text-xs text-text-tertiary mb-1">이메일</p>
-              <p className="text-lg font-semibold text-text-primary">
-                {result.maskedEmail}
+          {result.socialProvider ? (
+            /* 소셜(카카오) 계정 — 이메일/비밀번호 로그인이 없으므로 소셜 로그인 안내 */
+            <div className="p-5 bg-surface rounded-[12px] space-y-3 mb-8">
+              <p className="text-base font-semibold text-text-primary">
+                카카오로 가입한 계정입니다
               </p>
+              <p className="text-sm text-text-secondary">
+                이 계정은 이메일/비밀번호 없이 카카오로 로그인합니다. 로그인 화면에서 “카카오로 계속하기”를 이용해 주세요.
+              </p>
+              <div>
+                <p className="text-xs text-text-tertiary mb-1">가입일</p>
+                <p className="text-sm text-text-secondary">{result.createdAt}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-text-tertiary mb-1">가입일</p>
-              <p className="text-sm text-text-secondary">{result.createdAt}</p>
+          ) : (
+            <div className="p-5 bg-surface rounded-[12px] space-y-3 mb-8">
+              <div>
+                <p className="text-xs text-text-tertiary mb-1">이메일</p>
+                <p className="text-lg font-semibold text-text-primary">
+                  {result.maskedEmail}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-text-tertiary mb-1">가입일</p>
+                <p className="text-sm text-text-secondary">{result.createdAt}</p>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="space-y-3">
             <Button

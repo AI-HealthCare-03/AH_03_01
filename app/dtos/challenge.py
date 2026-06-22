@@ -88,6 +88,17 @@ class ChallengeCreateRequest(BaseModel):
             raise ValueError("end_date 는 start_date 이상이어야 합니다.")
         return self
 
+    @model_validator(mode="after")
+    def _validate_group_goal(self) -> "ChallengeCreateRequest":
+        if self.max_participants > 1:
+            has_sum = isinstance(self.goal_config.get("group_target_count"), int)
+            has_members = isinstance(self.goal_config.get("group_target_members"), int)
+            if has_sum == has_members:
+                raise ValueError(
+                    "그룹 챌린지는 group_target_count 또는 group_target_members 중 하나를 양의 정수로 지정해야 합니다."
+                )
+        return self
+
 
 class ChallengeUpdateRequest(BaseModel):
     title: Annotated[str | None, Field(None, min_length=2, max_length=120)] = None
@@ -96,6 +107,7 @@ class ChallengeUpdateRequest(BaseModel):
     unit: Annotated[str | None, Field(None, max_length=20)] = None
     visibility: ChallengeVisibility | None = None
     end_date: date | None = None
+    status: ChallengeStatus | None = None  # 방장만 CANCELLED 로 변경 가능 (포기)
 
 
 class ChallengeResponse(BaseSerializerModel):
@@ -115,11 +127,16 @@ class ChallengeResponse(BaseSerializerModel):
     max_participants: int
     start_date: date
     end_date: date
-    creator_id: UUID
+    creator_id: UUID | None
     created_at: datetime
     cadence: ChallengeCadence = ChallengeCadence.DAILY
     goal_config: dict[str, Any] = Field(default_factory=dict)
     invite_code: str | None = None  # 그룹 챌린지 + 방장/참여자에게만 노출
+    is_member: bool = False  # 현재 사용자가 참여자/방장인지 여부
+    my_progress: int | None = None  # 내 달성일 수 (승인된 인증 횟수)
+    total_days: int | None = None  # 챌린지 전체 기간 일 수
+    achievement_rate: int = 0  # 달성률 % (그룹: 전체 멤버 기준, 개인: 내 기준)
+    participant_count: int | None = None  # 현재 참여 인원 (그룹 챌린지)
 
 
 class ChallengeListItem(BaseModel):
@@ -128,9 +145,21 @@ class ChallengeListItem(BaseModel):
     scope: ChallengeScope
     status: ChallengeStatus
     category: ChallengeCategory
+    visibility: ChallengeVisibility = ChallengeVisibility.PUBLIC
+    max_participants: int | None = None
     start_date: date
     end_date: date
-    progress_percent: float | None = None
+    created_at: datetime
+    # 스코프에 관계없이 항상 "내 개인 진행률" (my_progress ÷ total_days × 100)
+    # 그룹 챌린지 전체 달성률은 achievement_rate 사용 — 두 필드를 혼용하지 않도록 주의
+    my_progress_percent: float | None = None
+    my_progress: int | None = None  # 내 달성일 수 (승인된 인증 횟수)
+    total_days: int | None = None  # 챌린지 전체 기간 일 수
+    achievement_rate: int = 0  # 달성률 % (그룹: 전체 멤버 평균, 개인: 내 기준)
+    missed_count: int | None = None  # 누락 횟수
+    my_participant_status: str | None = None  # 현재 사용자의 참여 상태 (APPROVED/LEFT 등)
+    today_verification_status: str | None = None  # 오늘 인증 상태 (APPROVED/PENDING/REJECTED/None)
+    participant_count: int | None = None  # 현재 참여 인원 (그룹 챌린지)
 
 
 class ChallengeListResponse(BaseModel):
@@ -148,11 +177,14 @@ class ChallengeListResponse(BaseModel):
 
 class ParticipantResponse(BaseSerializerModel):
     id: int
+    challenge_id: int
     user_id: UUID
     role: ParticipantRole
     status: ParticipantStatus
     current_score: int
     joined_at: datetime
+    progress_days: int = 0  # 승인된 인증 횟수
+    achievement_rate: int = 0  # 개인 달성률 %
 
 
 class JoinByCodeRequest(BaseModel):
@@ -198,6 +230,8 @@ class VerificationCreateRequest(BaseModel):
     answers: dict[str, Any] | None = None
     photo_file_id: int | None = None
     shield_inventory_id: int | None = None
+    caption: Annotated[str | None, Field(None, max_length=500)] = None
+    duration_seconds: int | None = None
 
     @model_validator(mode="after")
     def _validate(self) -> "VerificationCreateRequest":
@@ -224,10 +258,13 @@ class VerificationResponse(BaseSerializerModel):
     checked: bool | None
     photo_file_id: int | None
     status: VerificationStatus
+    caption: str | None
+    verified_duration_seconds: int | None
     rejection_reason: str | None
     like_count: int
     comment_count: int
     created_at: datetime
+    earned_points: int | None = None
 
 
 class VerificationListResponse(BaseModel):
@@ -236,6 +273,30 @@ class VerificationListResponse(BaseModel):
     total_elements: int
     total_pages: int
     items: list[VerificationResponse]
+
+
+class VerificationFeedItem(BaseModel):
+    id: int
+    user_id: UUID
+    user_nickname: str | None
+    method: VerificationMethod
+    verified_date: date
+    caption: str | None
+    photo_file_id: int | None
+    verified_duration_seconds: int | None
+    like_count: int
+    comment_count: int
+    my_like: bool
+    created_at: datetime
+    status: VerificationStatus = VerificationStatus.APPROVED
+
+
+class VerificationFeedResponse(BaseModel):
+    page: int
+    size: int
+    total_elements: int
+    total_pages: int
+    items: list[VerificationFeedItem]
 
 
 # ---------------------------------------------------------------------------
@@ -263,12 +324,18 @@ class ReactionResponse(BaseSerializerModel):
     user_id: UUID
     type: ReactionType
     content: str | None
+    parent_id: int | None
     created_at: datetime
+
+
+class ReactionWithReplies(ReactionResponse):
+    replies: list[ReactionResponse] = []
 
 
 class ReactionListResponse(BaseModel):
     like_count: int
-    comments: list[ReactionResponse]
+    my_like: bool
+    comments: list[ReactionWithReplies]
 
 
 # ---------------------------------------------------------------------------

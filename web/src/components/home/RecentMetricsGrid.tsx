@@ -11,7 +11,6 @@ import {
   getBmiStatus,
   getBloodPressureStatus,
   getFastingGlucoseStatus,
-  getHba1cStatus,
   statusColorClass,
   type HealthStatus,
 } from "@/lib/health/status";
@@ -24,7 +23,6 @@ interface RecentMetricsGridProps {
   healthProfile: HealthProfileRecord | null | undefined;
   bloodPressure: MetricStatResponse | null | undefined;
   fastingGlucose: MetricStatResponse | null | undefined;
-  hba1c: MetricStatResponse | null | undefined;
   isLoading: boolean;
 }
 
@@ -95,7 +93,6 @@ export default function RecentMetricsGrid({
   healthProfile,
   bloodPressure,
   fastingGlucose,
-  hba1c,
   isLoading,
 }: RecentMetricsGridProps) {
   /* BMI 계산 */
@@ -122,9 +119,9 @@ export default function RecentMetricsGrid({
   const bpBox: MetricBox = lastBp
     ? {
         label: "혈압",
-        value: `${lastBp.primary_value}/${lastBp.secondary_value ?? "—"}`,
+        value: `${Math.round(parseFloat(String(lastBp.primary_value)))}/${Math.round(parseFloat(String(lastBp.secondary_value ?? "0")))}`,
         unit: "mmHg",
-        status: getBloodPressureStatus(lastBp.primary_value),
+        status: getBloodPressureStatus(parseFloat(String(lastBp.primary_value))),
       }
     : { label: "혈압", value: "—", unit: "", status: null };
 
@@ -134,25 +131,13 @@ export default function RecentMetricsGrid({
   const fgBox: MetricBox = lastFg
     ? {
         label: "공복혈당",
-        value: String(lastFg.primary_value),
+        value: String(Math.round(parseFloat(String(lastFg.primary_value)))),
         unit: "mg/dL",
-        status: getFastingGlucoseStatus(lastFg.primary_value),
+        status: getFastingGlucoseStatus(parseFloat(String(lastFg.primary_value))),
       }
     : { label: "공복혈당", value: "—", unit: "", status: null };
 
-  /* HbA1c */
-  const hba1cSeries = hba1c?.series;
-  const lastHba1c = hba1cSeries?.[hba1cSeries.length - 1];
-  const hba1cBox: MetricBox = lastHba1c
-    ? {
-        label: "HbA1c",
-        value: String(lastHba1c.primary_value),
-        unit: "%",
-        status: getHba1cStatus(lastHba1c.primary_value),
-      }
-    : { label: "HbA1c", value: "—", unit: "", status: null };
-
-  const boxes = [bmiBox, bpBox, fgBox, hba1cBox];
+  const boxes = [bmiBox, bpBox, fgBox];
 
   return (
     <section aria-labelledby="recent-metrics-heading">

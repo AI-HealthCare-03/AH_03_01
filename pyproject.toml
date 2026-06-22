@@ -10,6 +10,7 @@ dependencies = [
     "pydantic-settings>=2.12.0",
     "python-dateutil>=2.9.0.post0",
     "redis>=7.1.0",
+    "tzdata>=2024.1",
     "tomlkit>=0.14.0",
 ]
 
@@ -33,17 +34,37 @@ app = [
     "bcrypt<=4.0.1",
     "fastapi[standard]>=0.128.0",
     "httpx>=0.28.1",
+    "kiwipiepy>=0.20.0",                # RAG: BM25 한국어 형태소 (Step A 하이브리드 검색)
+    "langchain-openai>=0.2.0",          # RAG/LangGraph: OpenAI chat/embedding wrapper (Step A)
+    "langchain-text-splitters>=0.3.0",  # RAG: 문서 청킹 (인덱싱)
+    "langgraph>=0.2.0",                 # RAG: ChatRAGGraph (Step A)
+    "openai>=1.50.0",                   # RAG: 임베딩/LLM API (인덱싱·Step A)
     "orjson>=3.11.5",
     "passlib[bcrypt]>=1.7.4",
     "pgvector>=0.3.6",
+    "playwright>=1.49.0",               # 월간 리포트 서버사이드 PDF 렌더 (chromium set_content → page.pdf)
     "pyjwt>=2.10.1",
+    "python-frontmatter>=1.1.0",        # RAG: 문서 frontmatter 파싱 (인덱싱)
+    "rank-bm25>=0.2.2",                 # RAG: BM25 검색 (Step A 하이브리드 검색)
+    "slowapi>=0.1.9",
     "tortoise-orm[asyncpg]>=0.25.3",
     "uvicorn>=0.40.0",
+    # ML 모델 추론 (KNHANES 만성질환 위험 예측)
+    "lightgbm>=4.0.0",
+    "catboost>=1.2.0",
+    "shap>=0.43.0",
+    "scipy>=1.11.0",
+    "firebase-admin>=6.5.0",              # FCM 푸시 알림 발송
+    "apscheduler>=3.10.0",                # 복약 알림 주기적 스케줄링
 ]
 dev = [
     "coverage>=7.13.2",
+    "datasets>=4.8.5",
+    "langchain-openai>=0.2.0,<1.0.0",   # ← 범위 조정
+    "langchain-community>=0.2.0,<1.0.0",
     "mypy>=1.19.1",
     "pytest-asyncio>=1.3.0",
+    "ragas>=0.2.0,<0.3.0",              # ← 버전 올림
     "ruff>=0.14.14",
     "types-passlib>=1.7.7.20250602",
     "types-python-dateutil>=2.9.0.20260124",

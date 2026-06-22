@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useWatch } from "react-hook-form";
 import SimpleAuthShell from "@/components/layout/SimpleAuthShell";
 import Input, { PasswordInput } from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
@@ -14,57 +13,50 @@ import {
   forgotPasswordSchema,
   type ForgotPasswordFormValues,
   getPasswordStrength,
-  formatPhoneNumber,
 } from "@/lib/validators";
+import { checkEmailVerified, resetPassword, sendEmailVerification } from "@/lib/api/auth";
+import { extractErrorMessage } from "@/lib/api/client";
+import axios from "axios";
 import { ROUTES } from "@/constants";
 
 /* =========================================
-   비밀번호 재설정 페이지
-   와이어프레임: mobile 09-A06
-   단계 인디케이터: ✓ 2 3 (SMS 인증 완료 가정 후 새 비밀번호 입력)
+   비밀번호 재설정 페이지 (비밀번호 찾기)
+   이메일(아이디)+이름 → 이메일 본인 인증 → 새 비밀번호 설정
    ========================================= */
+
+const TOKEN_TTL_SEC = 10 * 60; // 인증 메일 토큰 유효시간 (백엔드와 일치)
+const VERIFIED_TTL_SEC = 15 * 60; // 인증 완료 상태 유효시간
+const formatRemaining = (s: number) =>
+  `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
 /* 단계 인디케이터 */
 function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
   const steps = [
     { num: 1, label: "본인 확인" },
-    { num: 2, label: "코드 인증" },
+    { num: 2, label: "이메일 인증" },
     { num: 3, label: "비밀번호 변경" },
   ];
-
   return (
     <div className="flex items-center gap-2 mb-8">
       {steps.map((step, idx) => {
         const done = step.num < current;
         const active = step.num === current;
-
         return (
           <div key={step.num} className="flex items-center gap-2">
             <div className="flex flex-col items-center gap-1">
               <div
                 className={[
                   "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold",
-                  done
-                    ? "bg-status-success text-white"
-                    : active
-                    ? "bg-brand-black text-white"
-                    : "bg-border text-text-tertiary",
+                  done ? "bg-status-success text-white" : active ? "bg-brand-black text-white" : "bg-border text-text-tertiary",
                 ].join(" ")}
                 aria-current={active ? "step" : undefined}
               >
                 {done ? "✓" : step.num}
               </div>
-              <span className="text-[10px] text-text-tertiary whitespace-nowrap">
-                {step.label}
-              </span>
+              <span className="text-[10px] text-text-tertiary whitespace-nowrap">{step.label}</span>
             </div>
             {idx < steps.length - 1 && (
-              <div
-                className={[
-                  "h-px w-8 mb-4 transition-colors",
-                  done ? "bg-status-success" : "bg-border",
-                ].join(" ")}
-              />
+              <div className={["h-px w-8 mb-4 transition-colors", done ? "bg-status-success" : "bg-border"].join(" ")} />
             )}
           </div>
         );
@@ -82,51 +74,100 @@ export default function ForgotPasswordPage() {
     register,
     handleSubmit,
     control,
-    setValue,
+    getValues,
     setError,
     formState: { errors, isSubmitting },
   } = useForm<ForgotPasswordFormValues>({
     resolver: zodResolver(forgotPasswordSchema),
-    defaultValues: {
-      email: "",
-      phone_number: "",
-      new_password: "",
-      new_password_confirm: "",
-    },
+    defaultValues: { email: "", name: "", new_password: "", new_password_confirm: "" },
   });
 
   const watchedPassword = useWatch({ control, name: "new_password" });
-  const passwordStrength =
-    watchedPassword?.length > 0 ? getPasswordStrength(watchedPassword) : null;
+  const passwordStrength = watchedPassword?.length > 0 ? getPasswordStrength(watchedPassword) : null;
 
-  const handleStep1 = async (e: React.FormEvent) => {
-    e.preventDefault();
-    // TODO(backend): /api/v1/auth/reset-password (인증메일/SMS 발송) 추가 필요
-    showToast("인증 코드 발송은 백엔드 추가 예정입니다", "info");
-    setStep(2);
+  /* 이메일 본인 인증 상태 + 유효시간 카운트다운 */
+  const [emailVerify, setEmailVerify] = useState<"idle" | "sending" | "sent" | "verified">("idle");
+  const [verifyChecking, setVerifyChecking] = useState(false);
+  const [verifyDeadline, setVerifyDeadline] = useState<number | null>(null);
+  const [remainingSec, setRemainingSec] = useState(0);
+
+  useEffect(() => {
+    if (verifyDeadline === null) {
+      setRemainingSec(0);
+      return;
+    }
+    const tick = () => {
+      const rem = Math.max(0, Math.round((verifyDeadline - Date.now()) / 1000));
+      setRemainingSec(rem);
+      if (rem <= 0) {
+        // 토큰/인증 유효시간 만료 → 1단계로 되돌려 인증 메일 보내기 재활성화
+        setEmailVerify("idle");
+        setVerifyDeadline(null);
+        setStep(1);
+        showToast("인증 유효 시간이 만료되었어요. 다시 인증해 주세요.", "info");
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verifyDeadline]);
+
+  const handleSendVerification = async () => {
+    const email = getValues("email");
+    const name = getValues("name");
+    if (!email || !name) {
+      showToast("이메일과 이름을 먼저 입력해 주세요", "info");
+      return;
+    }
+    setEmailVerify("sending");
+    try {
+      await sendEmailVerification(email, name);
+      setEmailVerify("sent");
+      setVerifyDeadline(Date.now() + TOKEN_TTL_SEC * 1000);
+      setStep(2);
+      showToast("인증 메일을 보냈어요. 메일함에서 링크를 확인해 주세요.", "success");
+    } catch (err) {
+      setEmailVerify("idle");
+      showToast(extractErrorMessage(err), "error");
+    }
   };
 
-  const handleStep2 = (e: React.FormEvent) => {
-    e.preventDefault();
-    // TODO(backend): /api/v1/auth/sms/verify 추가 필요
-    showToast("SMS 인증은 백엔드 추가 예정입니다", "info");
-    setStep(3);
+  const handleCheckVerified = async () => {
+    setVerifyChecking(true);
+    try {
+      const ok = await checkEmailVerified(getValues("email"));
+      if (ok) {
+        setEmailVerify("verified");
+        setVerifyDeadline(Date.now() + VERIFIED_TTL_SEC * 1000);
+        setStep(3);
+        showToast("이메일 인증이 완료되었어요", "success");
+      } else {
+        showToast("아직 인증 전이에요. 메일의 링크를 클릭해 주세요.", "info");
+      }
+    } catch (err) {
+      showToast(extractErrorMessage(err), "error");
+    } finally {
+      setVerifyChecking(false);
+    }
   };
 
   const onSubmit = async (data: ForgotPasswordFormValues) => {
+    if (emailVerify !== "verified") {
+      showToast("이메일 본인 인증을 먼저 완료해 주세요", "info");
+      return;
+    }
     try {
-      // TODO(backend): /api/v1/auth/reset-password (비번 변경) 추가 필요
-      // 이미 사용 중인 비밀번호 에러 케이스 예시:
-      if (data.new_password === "Aaaa1234!") {
-        setError("new_password", {
-          message: "이미 사용 중인 비밀번호입니다",
-        });
-        return;
-      }
-      showToast("비밀번호 변경은 백엔드 추가 예정입니다", "info");
+      await resetPassword(data.email, data.name, data.new_password);
       setDone(true);
-    } catch {
-      showToast("비밀번호 변경에 실패했습니다. 다시 시도해 주세요.", "error");
+    } catch (err) {
+      const msg = extractErrorMessage(err);
+      // 400: 백엔드가 비밀번호 자체를 거부한 경우 (예: 이미 사용된 비밀번호) → 필드 인라인 에러
+      if (axios.isAxiosError(err) && err.response?.status === 400) {
+        setError("new_password", { message: msg });
+      } else {
+        showToast(msg, "error");
+      }
     }
   };
 
@@ -136,12 +177,8 @@ export default function ForgotPasswordPage() {
       <SimpleAuthShell title="비밀번호 재설정" backHref={ROUTES.LOGIN}>
         <div className="pt-8 text-center">
           <div className="text-5xl mb-4">✓</div>
-          <h2 className="text-xl font-bold text-text-primary mb-2">
-            비밀번호가 변경되었습니다
-          </h2>
-          <p className="text-sm text-text-secondary mb-8">
-            새로운 비밀번호로 로그인해 주세요
-          </p>
+          <h2 className="text-xl font-bold text-text-primary mb-2">비밀번호가 변경되었습니다</h2>
+          <p className="text-sm text-text-secondary mb-8">새로운 비밀번호로 로그인해 주세요</p>
           <Link href={ROUTES.LOGIN}>
             <Button variant="secondary" size="lg" fullWidth>
               로그인하기
@@ -155,77 +192,72 @@ export default function ForgotPasswordPage() {
   return (
     <SimpleAuthShell title="비밀번호 재설정" backHref={ROUTES.LOGIN}>
       <div className="pt-4">
-        <h2 className="text-xl font-bold text-text-primary mb-6">
-          새 비밀번호를 입력해주세요
-        </h2>
+        <h2 className="text-xl font-bold text-text-primary mb-6">가입한 이메일과 이름을 입력해 주세요</h2>
 
         <StepIndicator current={step} />
 
-        {/* 단계 1: 이메일 + 휴대폰 */}
-        {step === 1 && (
-          <form onSubmit={handleStep1} noValidate className="space-y-4">
+        {/* 1·2단계: 이메일 + 이름 + 본인 인증 */}
+        {step !== 3 && (
+          <div className="space-y-4">
             <Input
-              label="이메일"
+              label="이메일(아이디)"
               type="email"
               placeholder="가입한 이메일 주소"
               required
               error={errors.email?.message}
+              disabled={emailVerify === "verified"}
               {...register("email")}
             />
             <Input
-              label="휴대폰 번호"
-              type="tel"
-              placeholder="010-0000-0000"
+              label="이름"
+              type="text"
+              placeholder="가입 시 입력한 이름"
               required
-              error={errors.phone_number?.message}
-              {...register("phone_number", {
-                onChange: (e) => {
-                  setValue(
-                    "phone_number",
-                    formatPhoneNumber(e.target.value),
-                    { shouldValidate: false }
-                  );
-                },
-              })}
+              error={errors.name?.message}
+              disabled={emailVerify === "verified"}
+              {...register("name")}
             />
+
             <Button
-              type="submit"
+              type="button"
               variant="secondary"
               size="lg"
               fullWidth
-              className="mt-2"
+              loading={emailVerify === "sending"}
+              onClick={handleSendVerification}
             >
-              인증 코드 받기
+              {emailVerify === "sent" ? "인증 메일 다시 보내기" : "인증 메일 받기"}
             </Button>
-          </form>
+
+            {emailVerify === "sent" && (
+              <div className="space-y-2">
+                <p className="text-xs text-text-secondary">
+                  메일함의 링크를 클릭한 뒤 아래 버튼을 눌러 주세요{" "}
+                  {remainingSec > 0 && (
+                    <span className="text-status-danger">(유효 시간 {formatRemaining(remainingSec)})</span>
+                  )}
+                </p>
+                <Button type="button" variant="primary" size="md" fullWidth loading={verifyChecking} onClick={handleCheckVerified}>
+                  인증 완료 확인
+                </Button>
+              </div>
+            )}
+          </div>
         )}
 
-        {/* 단계 2: SMS 코드 입력 (간략화) */}
-        {step === 2 && (
-          <form onSubmit={handleStep2} noValidate className="space-y-4">
-            <p className="text-sm text-text-secondary">
-              등록된 휴대폰으로 인증 코드를 전송했습니다
-            </p>
-            <Input
-              label="인증 코드"
-              type="text"
-              inputMode="numeric"
-              placeholder="6자리 코드 입력"
-              maxLength={6}
-            />
-            <Button type="submit" variant="secondary" size="lg" fullWidth>
-              코드 확인
-            </Button>
-          </form>
-        )}
-
-        {/* 단계 3: 새 비밀번호 */}
+        {/* 3단계: 새 비밀번호 */}
         {step === 3 && (
           <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+            <p className="text-xs text-status-success">✓ 이메일 인증 완료</p>
+            {remainingSec > 0 && (
+              <p className="text-xs text-text-secondary">
+                인증 유효 시간 {formatRemaining(remainingSec)} — 시간 내 새 비밀번호를 설정해 주세요
+              </p>
+            )}
             <div className="space-y-1.5">
               <PasswordInput
                 label="새 비밀번호"
-                placeholder="영문+숫자 8자 이상"
+                placeholder="대/소문자·숫자·특수문자 포함 8자 이상"
                 autoComplete="new-password"
                 required
                 error={errors.new_password?.message}
@@ -233,7 +265,6 @@ export default function ForgotPasswordPage() {
               />
               <PasswordStrengthBar strength={passwordStrength} />
             </div>
-
             <PasswordInput
               label="새 비밀번호 확인"
               placeholder="비밀번호를 다시 입력해 주세요"
@@ -242,15 +273,7 @@ export default function ForgotPasswordPage() {
               error={errors.new_password_confirm?.message}
               {...register("new_password_confirm")}
             />
-
-            <Button
-              type="submit"
-              variant="secondary"
-              size="lg"
-              fullWidth
-              loading={isSubmitting}
-              className="mt-2"
-            >
+            <Button type="submit" variant="secondary" size="lg" fullWidth loading={isSubmitting} className="mt-2">
               비밀번호 변경
             </Button>
           </form>

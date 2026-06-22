@@ -9,84 +9,109 @@ import {
   CartesianGrid,
   Tooltip,
   ReferenceLine,
-  Legend,
+  ReferenceArea,
 } from "recharts";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
 import type { StatSeriesPoint } from "@/types/health";
+import { useIsDarkMode } from "@/hooks/useIsDarkMode";
 
 interface BGTrendChartProps {
-  fastingSeries: StatSeriesPoint[];
-  postmealSeries?: StatSeriesPoint[];
+  series: StatSeriesPoint[];
 }
 
-export default function BGTrendChart({ fastingSeries, postmealSeries }: BGTrendChartProps) {
-  /* 날짜 기준으로 병합 */
-  const dateMap: Record<string, { date: string; 공복혈당?: number; 식후혈당?: number }> = {};
+export default function BGTrendChart({ series }: BGTrendChartProps) {
+  const isDark = useIsDarkMode();
+  const data = series.map((p) => ({
+    date: format(new Date(p.measured_at), "M/d", { locale: ko }),
+    공복혈당: parseFloat(p.primary_value),
+  }));
 
-  fastingSeries.forEach((p) => {
-    const key = format(new Date(p.measured_at), "M/d", { locale: ko });
-    dateMap[key] = { ...dateMap[key], date: key, 공복혈당: parseFloat(p.primary_value) };
-  });
-
-  postmealSeries?.forEach((p) => {
-    const key = format(new Date(p.measured_at), "M/d", { locale: ko });
-    dateMap[key] = { ...dateMap[key], date: key, 식후혈당: parseFloat(p.primary_value) };
-  });
-
-  const data = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
+  const c = isDark
+    ? {
+        grid: "#3a3a3a",
+        tick: "#b0b0b0",
+        dangerBg: "#3a0d0d",
+        dangerLabel: "#ef9a9a",
+        warningBg: "#332b10",
+        warningLabel: "#ffd43b",
+        normalBg: "#0d2a14",
+        normalLabel: "#81c784",
+        line: "#74c0fc",
+        tooltipBg: "#242424",
+        tooltipBorder: "#3a3a3a",
+        tooltipText: "#f0f0f0",
+      }
+    : {
+        grid: "#f0f0f0",
+        tick: "#999",
+        dangerBg: "#ffeaea",
+        dangerLabel: "#e53935",
+        warningBg: "#fffbe6",
+        warningLabel: "#856404",
+        normalBg: "#e8f5e9",
+        normalLabel: "#2e7d32",
+        line: "#2563EB",
+        tooltipBg: "#fff",
+        tooltipBorder: "#e0e0e0",
+        tooltipText: "#111",
+      };
+  const areaOpacity = isDark ? { danger: 0.6, warning: 0.6, normal: 0.5 } : { danger: 0.4, warning: 0.5, normal: 0.3 };
 
   return (
     <ResponsiveContainer width="100%" height={260}>
       <LineChart
         data={data}
-        margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+        /* right 여백 확대: 기준선 라벨(position="right")이 오른쪽 끝에서 잘리지 않도록. */
+        margin={{ top: 8, right: 64, left: 0, bottom: 0 }}
       >
-        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-        <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#999" }} />
+        {/* 구간 배경 */}
+        <ReferenceArea y1={140} y2={250} fill={c.dangerBg} fillOpacity={areaOpacity.danger}
+          label={{ value: "위험", position: "insideTopRight", fill: c.dangerLabel, fontSize: 10, fontWeight: 600 }} />
+        <ReferenceArea y1={100} y2={140} fill={c.warningBg} fillOpacity={areaOpacity.warning}
+          label={{ value: "주의", position: "insideTopRight", fill: c.warningLabel, fontSize: 10, fontWeight: 600 }} />
+        <ReferenceArea y1={60} y2={100} fill={c.normalBg} fillOpacity={areaOpacity.normal}
+          label={{ value: "정상", position: "insideTopRight", fill: c.normalLabel, fontSize: 10, fontWeight: 600 }} />
+
+        <CartesianGrid strokeDasharray="3 3" stroke={c.grid} />
+        <XAxis dataKey="date" tick={{ fontSize: 11, fill: c.tick }} />
         <YAxis
           domain={[60, 250]}
           unit="mg/dL"
-          tick={{ fontSize: 11, fill: "#999" }}
+          tick={{ fontSize: 11, fill: c.tick }}
           width={70}
         />
         <Tooltip
-          formatter={(value, name) => [`${Number(value)} mg/dL`, String(name)]}
-          contentStyle={{ borderRadius: 8, border: "1px solid #e0e0e0", fontSize: 12 }}
+          formatter={(value) => [`${Number(value)} mg/dL`, "공복혈당"]}
+          contentStyle={{
+            borderRadius: 8,
+            border: `1px solid ${c.tooltipBorder}`,
+            fontSize: 12,
+            backgroundColor: c.tooltipBg,
+            color: c.tooltipText,
+          }}
         />
-        <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
 
         {/* 공복 기준선 */}
         <ReferenceLine
           y={100}
-          stroke="#f9a825"
+          stroke={c.warningLabel}
           strokeDasharray="4 2"
-          label={{ value: "공복 정상 상한", position: "right", fontSize: 10, fill: "#856404" }}
+          label={{ value: "정상상한 100", position: "right", fontSize: 10, fill: c.warningLabel }}
         />
-        {/* 식후 기준선 */}
         <ReferenceLine
-          y={140}
-          stroke="#e53935"
+          y={126}
+          stroke={c.dangerLabel}
           strokeDasharray="4 2"
-          label={{ value: "식후 정상 상한", position: "right", fontSize: 10, fill: "#e53935" }}
+          label={{ value: "당뇨기준 126", position: "right", fontSize: 10, fill: c.dangerLabel }}
         />
 
         <Line
           type="monotone"
           dataKey="공복혈당"
-          stroke="#2563EB"
+          stroke={c.line}
           strokeWidth={2}
-          dot={{ r: 3, fill: "#2563EB" }}
-          activeDot={{ r: 5 }}
-          connectNulls
-        />
-        <Line
-          type="monotone"
-          dataKey="식후혈당"
-          stroke="#9333ea"
-          strokeWidth={2}
-          strokeDasharray="5 3"
-          dot={{ r: 3, fill: "#9333ea" }}
+          dot={{ r: 3, fill: c.line }}
           activeDot={{ r: 5 }}
           connectNulls
         />

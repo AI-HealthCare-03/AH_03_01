@@ -12,6 +12,7 @@ import { format } from "date-fns";
 import Button from "@/components/ui/Button";
 import {
   getWeekDays,
+  getWeekDaysCompact,
   isCheckedDate,
   isToday,
   isBefore,
@@ -21,6 +22,7 @@ import type { AttendanceMonthResponse } from "@/types/api";
 import { useCheckInToday } from "@/hooks/queries/useCheckInToday";
 import { useToast } from "@/components/ui/Toast";
 import { extractErrorMessage } from "@/lib/api/client";
+import { useContainerWidth } from "@/hooks/useContainerWidth";
 
 interface AttendanceCardProps {
   data: AttendanceMonthResponse | undefined;
@@ -45,6 +47,10 @@ export default function AttendanceCard({
   const daysToBonus = nextBonusAt - streak;
 
   const weekDays = getWeekDays(today);
+
+  const [calRef, calWidth] = useContainerWidth<HTMLDivElement>();
+  // 7칸(w-7=28px × 7 + gap × 6 ≈ 220px) 미만이면 오늘 중심 5일 표시
+  const displayDays = calWidth !== null && calWidth < 230 ? getWeekDaysCompact(today, 5) : weekDays;
 
   const handleCheckIn = async () => {
     try {
@@ -104,22 +110,24 @@ export default function AttendanceCard({
           </div>
 
           {/* 주간 캘린더 */}
-          <div className="flex justify-between gap-1" aria-label="이번 주 출석 현황">
-            {weekDays.map((day, idx) => {
+          <div ref={calRef} className="flex justify-between gap-1 overflow-hidden" aria-label="이번 주 출석 현황">
+            {displayDays.map((day) => {
               const dayStr = format(day, "yyyy-MM-dd");
               const checked = isCheckedDate(day, checkedDates);
               const todayFlag = isToday(day);
               const pastUnChecked =
                 isBefore(day, today) && !checked && !todayFlag;
+              // 요일 레이블을 Date에서 직접 도출 (5일 슬라이스에서도 정확한 요일 표시)
+              const weekdayIdx = (day.getDay() + 6) % 7; // 월=0 … 일=6
 
               return (
                 <div
                   key={dayStr}
-                  className="flex flex-col items-center gap-1 flex-1"
-                  aria-label={`${KO_WEEKDAYS_MON[idx]}요일 ${checked ? "출석" : "미출석"}`}
+                  className="flex flex-col items-center gap-1 flex-1 min-w-0"
+                  aria-label={`${KO_WEEKDAYS_MON[weekdayIdx]}요일 ${checked ? "출석" : "미출석"}`}
                 >
                   <span className="text-[10px] text-text-tertiary">
-                    {KO_WEEKDAYS_MON[idx]}
+                    {KO_WEEKDAYS_MON[weekdayIdx]}
                   </span>
                   <div
                     className={[

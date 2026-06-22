@@ -198,7 +198,7 @@ class ExperienceService:
         rows_sorted = sorted(rows, key=lambda r: r["total"] or 0, reverse=True)[: len(WEEKLY_RANK_REWARDS)]
 
         for idx, r in enumerate(rows_sorted):
-            uid = int(r["user_id"])
+            uid = r["user_id"]  # UUID — User PK 는 UUID 라 int() 캐스트 금지(보상 누락 버그)
             amount = WEEKLY_RANK_REWARDS[idx]
             try:
                 await self.reward_service.grant(

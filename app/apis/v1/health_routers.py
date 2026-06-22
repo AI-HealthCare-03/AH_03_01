@@ -1,7 +1,9 @@
+import logging
 from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import Response as BinaryResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 
@@ -33,21 +35,29 @@ from app.services.health import (
     MonthlyReportService,
     total_pages,
 )
+from app.services.ml.risk_predictor import MLUnavailableError
+from app.services.report_pdf import ReportPdfService
 
 health_records_router = APIRouter(prefix="/health-records", tags=["health-records"])
 health_reports_router = APIRouter(prefix="/health-reports", tags=["health-reports"])
 predictions_router = APIRouter(prefix="/predictions", tags=["predictions"])
 
+logger = logging.getLogger(__name__)
+
 
 async def _award_health_view(user_id) -> None:  # type: ignore[no-untyped-def]  # user_id: UUID
-    """건강 데이터 확인 활동량 EXP 적립 (1일 1회). best-effort."""
+    """건강 데이터 확인 활동량 EXP 적립 (1일 1회). best-effort.
+
+    EXP 적립은 조회 응답의 부수효과이므로, dedupe(Redis/DB) 일시 장애로 실패해도
+    데이터 응답을 막지 않는다(500 방지). 단 무음 삼킴은 장애를 가리므로 경고 로그를 남긴다.
+    """
     try:
         from app.models.experience import XpKind
         from app.services.experience import ExperienceService
 
         await ExperienceService().award(user_id=user_id, kind=XpKind.HEALTH_VIEW)
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001 — best-effort 부수효과, 조회 응답 차단 금지
+        logger.warning("HEALTH_VIEW EXP 적립 실패(무시): %s: %s", type(e).__name__, e)
 
 
 # ---------------------------------------------------------------------------
@@ -72,8 +82,12 @@ async def list_health_records(
 ) -> Response:
     if record_type == "profile":
         profile = await profile_service.get_or_init(user)
+        completeness = await profile_service.compute_completeness(profile, user)
+        profile_payload = HealthProfileResponse.model_validate(profile).model_copy(
+            update={"completeness": completeness}
+        )
         return Response(
-            HealthProfileResponse.model_validate(profile).model_dump(),
+            profile_payload.model_dump(),
             status_code=status.HTTP_200_OK,
         )
 
@@ -157,6 +171,7 @@ async def get_health_statistics(
         limit=limit,
         include_reference=include_reference,
     )
+    await _award_health_view(user.id)
     return Response(payload.model_dump(), status_code=status.HTTP_200_OK)
 
 
@@ -206,20 +221,38 @@ async def delete_health_record(
 async def get_health_report(
     user: Annotated[User, Depends(get_request_user)],
     service: Annotated[MonthlyReportService, Depends(MonthlyReportService)],
+    pdf_service: Annotated[ReportPdfService, Depends(ReportPdfService)],
     period: Annotated[str, Query()] = "monthly",
     month: Annotated[str | None, Query()] = None,
+    date_from: Annotated[str | None, Query()] = None,
+    date_to: Annotated[str | None, Query()] = None,
     output_format: Annotated[str, Query(alias="format")] = "json",
-) -> Response:
-    if period != "monthly":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="현재는 monthly 만 지원합니다.")
-    if month is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="month 쿼리(YYYY-MM)가 필요합니다.")
+) -> BinaryResponse:
+    if period not in {"monthly", "custom"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="period 는 monthly 또는 custom 입니다.")
     if output_format not in {"json", "pdf"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="format 은 json 또는 pdf 입니다.")
-    payload = await service.get_or_build(user, month)
+    if period == "monthly":
+        if month is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="month 쿼리(YYYY-MM)가 필요합니다.")
+        payload = await service.get_or_build(user, month)
+    else:  # custom — 임의 기간(캐싱 없음)
+        if date_from is None or date_to is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="custom 기간은 date_from, date_to(YYYY-MM-DD)가 필요합니다.",
+            )
+        payload = await service.build_for_range(user, date_from, date_to)
     if output_format == "pdf":
-        # PDF 생성 파이프라인은 별도 작업(FILE_UPLOAD/렌더러)이라 현 단계에서 미지원.
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="PDF 다운로드는 추후 지원 예정입니다.")
+        # 서버사이드 렌더(Playwright chromium): 데이터→HTML→PDF bytes.
+        # PHI 보호: 디스크/미디어에 저장하지 않고 인증된 사용자에게 바로 다운로드시킨다.
+        pdf_bytes, filename = await pdf_service.build_bytes(payload)
+        return BinaryResponse(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            status_code=status.HTTP_200_OK,
+        )
     await _award_health_view(user.id)
     return Response(payload, status_code=status.HTTP_200_OK)
 
@@ -233,6 +266,7 @@ async def get_health_report(
 async def create_prediction(
     user: Annotated[User, Depends(get_request_user)],
     service: Annotated[DiseaseRiskService, Depends(DiseaseRiskService)],
+    profile_service: Annotated[HealthProfileService, Depends(HealthProfileService)],
     disease_type: Annotated[DiseaseType, Query(alias="diseaseType")],
     body: PredictionCreateRequest | None = None,
     mode: Annotated[str, Query()] = "sync",
@@ -242,8 +276,26 @@ async def create_prediction(
     if mode == "stream":
         # SSE 는 추후 지원
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="stream 모드는 추후 지원 예정입니다.")
+    # 예측 게이트: 모델입력 필드가 모두 채워져야 예측 가능. 미충족이면 422 + 누락 항목 안내.
+    profile = await profile_service.repo.get_by_user(user.id)
+    completeness = await profile_service.compute_completeness(profile, user)
+    if not completeness.complete:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "건강 데이터를 모두 입력해야 위험도 예측을 이용할 수 있습니다.",
+                "missing_fields": completeness.missing_fields,
+            },
+        )
     snapshot = body.input_snapshot if body and body.input_snapshot else None
-    risk = await service.create(user, disease_type, snapshot)
+    try:
+        risk = await service.create(user, disease_type, snapshot)
+    except MLUnavailableError as e:
+        # RISK_REQUIRE_ML=True 에서 ML 로드/추론 실패 — 룰로 가리지 않고 503 으로 드러낸다.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"message": "위험도 예측 모델을 일시적으로 사용할 수 없습니다.", "code": "ML_UNAVAILABLE"},
+        ) from e
     return Response(
         PredictionResponse.model_validate(risk).model_dump(),
         status_code=status.HTTP_201_CREATED,
@@ -320,6 +372,7 @@ async def get_risk_recommendation(
         hospital_visit_recommended=hospital_visit,
         disclaimer=disclaimer,
     )
+    await _award_health_view(user.id)
     return Response(payload.model_dump(), status_code=status.HTTP_200_OK)
 
 

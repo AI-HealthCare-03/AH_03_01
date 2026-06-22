@@ -96,7 +96,7 @@ export type ForgotIdFormValues = z.infer<typeof forgotIdSchema>;
 export const forgotPasswordSchema = z
   .object({
     email: emailSchema,
-    phone_number: phoneSchema,
+    name: nameSchema,
     new_password: passwordSchema,
     new_password_confirm: z.string().min(1, "비밀번호 확인을 입력해 주세요"),
   })

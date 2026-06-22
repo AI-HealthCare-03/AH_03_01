@@ -39,8 +39,6 @@ export default function HomePage() {
     "blood_glucose",
     "FASTING"
   );
-  const { data: hba1cStat, isLoading: hba1cLoading } = useMetricStat("hba1c");
-
   /* 예측 기반 고혈압 predictionId 추출 */
   const predItems = predictions?.items ?? [];
   const hyperPred = predItems.find((p) => p.disease_type === "HYPERTENSION");
@@ -56,7 +54,7 @@ export default function HomePage() {
   const latestPredictionDate = predItems[0]?.created_at;
 
   const metricsLoading =
-    profileLoading || bpLoading || fgLoading || hba1cLoading;
+    profileLoading || bpLoading || fgLoading;
 
   return (
     <div className="max-w-[1280px] mx-auto px-5 py-6 md:px-10 md:py-8 space-y-8">
@@ -96,7 +94,6 @@ export default function HomePage() {
         healthProfile={healthProfile}
         bloodPressure={bpStat}
         fastingGlucose={fgStat}
-        hba1c={hba1cStat}
         isLoading={metricsLoading}
       />
     </div>

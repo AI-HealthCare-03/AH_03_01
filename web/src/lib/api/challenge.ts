@@ -18,17 +18,24 @@ import type {
   CreateReactionRequest,
   ReactionListResponse,
   ChallengeSummaryResponse,
+  VerificationFeedResponse,
 } from "@/types/challenge";
 import type { ChallengeStatus, ChallengeScope } from "@/types/challenge";
 
 /* ─── 챌린지 목록 ─── */
 export async function fetchChallenges(params: {
   mine?: boolean;
+  leftOnly?: boolean;
   status?: ChallengeStatus;
   scope?: ChallengeScope;
+  category?: string;
+  visibility?: string;
   inviteCode?: string;
   size?: number;
   page?: number;
+  from?: string;
+  to?: string;
+  sortBy?: "created_at" | "end_date";
 }): Promise<ChallengeListResponse> {
   const { data } = await apiClient.get<ChallengeListResponse>(
     "/api/v1/challenges",
@@ -156,6 +163,14 @@ export async function respondToInvitation(
   return data;
 }
 
+/* ─── 방장 강제 탈퇴 ─── */
+export async function kickParticipant(
+  challengeId: number,
+  targetUserId: string,
+): Promise<void> {
+  await apiClient.delete(`/api/v1/challenges/${challengeId}/participants/${targetUserId}`);
+}
+
 /* ─── PENDING 참가 신청 처리 (방장이 수락/거절) ─── */
 export async function respondToPendingParticipant(
   challengeId: number,
@@ -218,11 +233,12 @@ export async function createVerification(
 
 /* ─── 인증 목록 ─── */
 export async function fetchVerifications(
-  challengeId: number
+  challengeId: number,
+  options?: { mine?: boolean }
 ): Promise<VerificationListResponse> {
   const { data } = await apiClient.get<VerificationListResponse>(
     "/api/v1/challenge-verifications",
-    { params: { challengeId } }
+    { params: { challengeId, ...(options?.mine ? { mine: true } : {}) } }
   );
   return data;
 }
@@ -274,6 +290,52 @@ export async function fetchChallengeSummary(
 export async function fetchChallengeCategories(): Promise<string[]> {
   const { data } = await apiClient.get<string[]>(
     "/api/v1/challenge-categories"
+  );
+  return data;
+}
+
+/* ─── 피드 조회 ─── */
+export async function fetchChallengeFeed(
+  challengeId: number,
+  page = 1,
+  size = 20
+): Promise<VerificationFeedResponse> {
+  const { data } = await apiClient.get<VerificationFeedResponse>(
+    `/api/v1/challenges/${challengeId}/feed`,
+    { params: { page, size } }
+  );
+  return data;
+}
+
+/* ─── 좋아요 토글 ─── */
+export async function toggleLike(
+  verificationId: number
+): Promise<{ liked: boolean; like_count: number }> {
+  const { data } = await apiClient.post<{ liked: boolean; like_count: number }>(
+    `/api/v1/challenge-verifications/${verificationId}/reactions/toggle-like`
+  );
+  return data;
+}
+
+/* ─── 댓글 삭제 ─── */
+export async function deleteReaction(
+  verificationId: number,
+  reactionId: number
+): Promise<void> {
+  await apiClient.delete(
+    `/api/v1/challenge-verifications/${verificationId}/reactions/${reactionId}`
+  );
+}
+
+/* ─── 대댓글 생성 ─── */
+export async function createReply(
+  verificationId: number,
+  reactionId: number,
+  content: string
+): Promise<VerificationReaction> {
+  const { data } = await apiClient.post<VerificationReaction>(
+    `/api/v1/challenge-verifications/${verificationId}/reactions/${reactionId}/replies`,
+    { type: "COMMENT", content }
   );
   return data;
 }

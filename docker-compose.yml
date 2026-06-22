@@ -3,6 +3,7 @@ services:
   redis:
     image: redis:alpine
     container_name: redis
+    restart: always  # 큐 브로커. 멈추면 사진 인증 파이프라인이 끊기므로 항상 자동 복구.
     networks:
       - ws
     ports:
@@ -58,12 +59,14 @@ services:
     environment:
       # 컨테이너 네트워크 안에서는 서비스명으로 해석. .env 의 localhost 를 오버라이드.
       DB_HOST: postgres
+      REDIS_HOST: redis
     command: |
-      sh -c "uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+      sh -c "uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     volumes:
       - ./app:/app/app  # 로컬의 app 디렉토리를 컨테이너의 /app/app에 마운트(수정사항 즉시 반영)
       - static_volume:/app/templates
       - media_data:/app/media  # 업로드된 사진 등 미디어 영속화. ai-worker 와 공유
+      - ./models:/app/models  # ML 모델 아티팩트 (preprocess.py + lgbm_model.pkl 포함)
     restart: always
     ports:
       - "8000:8000"
@@ -88,6 +91,7 @@ services:
     env_file: .env
     environment:
       DB_HOST: postgres
+      REDIS_HOST: redis
       HF_HOME: /app/.cache/huggingface
       TRANSFORMERS_CACHE: /app/.cache/huggingface
     restart: always
@@ -97,6 +101,35 @@ services:
       - hf_cache:/app/.cache/huggingface  # SigLIP2 가중치 캐시 영속화 (재빌드 시 재다운로드 방지)
       - ./ai_worker:/app/ai_worker  # 코드 변경 즉시 반영 (컨테이너 restart 만 필요)
       - ./app:/app/app              # ai_worker 가 import 하는 app 모듈도 동기화
+    networks:
+      - ws
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # 4-2. Risk Inference Worker (위험도 예측 ML 추론 — CatBoost/LightGBM, queue:ml-inference)
+  # SigLIP 워커(ai-worker)와 분리된 전용 프로세스. SigLIP/torch 없이 ML 부스팅 추론만 담당.
+  risk-worker:
+    container_name: risk-worker
+    build:
+      context: .  # 프로젝트 루트를 빌드 컨텍스트로 지정
+      dockerfile: ai_worker/risk_inference/Dockerfile
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    image: ${DOCKER_USER}/${DOCKER_REPOSITORY}:risk-${AI_WORKER_VERSION}
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      REDIS_HOST: redis
+    restart: always
+    mem_limit: 2G
+    volumes:
+      - ./models:/app/models        # ML 모델 아티팩트 (preprocess.py + 모델 가중치). 추론에 필수.
+      - ./ai_worker:/app/ai_worker  # 코드 변경 즉시 반영 (컨테이너 restart 만 필요)
+      - ./app:/app/app              # 워커가 import 하는 app 모듈도 동기화
     networks:
       - ws
     depends_on:

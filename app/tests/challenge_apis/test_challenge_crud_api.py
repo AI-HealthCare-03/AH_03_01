@@ -48,6 +48,7 @@ class TestChallengeCrudApi(TestCase):
                     "unit": "잔",
                     "verification_type": "CHECK",
                     "max_participants": 3,
+                    "goal_config": {"group_target_count": 30},
                     "start_date": start,
                     "end_date": end,
                 },

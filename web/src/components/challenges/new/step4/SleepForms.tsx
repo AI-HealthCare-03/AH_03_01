@@ -6,7 +6,7 @@ import {
   DurationPicker,
   WeeklyDurationNote,
   TitleInput,
-  MaxParticipantsSlider,
+  MaxParticipantsChips,
   RewardPreview,
   Step4Header,
   GROUP_SUM_OPTIONS,
@@ -30,6 +30,12 @@ const BED_TIME_OPTIONS = [
 const WAKE_TIME_OPTIONS = [
   { value: "07:00", label: "아침 7시" },
   { value: "08:00", label: "아침 8시" },
+];
+
+const GROUP_SLEEP_MODE_OPTIONS: { value: "BED_TIME" | "SLEEP_DURATION" | "WAKE_TIME"; title: string }[] = [
+  { value: "BED_TIME", title: "취침 시간" },
+  { value: "SLEEP_DURATION", title: "수면 시간" },
+  { value: "WAKE_TIME", title: "기상 시간" },
 ];
 
 /* ─── 개인 BED_TIME ─── */
@@ -129,13 +135,110 @@ export function SleepWakeForm({
   );
 }
 
-/* ─── 그룹 GROUP_SUM (세 모드 중 선택 + 합산 횟수) ─── */
-const GROUP_SLEEP_MODE_OPTIONS = [
-  { value: "BED_TIME", title: "취침 시간", emoji: "🌙", desc: "목표 시간대에 잠들기" },
-  { value: "SLEEP_DURATION", title: "수면 시간", emoji: "💤", desc: "7시간 이상 수면" },
-  { value: "WAKE_TIME", title: "기상 시간", emoji: "⏰", desc: "목표 시간에 일어나기" },
-] as const;
+/* ─── 그룹 공통 하단 필드 ─── */
+function SleepGroupFooter({
+  form,
+  onChange,
+}: {
+  form: WizardFormState;
+  onChange: (partial: Partial<WizardFormState>) => void;
+}) {
+  return (
+    <>
+      <Chips
+        label="그룹 합산 목표 횟수"
+        options={GROUP_SUM_OPTIONS}
+        value={form.goal_config.group_target_count}
+        onChange={(v) =>
+          onChange({ goal_config: { ...form.goal_config, group_target_count: v } })
+        }
+      />
+      <WeeklyDurationNote />
+      <MaxParticipantsChips
+        value={form.max_participants}
+        onChange={(v) => onChange({ max_participants: v })}
+      />
+      <TitleInput value={form.title} onChange={(v) => onChange({ title: v })} />
+      <RewardPreview durationDays={7} isGroup />
+    </>
+  );
+}
 
+/* ─── 그룹 BED_TIME ─── */
+export function SleepGroupBedTimeForm({
+  form,
+  onChange,
+}: {
+  form: WizardFormState;
+  onChange: (partial: Partial<WizardFormState>) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <Step4Header />
+      <Chips
+        label="목표 취침 시간대"
+        options={BED_TIME_OPTIONS}
+        value={form.goal_config.sleep_time_range}
+        onChange={(v) =>
+          onChange({
+            goal_config: { ...form.goal_config, sleep_mode: "BED_TIME", sleep_time_range: v },
+          })
+        }
+      />
+      <SleepGroupFooter form={form} onChange={onChange} />
+    </div>
+  );
+}
+
+/* ─── 그룹 SLEEP_DURATION ─── */
+export function SleepGroupDurationForm({
+  form,
+  onChange,
+}: {
+  form: WizardFormState;
+  onChange: (partial: Partial<WizardFormState>) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <Step4Header />
+      <div className="p-4 bg-surface rounded-[12px]">
+        <p className="text-sm font-semibold text-text-primary">목표</p>
+        <p className="text-sm text-text-secondary mt-1">
+          하루 7시간 이상 수면 — 매일 달성 여부를 기록합니다.
+        </p>
+      </div>
+      <SleepGroupFooter form={form} onChange={onChange} />
+    </div>
+  );
+}
+
+/* ─── 그룹 WAKE_TIME ─── */
+export function SleepGroupWakeForm({
+  form,
+  onChange,
+}: {
+  form: WizardFormState;
+  onChange: (partial: Partial<WizardFormState>) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <Step4Header />
+      <Chips
+        label="목표 기상 시간"
+        options={WAKE_TIME_OPTIONS}
+        value={form.goal_config.wake_time}
+        onChange={(v) =>
+          onChange({
+            goal_config: { ...form.goal_config, sleep_mode: "WAKE_TIME", wake_time: v },
+          })
+        }
+      />
+      <SleepGroupFooter form={form} onChange={onChange} />
+    </div>
+  );
+}
+
+/* ─── 그룹 GROUP_SUM (레거시, 미사용) ─── */
 export function SleepGroupForm({
   form,
   onChange,
@@ -200,7 +303,7 @@ export function SleepGroupForm({
         }
       />
       <WeeklyDurationNote />
-      <MaxParticipantsSlider
+      <MaxParticipantsChips
         value={form.max_participants}
         onChange={(v) => onChange({ max_participants: v })}
       />

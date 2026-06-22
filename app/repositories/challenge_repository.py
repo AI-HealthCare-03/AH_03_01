@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from collections import defaultdict
 from datetime import date, datetime
 from typing import Any
 
@@ -55,11 +58,14 @@ class ChallengeRepository:
         scope: str | None = None,
         status: str | None = None,
         category: str | None = None,
+        visibility: str | None = None,
         keyword: str | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
+        sort_by: str | None = None,  # "created_at" | "end_date" | None(기본: -created_at)
         page: int = 1,
         size: int = 20,
+        left_only: bool = False,
     ) -> tuple[list[Challenge], int]:
         qs = self._model.filter(is_deleted=False)
         if scope is not None:
@@ -68,6 +74,8 @@ class ChallengeRepository:
             qs = qs.filter(status=status)
         if category is not None:
             qs = qs.filter(category=category)
+        if visibility is not None:
+            qs = qs.filter(visibility=visibility)
         if keyword:
             qs = qs.filter(Q(title__icontains=keyword) | Q(description__icontains=keyword))
         if date_from is not None:
@@ -76,13 +84,23 @@ class ChallengeRepository:
             qs = qs.filter(start_date__lte=date_to)
         if user_id is not None:
             # Tortoise 가 __in= 에 subquery 객체를 직접 받지 못하므로 list 로 먼저 materialize.
+            # left_only=True: 탈퇴(LEFT)한 챌린지만 조회 (완료 탭 노출용)
+            # 참가자는 가입 즉시 APPROVED 가 되어 정상 흐름에서 PENDING 은 발생하지 않는다(자동 승인 정책, PR #274).
+            # PENDING 은 과거 버전이 남겼을 수 있는 레거시/예약(방장 승인) 행 대비 방어적으로만 포함한다.
+            participant_statuses = (
+                [ParticipantStatus.LEFT] if left_only else [ParticipantStatus.APPROVED, ParticipantStatus.PENDING]
+            )
             participating_ids = await ChallengeParticipant.filter(
                 user_id=user_id,
-                status=ParticipantStatus.APPROVED,
+                status__in=participant_statuses,
             ).values_list("challenge_id", flat=True)
-            qs = qs.filter(Q(creator_id=user_id) | Q(id__in=list(participating_ids)))
+            if left_only:
+                qs = qs.filter(id__in=list(participating_ids))
+            else:
+                qs = qs.filter(Q(creator_id=user_id) | Q(id__in=list(participating_ids)))
         total = await qs.count()
-        items = await qs.order_by("-created_at").offset((page - 1) * size).limit(size)
+        _order = {"created_at": "-created_at", "end_date": "end_date"}.get(sort_by or "", "-created_at")
+        items = await qs.order_by(_order).offset((page - 1) * size).limit(size)
         return list(items), total
 
     async def update_instance(self, challenge: Challenge, data: dict[str, Any]) -> Challenge:
@@ -262,6 +280,17 @@ class ChallengeVerificationRepository:
         await verification.save(update_fields=["like_count", "comment_count"])
         return verification
 
+    async def list_feed(
+        self,
+        challenge_id: int,
+        page: int = 1,
+        size: int = 20,
+    ) -> tuple[list[ChallengeVerification], int]:
+        qs = self._model.filter(challenge_id=challenge_id, is_deleted=False)
+        total = await qs.count()
+        items = await qs.prefetch_related("user").order_by("-created_at").offset((page - 1) * size).limit(size)
+        return list(items), total
+
     async def aggregate_summary(
         self,
         user_id: int,
@@ -351,6 +380,55 @@ class ChallengeReactionRepository:
                 type=ReactionType.COMMENT,
                 is_deleted=False,
             ).order_by("created_at")
+        )
+
+    async def get_liked_verification_ids(self, user_id: int, verification_ids: list[int]) -> set[int]:
+        if not verification_ids:
+            return set()
+        liked = await self._model.filter(
+            user_id=user_id,
+            verification_id__in=verification_ids,
+            type=ReactionType.LIKE,
+            is_deleted=False,
+        ).values_list("verification_id", flat=True)
+        return set(liked)
+
+    async def list_comments_with_replies(self, verification_id: int) -> list[ChallengeReaction]:
+        top_level = list(
+            await self._model.filter(
+                verification_id=verification_id,
+                type=ReactionType.COMMENT,
+                parent_id__isnull=True,
+                is_deleted=False,
+            )
+            .prefetch_related("user")
+            .order_by("created_at")
+        )
+        # 답글을 댓글마다 따로 조회(N+1)하지 않고, 상위 댓글 전체의 답글을 1회에 가져와 parent 별로 묶는다.
+        if top_level:
+            top_ids = [c.id for c in top_level]
+            replies = list(
+                await self._model.filter(
+                    parent_id__in=top_ids,
+                    type=ReactionType.COMMENT,
+                    is_deleted=False,
+                )
+                .prefetch_related("user")
+                .order_by("created_at")
+            )
+            grouped: dict[int, list[ChallengeReaction]] = defaultdict(list)
+            for reply in replies:
+                grouped[reply.parent_id].append(reply)
+            for comment in top_level:
+                comment.reply_list = grouped.get(comment.id, [])  # type: ignore[attr-defined]
+        return top_level
+
+    async def get_user_like(self, verification_id: int, user_id: int) -> ChallengeReaction | None:
+        return await self._model.get_or_none(
+            verification_id=verification_id,
+            user_id=user_id,
+            type=ReactionType.LIKE,
+            is_deleted=False,
         )
 
     async def update_content(self, reaction: ChallengeReaction, content: str) -> ChallengeReaction:

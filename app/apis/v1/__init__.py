@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.apis.v1.admin_routers import admin_router
 from app.apis.v1.auth_routers import auth_router
 from app.apis.v1.challenge_routers import (
     challenge_categories_router,
@@ -10,6 +11,7 @@ from app.apis.v1.challenge_routers import (
     challenges_router,
 )
 from app.apis.v1.chatbot_routers import chatbot_router
+from app.apis.v1.community_routers import comments_router, posts_router, quiz_router, reports_router
 from app.apis.v1.experience_routers import experience_router, leaderboard_router
 from app.apis.v1.files_routers import files_router
 from app.apis.v1.health_routers import (
@@ -17,6 +19,8 @@ from app.apis.v1.health_routers import (
     health_reports_router,
     predictions_router,
 )
+from app.apis.v1.medication_reminder_routers import fcm_router, medication_reminders_router
+from app.apis.v1.notification_routers import notifications_router
 from app.apis.v1.pet_routers import (
     attendance_router,
     inventory_router,
@@ -25,6 +29,8 @@ from app.apis.v1.pet_routers import (
     rewards_router,
     store_router,
 )
+from app.apis.v1.risk_recommendation_routers import risk_recommendations_router
+from app.apis.v1.support_routers import support_router
 from app.apis.v1.user_routers import user_router
 
 v1_routers = APIRouter(prefix="/api/v1")
@@ -46,6 +52,16 @@ v1_routers.include_router(points_router)
 v1_routers.include_router(attendance_router)
 v1_routers.include_router(rewards_router)
 v1_routers.include_router(chatbot_router)
+v1_routers.include_router(risk_recommendations_router)
 v1_routers.include_router(files_router)
 v1_routers.include_router(experience_router)
 v1_routers.include_router(leaderboard_router)
+v1_routers.include_router(posts_router)
+v1_routers.include_router(comments_router)
+v1_routers.include_router(reports_router)
+v1_routers.include_router(quiz_router)
+v1_routers.include_router(notifications_router)
+v1_routers.include_router(support_router)
+v1_routers.include_router(admin_router)
+v1_routers.include_router(medication_reminders_router)
+v1_routers.include_router(fcm_router)

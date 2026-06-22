@@ -6,12 +6,43 @@
    - 모바일: 가로 스크롤 스냅
    ========================================= */
 
+import { useState } from "react";
 import Link from "next/link";
 import Button from "@/components/ui/Button";
+import Modal from "@/components/ui/Modal";
+import { CATEGORY_CONFIG } from "@/components/challenges/common/ChallengeCategoryIcon";
+import { useChallenges } from "@/hooks/queries/useChallenges";
+import { useJoinChallenge } from "@/hooks/queries/useJoinChallenge";
+import { useToast } from "@/components/ui/Toast";
+import { extractErrorMessage } from "@/lib/api/client";
 import type {
   ChallengeRecommendationItem,
   RecommendationPriority,
 } from "@/types/api";
+import type { ChallengeCategory } from "@/types/challenge";
+
+const DISEASE_LABEL: Record<string, string> = {
+  HYPERTENSION: "고혈압",
+  DIABETES: "당뇨",
+  CARDIOVASCULAR: "심혈관",
+};
+const RISK_LABEL: Record<string, string> = {
+  HIGH_RISK: "고위험",
+  RISK: "위험",
+  CAUTION: "주의",
+  NORMAL: "정상",
+};
+
+function parseFriendlyReason(raw?: string | null): string {
+  if (!raw) return "위험도 분석 기반 맞춤 추천이에요";
+  const match = raw.match(/^(\w+)\s+위험도\s+(\w+)/);
+  if (match) {
+    const disease = DISEASE_LABEL[match[1]] ?? match[1];
+    const risk = RISK_LABEL[match[2]] ?? match[2];
+    return `${disease} ${risk} 개선에 도움이 되는 챌린지예요`;
+  }
+  return raw;
+}
 
 interface RecommendationListProps {
   items: ChallengeRecommendationItem[];
@@ -42,51 +73,180 @@ const PRIORITY_CONFIG: Record<
   SUPPLEMENTAL: OPT_STYLE,
 };
 
-function RecommendationCard({ item }: { item: ChallengeRecommendationItem }) {
-  /* 미지의 priority 값에 대해 RECOMMENDED 로 fallback (crash 방지) */
-  const priority = PRIORITY_CONFIG[item.priority] ?? PRIORITY_CONFIG.RECOMMENDED;
-  /* 백엔드는 reward_points 를 보내지 않으므로 정책상 기본 200P 표시 */
-  const rewardLabel = `${item.reward_points ?? 200}P`;
+/* ── 그룹 챌린지 참여 모달 ──────────────────── */
+function GroupChallengeModal({
+  open,
+  onClose,
+  category,
+  categoryLabel,
+}: {
+  open: boolean;
+  onClose: () => void;
+  category: ChallengeCategory;
+  categoryLabel: string;
+}) {
+  const { data, isLoading } = useChallenges({
+    scope: "GROUP",
+    category,
+    size: 20,
+    enabled: open,
+  });
+  const { mutate: join, isPending } = useJoinChallenge();
+  const { showToast } = useToast();
+  /* COMPLETED/CANCELLED 제외 — RECRUITING(참여 가능) + ACTIVE(정원 마감) 모두 표시 */
+  const groupChallenges = (data?.items ?? []).filter(
+    (c) => c.status === "RECRUITING" || c.status === "ACTIVE"
+  );
 
   return (
-    <div className="snap-start shrink-0 w-[240px] md:w-auto bg-white rounded-[16px] border border-border p-4 flex flex-col gap-3 shadow-sm min-w-0">
-      {/* 헤더 행 */}
-      <div className="flex items-center justify-between gap-2">
-        <span
-          className={[
-            "text-[10px] font-bold px-2 py-0.5 rounded-full",
-            priority.bg,
-            priority.text,
-          ].join(" ")}
+    <Modal open={open} onClose={onClose} title={`${categoryLabel} 챌린지`} maxWidth="sm">
+      <div className="px-6 py-5 space-y-4">
+        {/* 직접 만들기 */}
+        <Link href="/challenges/new" onClick={onClose}>
+          <Button variant="primary" fullWidth>
+            + 챌린지 만들기
+          </Button>
+        </Link>
+
+        <div className="flex items-center gap-3 pt-3">
+          <div className="flex-1 h-px bg-border" />
+          <span className="text-xs text-text-tertiary">또는 그룹 참여</span>
+          <div className="flex-1 h-px bg-border" />
+        </div>
+
+        {/* 그룹 챌린지 목록 */}
+        {isLoading ? (
+          <div className="space-y-2">
+            {[0, 1].map((i) => (
+              <div
+                key={i}
+                className="h-14 bg-surface rounded-xl animate-pulse"
+              />
+            ))}
+          </div>
+        ) : groupChallenges.length === 0 ? (
+          <p className="text-sm text-text-tertiary text-center py-3">
+            현재 참여 가능한 그룹 챌린지가 없어요
+          </p>
+        ) : (
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {groupChallenges.map((c) => {
+              const isFull = c.status === "ACTIVE";
+              return (
+                <div
+                  key={c.id}
+                  className="flex items-center justify-between gap-2 p-3 bg-surface rounded-xl"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <p className="text-sm font-semibold text-text-primary truncate">
+                        {c.title}
+                      </p>
+                      {isFull && (
+                        <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-surface border border-border text-text-tertiary">
+                          마감
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-text-tertiary">
+                      {c.start_date} ~ {c.end_date}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 text-xs"
+                    disabled={isPending}
+                    onClick={() =>
+                      join(
+                        { challengeId: c.id },
+                        {
+                          onSuccess: () => {
+                            showToast("챌린지에 참여했어요!", "success");
+                            onClose();
+                          },
+                          onError: (err) => {
+                            showToast(extractErrorMessage(err), "error");
+                          },
+                        }
+                      )
+                    }
+                  >
+                    참여하기
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="w-full py-2 text-xs text-text-tertiary hover:text-text-primary transition-colors"
+          onClick={onClose}
         >
-          {priority.label}
-        </span>
-        <span className="text-xs font-bold text-brand-black">{rewardLabel}</span>
+          닫기
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function RecommendationCard({ item }: { item: ChallengeRecommendationItem }) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const priority = PRIORITY_CONFIG[item.priority] ?? PRIORITY_CONFIG.RECOMMENDED;
+  const rewardLabel = `${item.reward_points ?? 200}P`;
+  const categoryLabel = CATEGORY_CONFIG[item.category]?.label ?? item.title;
+
+  return (
+    <>
+      <div className="snap-start shrink-0 w-[240px] md:w-auto bg-white rounded-[16px] border border-border p-4 flex flex-col gap-3 shadow-sm min-w-0">
+        {/* 헤더 행 */}
+        <div className="flex items-center justify-between gap-2">
+          <span
+            className={[
+              "text-[10px] font-bold px-2 py-0.5 rounded-full",
+              priority.bg,
+              priority.text,
+            ].join(" ")}
+          >
+            {priority.label}
+          </span>
+          <span className="text-xs font-bold text-brand-black">{rewardLabel}</span>
+        </div>
+
+        {/* 제목 */}
+        <div>
+          <p className="text-sm font-bold text-text-primary leading-snug mb-1">
+            {categoryLabel}
+          </p>
+          <p className="text-xs text-text-tertiary leading-relaxed line-clamp-2">
+            {parseFriendlyReason(item.reason)}
+          </p>
+        </div>
+
+        {/* 시작 버튼 */}
+        <div className="mt-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            fullWidth
+            className="text-xs"
+            aria-label={`${categoryLabel} 챌린지 시작하기`}
+            onClick={() => setModalOpen(true)}
+          >
+            시작하기
+          </Button>
+        </div>
       </div>
 
-      {/* 제목 */}
-      <div>
-        <p className="text-sm font-bold text-text-primary leading-snug mb-1">
-          {item.title}
-        </p>
-        <p className="text-xs text-text-tertiary leading-relaxed line-clamp-2">
-          {item.reason}
-        </p>
-      </div>
-
-      {/* 시작 버튼 */}
-      <div className="mt-auto">
-        <Button
-          variant="outline"
-          size="sm"
-          fullWidth
-          className="text-xs"
-          aria-label={`${item.title} 챌린지 시작하기`}
-        >
-          <Link href="/challenges">시작하기</Link>
-        </Button>
-      </div>
-    </div>
+      <GroupChallengeModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        category={item.category as ChallengeCategory}
+        categoryLabel={categoryLabel}
+      />
+    </>
   );
 }
 

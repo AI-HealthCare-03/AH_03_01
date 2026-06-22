@@ -10,12 +10,15 @@ export type { ChallengeCategory };
 /* 챌린지 범위 */
 export type ChallengeScope = "PERSONAL" | "GROUP";
 
+/* 챌린지 공개 설정 */
+export type ChallengeVisibility = "PUBLIC" | "PRIVATE";
+
 /* 챌린지 상태 */
 export type ChallengeStatus =
+  | "RECRUITING"
   | "ACTIVE"
   | "COMPLETED"
-  | "CANCELLED"
-  | "RECRUITING";
+  | "CANCELLED";
 
 /* 목표 타입 */
 export type GoalType = "DURATION" | "COUNT" | "AMOUNT" | "CHECK";
@@ -57,7 +60,10 @@ export interface Challenge {
   max_participants?: number | null;
   verification_type: VerificationMethod;
   invite_code?: string | null;
-  created_by: number;
+  visibility?: ChallengeVisibility | null;
+  is_member?: boolean;
+  created_by?: number;
+  creator_id?: string | null;  /* UUID — 상세 API에서 제공 */
   created_at: string;
   /* 신규: cadence + goal_config */
   cadence?: ChallengeCadence | null;
@@ -66,13 +72,17 @@ export interface Challenge {
   participant_count?: number;
   my_progress?: number;      /* 내 달성일 수 */
   total_days?: number;       /* 전체 기간 일 수 */
+  achievement_rate?: number; /* 달성률 % (그룹: 전체 멤버 기준, 개인: 내 기준) */
   missed_count?: number;     /* 누락 횟수 */
+  my_participant_status?: ParticipantStatus | null;  /* 내 참여 상태 (mine 쿼리 시) */
+  today_verification_status?: VerificationStatus | null;  /* 오늘 인증 상태 (mine 쿼리 시) */
 }
 
 /* 챌린지 목록 응답 */
 export interface ChallengeListResponse {
   items: Challenge[];
-  total: number;
+  total_elements: number;
+  total_pages: number;
   page: number;
   size: number;
 }
@@ -93,19 +103,22 @@ export interface CreateChallengeRequest {
   /* 신규 옵션 필드 */
   cadence?: ChallengeCadence;
   goal_config?: ChallengeGoalConfig;
+  visibility?: ChallengeVisibility;
 }
 
 /* 챌린지 수정 요청 */
-export type UpdateChallengeRequest = Partial<CreateChallengeRequest>;
+export type UpdateChallengeRequest = Partial<CreateChallengeRequest> & { status?: ChallengeStatus };
 
 /* ─── 참여자 ─── */
 export interface ChallengeParticipant {
   id: number;
   user_id: string; /* UUID */
   challenge_id: number;
+  role?: "OWNER" | "MEMBER";
   status: ParticipantStatus;
   joined_at: string;
   progress_days?: number;
+  achievement_rate?: number; /* 개인 달성률 % */
   missed_count?: number;
   user?: {
     id: string; /* UUID */
@@ -130,8 +143,12 @@ export interface ChallengeVerification {
   photo_file_id?: number | null;
   shield_inventory_id?: number | null;
   memo?: string | null;
+  /* REJECTED 시 SigLIP2 판정 사유(점수/임계값) */
+  rejection_reason?: string | null;
+  verified_date?: string | null;  /* YYYY-MM-DD, 백엔드 verified_date */
   verified_at?: string | null;
   created_at: string;
+  earned_points?: number | null;  /* APPROVED 인증 시 실제 적립 포인트 */
 }
 
 export interface CreateVerificationRequest {
@@ -142,7 +159,8 @@ export interface CreateVerificationRequest {
   checked?: boolean;
   photo_file_id?: number;
   shield_inventory_id?: number;
-  memo?: string;
+  caption?: string;
+  duration_seconds?: number;
   /* 설문형 인증 응답 (예: 당뇨발 9문항 → {template, wound, blister, ...}) */
   answers?: Record<string, string>;
 }
@@ -172,9 +190,14 @@ export interface CreateReactionRequest {
   content?: string;
 }
 
+export interface ReactionWithReplies extends VerificationReaction {
+  replies: VerificationReaction[];
+}
+
 export interface ReactionListResponse {
-  items: VerificationReaction[];
-  total: number;
+  like_count: number;
+  my_like: boolean;
+  comments: ReactionWithReplies[];
 }
 
 /* ─── 요약 ─── */
@@ -232,9 +255,35 @@ export interface ChallengeGoalConfig {
   kind?: "WEIGHT";
 }
 
+/* ─── 피드 ─── */
+export interface VerificationFeedItem {
+  id: number;
+  user_id: string;
+  user_nickname: string | null;
+  method: VerificationMethod;
+  verified_date: string;
+  caption: string | null;
+  photo_file_id: number | null;
+  verified_duration_seconds: number | null;
+  like_count: number;
+  comment_count: number;
+  my_like: boolean;
+  created_at: string;
+  status: VerificationStatus;
+}
+
+export interface VerificationFeedResponse {
+  page: number;
+  size: number;
+  total_elements: number;
+  total_pages: number;
+  items: VerificationFeedItem[];
+}
+
 /* ─── 위저드 폼 상태 ─── */
 export interface WizardFormState {
   scope: ChallengeScope;
+  visibility: ChallengeVisibility;
   category: ChallengeCategory | null;
   sub_category: ExerciseSubType | null;
   /* Step3 내 세부 모드 분기 */

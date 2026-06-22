@@ -61,6 +61,7 @@ class EquippedBackgroundMeta(BaseModel):
     id: int
     name: str
     gradient: str | None = None
+    image: str | None = None  # main|sunset|star|beach (이미지 배경 키)
 
 
 class EquippedItemMeta(BaseModel):
@@ -69,6 +70,8 @@ class EquippedItemMeta(BaseModel):
     emoji: str | None = None
     slot: str | None = None
     placement: str | None = None  # head|paws|stage_top|stage_bottom
+    asset: str | None = None  # 이미지 경로 (/pets/items/*.png)
+    variant: str | None = None  # ribbon|flower|ball|butterfly
 
 
 class PetDetailResponse(PetResponse):
@@ -150,6 +153,7 @@ class InventoryItemResponse(BaseSerializerModel):
     quantity: int
     is_equipped: bool
     acquired_at: datetime
+    asset: str | None = None  # 아이템 썸네일 이미지 경로
 
 
 class InventoryListResponse(BaseModel):
@@ -201,16 +205,3 @@ class AttendanceCheckResponse(BaseModel):
     reward_point: int
     bonus_point: int
     transaction_ids: list[int]
-
-
-class RewardClaimRequest(BaseModel):
-    challenge_id: int
-    verification_id: int | None = None
-    difficulty_level: str | None = None
-
-
-class RewardClaimResponse(BaseModel):
-    transaction_id: int
-    reward_type: str
-    point_amount: int
-    point_balance: int

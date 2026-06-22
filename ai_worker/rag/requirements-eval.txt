@@ -1,0 +1,23 @@
+# RAGAS 평가 전용 환경 (Python 3.12)
+# 설치: pip install -r requirements-eval.txt
+
+# 앱 의존성
+tortoise-orm[asyncpg]
+asyncpg
+pgvector
+kiwipiepy
+langchain-openai
+langchain-core
+langchain-community
+langgraph
+openai
+python-frontmatter
+rank-bm25
+pydantic
+pydantic-settings
+aerich
+
+# 평가 도구
+ragas==0.1.21
+datasets
+nest_asyncio

@@ -17,6 +17,7 @@ export interface Me {
   avatar_file_id?: number | null;
   avatar_url?: string | null;
   created_at: string;
+  is_admin?: boolean;
 }
 
 /* 펫 (GET /api/v1/pets/me) */
@@ -24,6 +25,8 @@ export interface EquippedBackground {
   id: number;
   name: string;
   gradient?: string | null;
+  /** main | sunset | star | beach (이미지 배경 키) */
+  image?: string | null;
 }
 
 export interface EquippedItemMeta {
@@ -31,8 +34,12 @@ export interface EquippedItemMeta {
   name: string;
   emoji?: string | null;
   slot?: string | null;
-  /** head | paws | stage_top | stage_bottom */
+  /** head | paws | stage_top | stage_bottom | pet_skin | play */
   placement?: string | null;
+  /** 이미지 경로 (/pets/items/*.png) */
+  asset?: string | null;
+  /** ribbon | flower | ball | butterfly */
+  variant?: string | null;
 }
 
 export interface MyPet {
@@ -66,29 +73,8 @@ export type ChallengeCategory =
   | "MEDITATION"
   | "WEIGHT_MANAGEMENT";
 
-/* 챌린지 상태 */
-export type ChallengeStatus = "ACTIVE" | "COMPLETED" | "CANCELLED";
-
-/* 챌린지 아이템 */
-export interface ChallengeItem {
-  id: number;
-  title: string;
-  description?: string;
-  category: ChallengeCategory;
-  status: ChallengeStatus;
-  start_date: string;
-  end_date: string;
-  reward_points: number;
-  created_at: string;
-}
-
-/* 챌린지 목록 응답 */
-export interface ChallengeListResponse {
-  items: ChallengeItem[];
-  total: number;
-  page: number;
-  size: number;
-}
+/* 챌린지 목록(Challenge / ChallengeListResponse / ChallengeStatus)은
+   @/types/challenge 가 단일 출처. 중복 정의 시 타입 드리프트로 빌드 실패가 재발. */
 
 /* 질병 타입 */
 export type DiseaseType = "HYPERTENSION" | "DIABETES" | "CARDIOVASCULAR";
@@ -206,6 +192,7 @@ export interface HealthProfileRecord {
   weight_kg?: number;
   updated_at?: string;
   recorded_at?: string;
+  medications?: string[];
 }
 
 /* 측정 통계 시리즈 포인트 */
@@ -253,6 +240,8 @@ export interface InventoryItem {
   quantity: number;
   is_equipped: boolean;
   acquired_at: string;
+  /** 아이템 썸네일 이미지 경로 (/pets/items/*.png) */
+  asset?: string | null;
 }
 
 export interface InventoryListResponse { items: InventoryItem[]; }
