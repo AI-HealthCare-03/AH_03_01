@@ -46,6 +46,7 @@ def get_scheduler() -> AsyncIOScheduler:
             id="medication_reminder",
             replace_existing=True,
             misfire_grace_time=30,
+            coalesce=True,  # 잡 적체 시 누적 트리거를 1회로 합쳐 알림 중복 발송 방지
         )
     return _scheduler
 

@@ -4,6 +4,7 @@ import random
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
+from tortoise.expressions import F
 from tortoise.functions import Count
 
 from app.models.community import (
@@ -94,8 +95,9 @@ class PostRepository:
             .annotate(comment_count=Count("comments", distinct=True), like_count=Count("likes", distinct=True))
         )
 
-    async def increment_view(self, post_id: int, current: int) -> None:
-        await Post.filter(id=post_id).update(view_count=current + 1)
+    async def increment_view(self, post_id: int) -> None:
+        # 앱 레벨 산술(current + 1)은 동시 접근 시 카운트가 유실되므로 DB 원자 증가(F 표현식)를 사용한다.
+        await Post.filter(id=post_id).update(view_count=F("view_count") + 1)
 
     async def create_post(
         self,
