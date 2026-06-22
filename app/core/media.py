@@ -24,16 +24,19 @@ from app.core import config
 # FileUploadService 저장 경로 = /media/uploads/{file_type.lower()}/...
 # ⚠️ 새 PHI FileType 을 추가하면 이 목록도 반드시 갱신할 것 — 누락하면 해당 타입이
 #    무서명 공개 경로로 서빙된다(서명 게이트 우회).
+# 끝의 슬래시 없이 정의하고 경로 경계(== prefix 또는 prefix + "/")로 매칭한다.
+# trailing slash 가 없는 요청(.../challenge_verification)이 공개로 새는 우회를 막고,
+# .../challenge_verificationX 같은 유사 경로의 오탐도 방지한다.
 _PRIVATE_MEDIA_PREFIXES: tuple[str, ...] = (
-    f"{config.MEDIA_URL_PREFIX}/uploads/challenge_verification/",
-    f"{config.MEDIA_URL_PREFIX}/uploads/inquiry_attachment/",
-    f"{config.MEDIA_URL_PREFIX}/uploads/report_pdf/",
+    f"{config.MEDIA_URL_PREFIX}/uploads/challenge_verification",
+    f"{config.MEDIA_URL_PREFIX}/uploads/inquiry_attachment",
+    f"{config.MEDIA_URL_PREFIX}/uploads/report_pdf",
 )
 
 
 def is_private_media_path(path: str) -> bool:
     """서명 게이트가 필요한 비공개(PHI) 미디어 경로인지."""
-    return path.startswith(_PRIVATE_MEDIA_PREFIXES)
+    return any(path == prefix or path.startswith(prefix + "/") for prefix in _PRIVATE_MEDIA_PREFIXES)
 
 
 def _secret() -> bytes:

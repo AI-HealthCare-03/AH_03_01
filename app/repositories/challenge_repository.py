@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import date, datetime
 from typing import Any
 
@@ -403,16 +404,23 @@ class ChallengeReactionRepository:
             .prefetch_related("user")
             .order_by("created_at")
         )
-        for comment in top_level:
-            comment.reply_list = list(  # type: ignore[attr-defined]
+        # 답글을 댓글마다 따로 조회(N+1)하지 않고, 상위 댓글 전체의 답글을 1회에 가져와 parent 별로 묶는다.
+        if top_level:
+            top_ids = [c.id for c in top_level]
+            replies = list(
                 await self._model.filter(
-                    parent_id=comment.id,
+                    parent_id__in=top_ids,
                     type=ReactionType.COMMENT,
                     is_deleted=False,
                 )
                 .prefetch_related("user")
                 .order_by("created_at")
             )
+            grouped: dict[int, list[ChallengeReaction]] = defaultdict(list)
+            for reply in replies:
+                grouped[reply.parent_id].append(reply)
+            for comment in top_level:
+                comment.reply_list = grouped.get(comment.id, [])  # type: ignore[attr-defined]
         return top_level
 
     async def get_user_like(self, verification_id: int, user_id: int) -> ChallengeReaction | None:

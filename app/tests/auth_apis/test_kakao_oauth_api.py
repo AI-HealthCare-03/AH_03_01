@@ -10,6 +10,7 @@ from app.core.jwt.state import token_backend
 from app.core.utils.security import generate_oauth_state, register_oauth_state
 from app.main import app
 from app.models.users import User
+from app.services.email_verification import EmailVerificationService
 from app.services.kakao_oauth import KakaoProfile
 
 BASE = "/api/v1/auth"
@@ -103,6 +104,18 @@ class TestKakaoOAuthAPI(TestCase):
         assert res.status_code == status.HTTP_201_CREATED
         assert "access_token" in res.json()
         assert any("refresh_token" in h for h in res.headers.get_list("set-cookie"))
+
+    async def test_signup_rejects_unverified_email(self):
+        # 카카오 scope 는 닉네임뿐이라 이메일은 사용자 입력 → 본인 인증 없으면 가입 거부(타인 이메일 선점 차단).
+        state = await _fresh_state()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            with _patch_kakao(social_id="900099", email="unv@kakao.com", nickname="미인증"):
+                cb = await client.post(f"{BASE}/kakao/callback", json={"code": "authcode", "state": state})
+            ticket = cb.json()["signup_ticket"]
+            with mock.patch.object(EmailVerificationService, "is_verified", new=mock.AsyncMock(return_value=False)):
+                res = await client.post(f"{BASE}/kakao/signup", json=_signup_payload(ticket, email="unv@kakao.com"))
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        assert await User.filter(social_id="900099").count() == 0  # 계정 미생성
 
     async def test_existing_social_user_logs_in(self):
         state = await _fresh_state()

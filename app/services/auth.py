@@ -243,6 +243,14 @@ class AuthService:
         if user is None or user.is_deleted or user.name != name:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="일치하는 계정을 찾을 수 없습니다.")
 
+        # 소셜(카카오) 전용 계정은 비밀번호 로그인이 없다 — reset_password 로 사용 가능한 비번을
+        # 심으면 의도치 않게 이메일+비밀번호 로그인 경로가 열리므로 차단한다.
+        if user.social_provider:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="소셜 로그인 전용 계정은 비밀번호를 설정할 수 없습니다.",
+            )
+
         if verify_password(new_password, user.hashed_password):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 사용 중인 비밀번호입니다.")
 
@@ -353,6 +361,10 @@ class AuthService:
         # 티켓 재사용/경합 방지 + 일반 가입 중복 검증(기존 헬퍼 재사용).
         if await self.user_repo.get_user_by_social(KAKAO_PROVIDER, social_id) is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 가입된 카카오 계정입니다.")
+        # 카카오 인가 scope 는 닉네임만이라 이메일은 사용자가 직접 입력한다 → 일반 가입과 동일하게
+        # 이메일 소유권(본인 인증)을 확인해야 타인 이메일 선점(메일 폭탄·계정 탈취 단서) 을 막는다.
+        if not await self.email_verification.is_verified(str(data.email)):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이메일 본인 인증이 필요합니다.")
         await self.check_email_exists(data.email)
         await self.check_nickname_exists(data.nickname)
 
@@ -381,6 +393,7 @@ class AuthService:
             # 유니크 인덱스가 막는다. 500 대신 409 로 정리한다.
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 가입된 계정입니다.") from err
 
+        await self.email_verification.consume(str(data.email))
         return await self.login(user)
 
     @staticmethod

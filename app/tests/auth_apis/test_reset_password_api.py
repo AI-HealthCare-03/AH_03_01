@@ -120,3 +120,26 @@ class TestResetPassword(TestCase):
                 json={"email": user.email, "name": user.name, "new_password": NEW_PW},
             )
         assert res.status_code == status.HTTP_404_NOT_FOUND
+
+    async def test_reset_rejects_social_account(self):
+        # 소셜(카카오) 전용 계정에 reset_password 로 사용 가능한 비번을 심으면 이메일+비번 로그인 경로가 열림 → 차단.
+        user = await User.create(
+            email="social_reset@example.com",
+            hashed_password=hash_password(OLD_PW),
+            name="카카오",
+            nickname=None,
+            phone_number="01088887777",
+            birthday=date(1990, 1, 1),
+            gender=Gender.MALE,
+            social_provider="kakao",
+            social_id="reset-sx1",
+        )
+        with patch.object(EmailVerificationService, "consume", AsyncMock()):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE_URL) as client:
+                res = await client.post(
+                    "/api/v1/auth/reset-password",
+                    json={"email": user.email, "name": user.name, "new_password": NEW_PW},
+                )
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        await user.refresh_from_db()
+        assert verify_password(OLD_PW, user.hashed_password)  # 비밀번호 미변경

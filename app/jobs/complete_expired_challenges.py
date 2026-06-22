@@ -22,12 +22,13 @@ import asyncio
 import logging
 import sys
 import time
-from datetime import date
+from datetime import datetime
 
 from tortoise import Tortoise
 from tortoise.exceptions import IntegrityError
 from tortoise.transactions import in_transaction
 
+from app.core import config
 from app.core.db.databases import TORTOISE_ORM
 from app.models.challenge import (
     Challenge,
@@ -142,7 +143,7 @@ async def complete_expired_challenges(*, dry_run: bool, batch_size: int) -> dict
 
     건별 예외는 격리해(실패가 전체를 막지 않음) 성공/실패 카운트를 집계한다.
     """
-    today = date.today()
+    today = datetime.now(config.TIMEZONE).date()  # KST 기준 — UTC 크론(0 15 * * *)과의 9시간 오차 방지
     started = time.monotonic()
 
     logger.info(

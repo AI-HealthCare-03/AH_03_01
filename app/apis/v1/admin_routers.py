@@ -84,6 +84,27 @@ class BanRequest(BaseModel):
     reason: str
 
 
+async def _received_report_count(user_id: UUID) -> int:
+    """해당 유저가 '당한' 신고 수 — 본인이 작성한 게시글/댓글에 접수된 신고를 집계한다.
+    (Report.reporter_id 는 '신고한' 사람이므로 제재 판단 기준으로는 부적합.)
+    """
+    from tortoise.expressions import Q  # noqa: PLC0415
+
+    post_ids = list(await Post.filter(author_id=user_id).values_list("id", flat=True))
+    comment_ids = list(await Comment.filter(author_id=user_id).values_list("id", flat=True))
+    conds = Q()
+    has_target = False
+    if post_ids:
+        conds |= Q(target_type=ReportTargetType.POST, target_id__in=post_ids)
+        has_target = True
+    if comment_ids:
+        conds |= Q(target_type=ReportTargetType.COMMENT, target_id__in=comment_ids)
+        has_target = True
+    if not has_target:
+        return 0
+    return await Report.filter(conds).count()
+
+
 @admin_router.get("/users", response_model=list[AdminUserItem])
 async def list_users(
     admin: Annotated[User, Depends(get_admin_user)],
@@ -99,7 +120,7 @@ async def list_users(
     users = await qs.order_by("-created_at").offset(offset).limit(limit)
     result = []
     for u in users:
-        report_count = await Report.filter(reporter_id=u.id).count()
+        report_count = await _received_report_count(u.id)
         result.append(
             AdminUserItem(
                 id=str(u.id),
@@ -125,7 +146,7 @@ async def get_user_detail(
     u = await User.get_or_none(id=user_id, is_deleted=False)
     if not u:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="사용자를 찾을 수 없습니다.")
-    report_count = await Report.filter(reporter_id=u.id).count()
+    report_count = await _received_report_count(u.id)
     post_count = await Post.filter(author_id=u.id, is_deleted=False).count()
     comment_count = await Comment.filter(author_id=u.id).count()
     return AdminUserDetail(

@@ -65,7 +65,6 @@ from app.models.health import (
     DiseaseRiskGuideline,
     DiseaseType,
     HealthRecord,
-    RecordType,
     RiskLevel,
     UserHealthInfo,
     score_to_risk_level_label,
@@ -81,6 +80,7 @@ from app.repositories.notification_repository import NotificationRepository
 from app.services.ml.challenge_eligibility_filter import EligibleTemplate, filter_eligible_templates
 from app.services.ml.retrieval import RetrievedChunk, retrieve
 from app.services.ml.risk_predictor import (
+    MLUnavailableError,
     PredictionInput,
     PredictionOutput,
     RiskPredictor,
@@ -282,17 +282,14 @@ async def validate_input(state: RiskState) -> dict[str, Any]:
             "missing_fields": ["height_cm", "weight_kg"],
         }
 
-    # 각 record_type 별 최근 1건 (ChatRAGGraph 의 fetch_health_data 와 같은 패턴)
+    # 각 record_type 별 최근 1건. RecordType 멤버마다 개별 쿼리(7 라운드트립) 대신
+    # 한 번에 최신순으로 가져와 record_type 별 첫(=최신) 행만 취한다.
     recent: dict[str, dict[str, Any]] = {}
-    for rt in RecordType:
-        rec = (
-            await HealthRecord.filter(user_id=user_id, record_type=rt, is_deleted=False)
-            .order_by("-measured_at")
-            .first()
-        )
-        if rec is None:
-            continue
-        recent[rt.value] = {
+    for rec in await HealthRecord.filter(user_id=user_id, is_deleted=False).order_by("-measured_at"):
+        key = rec.record_type.value if hasattr(rec.record_type, "value") else str(rec.record_type)
+        if key in recent:
+            continue  # 최신순 정렬이므로 record_type 별 첫 행이 최신
+        recent[key] = {
             "primary_value": float(rec.primary_value),
             "secondary_value": float(rec.secondary_value) if rec.secondary_value is not None else None,
             "unit": rec.unit,
@@ -525,6 +522,18 @@ async def _ml_inference_sync(state: RiskState) -> dict[str, Any]:
             await request.save()
             request_ids.append(request.id)
             predictions.append(result_dict)
+        except MLUnavailableError as e:
+            # RISK_REQUIRE_ML=True 면 'ML 결과 보장'이 정책 → 폴백 없이 표면화해야 한다.
+            # 실패는 기록하되, 정책이 켜져 있으면 재던져 그래프 경로에서도 게이트가 작동하게 한다
+            # (아래 except Exception 이 먼저 삼켜 정책이 무력화되던 버그 수정).
+            _logger.warning("ml_inference (%s) ML 미가용: %s", dt.value, _safe_err_repr(e))
+            request.status = MLInferenceStatus.FAILED
+            request.error_message = _safe_err_repr(e)
+            request.completed_at = datetime.now(tz=UTC)
+            await request.save()
+            if config.RISK_REQUIRE_ML:
+                raise
+            # 정책 off: 해당 질환만 skip, 다른 질환 계속
         except Exception as e:  # noqa: BLE001
             _logger.warning("ml_inference (%s) 실패: %s", dt.value, type(e).__name__)
             _logger.debug("ml_inference (%s) 실패 상세: %s", dt.value, _safe_err_repr(e))
